@@ -122,7 +122,7 @@ function openAppointmentModal() {
     }
 }
 
-function closeAppointmentModal() {
+function closeAppointmentModalFunction() {
     const modal = document.getElementById('appointment-modal');
     if (modal) {
         modal.classList.add('hidden');
@@ -271,7 +271,7 @@ function generatePrescriptionHTML(data) {
     `;
 }
 
-function closePrescriptionModal() {
+function closePrescriptionModalFunction() {
     const modal = document.getElementById('prescription-modal');
     if (modal) {
         modal.classList.add('hidden');
@@ -287,11 +287,17 @@ function initializeModals() {
     const appointmentForm = document.getElementById('appointment-form');
     
     if (closeAppointmentModal) {
-        closeAppointmentModal.addEventListener('click', closeAppointmentModal);
+        closeAppointmentModal.addEventListener('click', function(e) {
+            e.preventDefault();
+            closeAppointmentModalFunction();
+        });
     }
     
     if (cancelAppointment) {
-        cancelAppointment.addEventListener('click', closeAppointmentModal);
+        cancelAppointment.addEventListener('click', function(e) {
+            e.preventDefault();
+            closeAppointmentModalFunction();
+        });
     }
     
     if (appointmentForm) {
@@ -305,11 +311,17 @@ function initializeModals() {
     const downloadPrescription = document.getElementById('download-prescription');
     
     if (closePrescriptionModal) {
-        closePrescriptionModal.addEventListener('click', closePrescriptionModal);
+        closePrescriptionModal.addEventListener('click', function(e) {
+            e.preventDefault();
+            closePrescriptionModalFunction();
+        });
     }
     
     if (closePrescription) {
-        closePrescription.addEventListener('click', closePrescriptionModal);
+        closePrescription.addEventListener('click', function(e) {
+            e.preventDefault();
+            closePrescriptionModalFunction();
+        });
     }
     
     if (downloadPrescription) {
@@ -350,7 +362,7 @@ function handleAppointmentSubmit(e) {
     updateConfirmedAppointments(1);
     
     // Cerrar modal
-    closeAppointmentModal();
+    closeAppointmentModalFunction();
     
     // Aquí se enviaría la cita al backend
     console.log('Turno agendado:', appointment);
@@ -508,9 +520,9 @@ window.PatientPanel = {
     startVideoCall,
     endVideoCall,
     openAppointmentModal,
-    closeAppointmentModal,
+    closeAppointmentModal: closeAppointmentModalFunction,
     viewPrescription,
-    closePrescriptionModal,
+    closePrescriptionModal: closePrescriptionModalFunction,
     showNotification,
     updateDashboardData
 };
