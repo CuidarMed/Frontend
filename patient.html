@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CuidarMed+ - Panel Paciente</title>
-    <link rel="stylesheet" href="patient.css">
+    <link rel="stylesheet" href="css/patient.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
@@ -51,124 +51,8 @@
         </div>
         
         <div class="dashboard-content">
-            <h1 class="dashboard-title">Vista del Paciente</h1>
-            
-            <div class="welcome-section">
-                <h2>Bienvenido, Juan</h2>
-                <p>Aquí está el resumen de tu atención médica</p>
-            </div>
-            
-            <div class="summary-cards">
-                <div class="summary-card">
-                    <div class="card-icon">
-                        <i class="fas fa-calendar"></i>
-                    </div>
-                    <div class="card-content">
-                        <span class="card-number" id="confirmed-appointments">2</span>
-                        <span class="card-label">Turnos confirmados</span>
-                    </div>
-                </div>
-                
-                <div class="summary-card">
-                    <div class="card-icon">
-                        <i class="fas fa-check-circle"></i>
-                    </div>
-                    <div class="card-content">
-                        <span class="card-number" id="consultations-year">12</span>
-                        <span class="card-label">Este año</span>
-                    </div>
-                </div>
-                
-                <div class="summary-card">
-                    <div class="card-icon">
-                        <i class="fas fa-pills"></i>
-                    </div>
-                    <div class="card-content">
-                        <span class="card-number" id="active-prescriptions">3</span>
-                        <span class="card-label">Disponibles</span>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="dashboard-section">
-                <div class="section-header">
-                    <h3>Próximos Turnos</h3>
-                    <p>Tus consultas programadas</p>
-                    <button class="btn btn-primary" id="schedule-appointment-btn">
-                        <i class="fas fa-calendar-plus"></i>
-                        Agendar Turno
-                    </button>
-                </div>
-                
-                <div class="appointments-list" id="appointments-list">
-                    <div class="appointment-card">
-                        <div class="appointment-icon">
-                            <i class="fas fa-calendar"></i>
-                        </div>
-                        <div class="appointment-info">
-                            <h4>Dr. María González</h4>
-                            <p>Cardiología</p>
-                            <span>2025-10-15 - 10:00</span>
-                        </div>
-                        <div class="appointment-actions">
-                            <span class="status confirmed">Confirmado</span>
-                            <button class="btn btn-secondary video-call-btn" data-doctor="Dr. María González">
-                                <i class="fas fa-video"></i>
-                                Videollamada
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <div class="appointment-card">
-                        <div class="appointment-icon">
-                            <i class="fas fa-calendar"></i>
-                        </div>
-                        <div class="appointment-info">
-                            <h4>Dr. Carlos Rodríguez</h4>
-                            <p>Traumatología</p>
-                            <span>2025-10-18 - 15:30</span>
-                        </div>
-                        <div class="appointment-actions">
-                            <span class="status pending">Pendiente</span>
-                            <button class="btn btn-secondary video-call-btn" data-doctor="Dr. Carlos Rodríguez">
-                                <i class="fas fa-video"></i>
-                                Videollamada
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="dashboard-section">
-                <div class="section-header">
-                    <h3>Historial Médico Reciente</h3>
-                    <p>Últimas consultas realizadas</p>
-                </div>
-                
-                <div class="history-list" id="history-list">
-                    <div class="history-item">
-                        <div class="history-info">
-                            <h4>2025-09-20 Dr. Ana Martinez</h4>
-                            <p>Control rutinario</p>
-                        </div>
-                        <button class="btn btn-secondary view-prescription-btn" data-consultation="2025-09-20">
-                            <i class="fas fa-file-medical"></i>
-                            Ver Receta
-                        </button>
-                    </div>
-                    
-                    <div class="history-item">
-                        <div class="history-info">
-                            <h4>2025-08-15 Dr. Juan López</h4>
-                            <p>Consulta dermatológica</p>
-                        </div>
-                        <button class="btn btn-secondary view-prescription-btn" data-consultation="2025-08-15">
-                            <i class="fas fa-file-medical"></i>
-                            Ver Receta
-                        </button>
-                    </div>
-                </div>
-            </div>
+
+        
         </div>
     </div>
 
@@ -258,6 +142,7 @@
         <a href="registro.html" class="demo-btn">Registro</a>
     </div>
 
-    <script src="patient.js"></script>
+        <script type="module" src="js/view/patient.js"></script>
+    <script src="js/patient.js"></script>
 </body>
 </html>
