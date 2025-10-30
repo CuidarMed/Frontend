@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CuidarMed+ - Panel Médico</title>
+    <link rel="stylesheet" href="css/doctor.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <header class="topbar">
+        <div class="brand">
+            <i class="fas fa-heart"></i>
+            <span>CuidarMed+</span>
+        </div>
+        <div class="actions">
+            <div class="user-menu" id="userMenu">
+                <button class="user-btn" id="userBtn">
+                    <i class="fas fa-user-circle"></i>
+                    <span>Mi cuenta</span>
+                    <i class="fas fa-chevron-down" style="font-size:0.8rem;"></i>
+                </button>
+                <div class="user-dropdown" id="userDropdown">
+                    <a href="#" id="logoutBtn"><i class="fas fa-sign-out-alt"></i> Cerrar sesión</a>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="dashboard">
+        <div class="dashboard-sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fas fa-heart"></i>
+                    <span>CuidarMed+</span>
+                </div>
+                <p class="panel-title">Panel Médico</p>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-item" data-section="agenda">
+                    <i class="fas fa-calendar"></i>
+                    Agenda
+                </a>
+                <a href="#" class="nav-item active" data-section="consultas">
+                    <i class="fas fa-list"></i>
+                    Consultas de hoy
+                </a>
+                <a href="#" class="nav-item" data-section="historia">
+                    <i class="fas fa-chart-line"></i>
+                    Historia Clínica
+                </a>
+                <a href="#" class="nav-item" data-section="recetas">
+                    <i class="fas fa-file-medical"></i>
+                    Recetas
+                </a>
+                <a href="#" class="nav-item" data-section="configuracion">
+                    <i class="fas fa-cog"></i>
+                    Configuración
+                </a>
+            </nav>
+        </div>
+
+        <div class="dashboard-content">
+            <!-- Welcome Section -->
+            <div class="welcome-section">
+                <h2 id="welcome-name">Bienvenida, Dra. Ana Martínez</h2>
+                <p>Panel de gestión médica</p>
+            </div>
+
+            <!-- Summary Cards -->
+            <div class="summary-cards">
+                <div class="summary-card">
+                    <div class="card-icon">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <div class="card-content">
+                        <div class="card-number" id="patients-today">4</div>
+                        <div class="card-label">Consultas programadas</div>
+                    </div>
+                </div>
+                <div class="summary-card">
+                    <div class="card-icon green">
+                        <i class="fas fa-calendar-check"></i>
+                    </div>
+                    <div class="card-content">
+                        <div class="card-number" id="weekly-appointments">35</div>
+                        <div class="card-label">Turnos asignados</div>
+                    </div>
+                </div>
+                <div class="summary-card">
+                    <div class="card-icon">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <div class="card-content">
+                        <div class="card-number" id="active-consultation">1</div>
+                        <div class="card-label">Consulta activa</div>
+                    </div>
+                </div>
+                <div class="summary-card">
+                    <div class="card-icon">
+                        <i class="fas fa-file-medical"></i>
+                    </div>
+                    <div class="card-content">
+                        <div class="card-number" id="prescriptions-today">8</div>
+                        <div class="card-label">Emitidas hoy</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dashboard Grid -->
+            <div class="dashboard-grid">
+                <!-- Consultas de Hoy Section -->
+                <div class="dashboard-section">
+                    <div class="section-header">
+                        <div>
+                            <h3>Consultas de Hoy</h3>
+                            <p>Agenda del día</p>
+                        </div>
+                    </div>
+                    <div class="consultations-list" id="consultations-list">
+                        <!-- Las consultas se cargarán dinámicamente desde el backend -->
+                    </div>
+                </div>
+
+                <!-- Agenda Semanal Section -->
+                <div class="dashboard-section">
+                    <div class="section-header">
+                        <div>
+                            <h3>Agenda Semanal</h3>
+                            <p>Vista general de la semana</p>
+                        </div>
+                    </div>
+                    <div class="weekly-schedule" id="weekly-schedule">
+                        <!-- La agenda semanal se cargará dinámicamente desde el backend -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Acciones Rápidas Section -->
+            <div class="quick-actions">
+                <h3>Acciones Rápidas</h3>
+                <div class="actions-grid">
+                    <div class="action-btn" id="emitPrescription">
+                        <i class="fas fa-file-medical"></i>
+                        <span>Emitir Receta</span>
+                    </div>
+                    <div class="action-btn" id="viewPatients">
+                        <i class="fas fa-users"></i>
+                        <span>Ver Pacientes</span>
+                    </div>
+                    <div class="action-btn" id="manageSchedule">
+                        <i class="fas fa-calendar-alt"></i>
+                        <span>Gestionar Agenda</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="prescription-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Emitir Receta Médica</h3>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="prescription-form">
+                    <div class="form-group">
+                        <label for="patient-name">Paciente:</label>
+                        <input type="text" id="patient-name" name="patient-name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="medication">Medicamento:</label>
+                        <input type="text" id="medication" name="medication" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="dosage">Dosis:</label>
+                        <input type="text" id="dosage" name="dosage" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="instructions">Instrucciones:</label>
+                        <textarea id="instructions" name="instructions" rows="4" required></textarea>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" id="cancel-prescription">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">Emitir Receta</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="js/main.js"></script>
+    <script src="js/doctor.js"></script>
+    <script>
+        (function(){
+            const btn = document.getElementById('userBtn');
+            const dropdown = document.getElementById('userDropdown');
+            const menu = document.getElementById('userMenu');
+            const logoutBtn = document.getElementById('logoutBtn');
+            if (btn && dropdown) {
+                btn.addEventListener('click', function(e){
+                    e.stopPropagation();
+                    const isOpen = dropdown.style.display === 'block';
+                    dropdown.style.display = isOpen ? 'none' : 'block';
+                    menu.classList.toggle('active', !isOpen);
+                });
+                document.addEventListener('click', function(e){
+                    if (!menu.contains(e.target)) {
+                        dropdown.style.display = 'none';
+                        menu.classList.remove('active');
+                    }
+                });
+            }
+            if (logoutBtn) {
+                logoutBtn.addEventListener('click', function(e){
+                    e.preventDefault();
+                    try { localStorage.clear(); } catch(_) {}
+                    window.location.href = 'cuidarMed.html';
+                });
+            }
+        })();
+    </script>
+</body>
+</html>
+
+
+

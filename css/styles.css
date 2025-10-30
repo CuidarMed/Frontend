@@ -202,7 +202,7 @@ body {
 /* Beneficios Grid */
 .benefits-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    grid-template-columns: repeat(2, 1fr);
     gap: 2rem;
     margin-top: 3rem;
 }
@@ -213,26 +213,38 @@ body {
     border-radius: 12px;
     box-shadow: 0 4px 20px rgba(0,0,0,0.1);
     text-align: center;
-    transition: transform 0.3s;
+    transition: all 0.3s ease;
+    border: 1px solid #e5e7eb;
 }
 
 .benefit-card:hover {
     transform: translateY(-5px);
+    box-shadow: 0 8px 30px rgba(37, 99, 235, 0.2);
 }
 
 .benefit-icon {
     width: 80px;
     height: 80px;
-    background: #dbeafe;
+    background: #f3f4f6;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     margin: 0 auto 1.5rem;
+    transition: all 0.3s ease;
+}
+
+.benefit-card:hover .benefit-icon {
+    background: #dbeafe;
 }
 
 .benefit-icon i {
     font-size: 2rem;
+    color: #1f2937;
+    transition: color 0.3s ease;
+}
+
+.benefit-card:hover .benefit-icon i {
     color: #2563eb;
 }
 
@@ -240,6 +252,11 @@ body {
     font-size: 1.5rem;
     margin-bottom: 1rem;
     color: #1f2937;
+    transition: color 0.3s ease;
+}
+
+.benefit-card:hover h3 {
+    color: #2563eb;
 }
 
 .benefit-card p {
@@ -431,6 +448,10 @@ body {
     .hero-actions {
         flex-direction: column;
         align-items: center;
+    }
+    
+    .benefits-grid {
+        grid-template-columns: 1fr;
     }
     
     .demo-nav {

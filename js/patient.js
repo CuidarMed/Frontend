@@ -1,6 +1,7 @@
 // Funcionalidades específicas del panel del paciente
 document.addEventListener('DOMContentLoaded', function() {
     initializePatientPanel();
+    loadPatientData(); // Cargar datos del backend
 });
 
 function initializePatientPanel() {
@@ -19,8 +20,177 @@ function initializePatientPanel() {
     // Inicializar modales
     initializeModals();
     
-    // Simular datos en tiempo real
-    startDataSimulation();
+    // Cargar datos periódicamente (cada 30 segundos)
+    setInterval(() => {
+        loadPatientData();
+    }, 30000);
+}
+
+// Cargar datos del paciente desde el backend
+async function loadPatientData() {
+    try {
+        // Importar Api dinámicamente si está disponible
+        const { Api } = await import('./api.js');
+        
+        const patientId = 1; // Esto debería venir del localStorage o del estado de autenticación
+        const patient = await Api.get(`v1/Patient/${patientId}`);
+        
+        // Actualizar nombre de bienvenida
+        const welcomeName = document.getElementById('welcome-name');
+        if (welcomeName && patient && patient.name) {
+            welcomeName.textContent = `Bienvenido, ${patient.name}`;
+        }
+        
+        // Cargar datos adicionales del paciente (turnos, historial, etc.)
+        await loadPatientAppointments();
+        await loadPatientHistory();
+        await loadPatientStats();
+        
+    } catch (error) {
+        console.error('Error al cargar datos del paciente:', error);
+        // Si hay error, mantener los valores por defecto del HTML
+    }
+}
+
+// Cargar turnos del paciente
+async function loadPatientAppointments() {
+    try {
+        const { Api } = await import('./api.js');
+        const patientId = 1;
+        const appointments = await Api.get(`v1/Patient/${patientId}/Appointments`);
+        
+        const appointmentsList = document.getElementById('appointments-list');
+        if (!appointmentsList) return;
+        
+        // Limpiar solo la lista de turnos
+        appointmentsList.innerHTML = '';
+        
+        if (appointments && appointments.length > 0) {
+            appointments.forEach(appointment => {
+                const appointmentCard = createAppointmentCardElement(appointment);
+                appointmentsList.appendChild(appointmentCard);
+            });
+        } else {
+            // Si no hay turnos, mantener un mensaje
+            appointmentsList.innerHTML = '<p style="color: #6b7280; padding: 2rem; text-align: center;">No hay turnos programados</p>';
+        }
+        
+    } catch (error) {
+        console.error('Error al cargar turnos:', error);
+        // Mantener HTML por defecto si falla
+    }
+}
+
+// Cargar historial del paciente
+async function loadPatientHistory() {
+    try {
+        const { Api } = await import('./api.js');
+        const patientId = 1;
+        const history = await Api.get(`v1/Patient/${patientId}/History`);
+        
+        const historyList = document.getElementById('history-list');
+        if (!historyList) return;
+        
+        // Limpiar solo la lista de historial
+        historyList.innerHTML = '';
+        
+        if (history && history.length > 0) {
+            history.forEach(item => {
+                const historyItem = createHistoryItemElement(item);
+                historyList.appendChild(historyItem);
+            });
+        } else {
+            historyList.innerHTML = '<p style="color: #6b7280; padding: 2rem; text-align: center;">No hay historial disponible</p>';
+        }
+        
+    } catch (error) {
+        console.error('Error al cargar historial:', error);
+        // Mantener HTML por defecto si falla
+    }
+}
+
+// Cargar estadísticas del paciente
+async function loadPatientStats() {
+    try {
+        const { Api } = await import('./api.js');
+        const patientId = 1;
+        const stats = await Api.get(`v1/Patient/${patientId}/Stats`);
+        
+        if (stats) {
+            // Actualizar tarjetas de resumen
+            const confirmedAppointments = document.getElementById('confirmed-appointments');
+            const consultationsYear = document.getElementById('consultations-year');
+            const activePrescriptions = document.getElementById('active-prescriptions');
+            
+            if (confirmedAppointments && stats.confirmedAppointments !== undefined) {
+                confirmedAppointments.textContent = stats.confirmedAppointments;
+            }
+            if (consultationsYear && stats.consultationsYear !== undefined) {
+                consultationsYear.textContent = stats.consultationsYear;
+            }
+            if (activePrescriptions && stats.activePrescriptions !== undefined) {
+                activePrescriptions.textContent = stats.activePrescriptions;
+            }
+        }
+        
+    } catch (error) {
+        console.error('Error al cargar estadísticas:', error);
+        // Mantener valores por defecto del HTML
+    }
+}
+
+// Crear elemento de tarjeta de turno
+function createAppointmentCardElement(appointment) {
+    const card = document.createElement('div');
+    card.className = 'appointment-card';
+    
+    const statusClass = appointment.status === 'confirmed' ? 'confirmed' : 'pending';
+    const statusText = appointment.status === 'confirmed' ? 'Confirmado' : 'Pendiente';
+    
+    card.innerHTML = `
+        <div class="appointment-icon">
+            <i class="fas fa-calendar-alt"></i>
+        </div>
+        <div class="appointment-info">
+            <h4>${appointment.doctorName || 'Dr. Desconocido'}</h4>
+            <p>${appointment.specialty || 'Sin especialidad'}</p>
+            <span>${appointment.date || ''} - ${appointment.time || ''}</span>
+        </div>
+        <div class="appointment-actions">
+            <span class="status ${statusClass}">${statusText}</span>
+            <button class="btn-video" data-doctor="${appointment.doctorName || ''}">
+                <i class="fas fa-video"></i>
+                Videollamada
+            </button>
+        </div>
+    `;
+    
+    return card;
+}
+
+// Crear elemento de historial
+function createHistoryItemElement(item) {
+    const historyItem = document.createElement('div');
+    historyItem.className = 'history-item';
+    
+    historyItem.innerHTML = `
+        <div class="appointment-icon">
+            <i class="fas fa-file-medical"></i>
+        </div>
+        <div class="history-info">
+            <span>${item.date || ''}</span>
+            <h4>${item.doctorName || 'Dr. Desconocido'}</h4>
+            <p>${item.description || 'Sin descripción'}</p>
+        </div>
+        <div class="appointment-actions">
+            <a href="#" class="btn-view-prescription" data-consultation="${item.date || ''}">
+                <i class="fas fa-file-medical"></i>
+                Ver Receta
+            </a>
+        </div>
+    `;
+    
+    return historyItem;
 }
 
 // Navegación del sidebar
@@ -45,16 +215,78 @@ function initializeSidebarNavigation() {
 }
 
 function handleSectionNavigation(section) {
-    const messages = {
-        'inicio': 'Navegando al inicio',
-        'turnos': 'Navegando a mis turnos',
-        'historial': 'Navegando al historial médico',
-        'pagos': 'Navegando a pagos',
-        'perfil': 'Navegando al perfil'
-    };
+    const dashboardContent = document.querySelector('.dashboard-content');
+    if (!dashboardContent) return;
     
-    if (messages[section]) {
-        showNotification(messages[section]);
+    // Ocultar todas las secciones
+    const allSections = dashboardContent.querySelectorAll('.dashboard-section, .welcome-section, .summary-cards');
+    allSections.forEach(sec => {
+        if (!sec.classList.contains('profile-section')) {
+            sec.style.display = 'none';
+        }
+    });
+    
+    // Eliminar TODAS las secciones de perfil anteriores si existen (usar querySelectorAll para evitar duplicados)
+    const existingProfiles = dashboardContent.querySelectorAll('.profile-section');
+    existingProfiles.forEach(profile => {
+        profile.remove();
+    });
+    
+    switch(section) {
+        case 'inicio':
+            // Mostrar sección de inicio
+            allSections.forEach(sec => {
+                if (!sec.classList.contains('profile-section') && !sec.classList.contains('coming-soon-section')) {
+                    sec.style.display = '';
+                }
+            });
+            // Ocultar sección coming soon si existe
+            const comingSoon = dashboardContent.querySelector('.coming-soon-section');
+            if (comingSoon) {
+                comingSoon.remove();
+            }
+            loadPatientData(); // Recargar datos
+            break;
+        case 'perfil':
+            // Ocultar sección coming soon si existe
+            const comingSoonProfile = dashboardContent.querySelector('.coming-soon-section');
+            if (comingSoonProfile) {
+                comingSoonProfile.remove();
+            }
+            // Cargar y mostrar perfil
+            loadPatientProfile();
+            break;
+        case 'pagos':
+            // Ocultar TODAS las secciones de perfil si existen
+            const existingProfilesPagos = dashboardContent.querySelectorAll('.profile-section');
+            existingProfilesPagos.forEach(profile => {
+                profile.remove();
+            });
+            // Mostrar página de "En construcción"
+            showComingSoonSection('pagos');
+            break;
+        case 'turnos':
+        case 'historial':
+            // Ocultar TODAS las secciones de perfil si existen
+            const existingProfilesTurnos = dashboardContent.querySelectorAll('.profile-section');
+            existingProfilesTurnos.forEach(profile => {
+                profile.remove();
+            });
+            // Mostrar página de "En construcción"
+            showComingSoonSection(section);
+            break;
+        default:
+            // Mostrar inicio por defecto
+            allSections.forEach(sec => {
+                if (!sec.classList.contains('profile-section') && !sec.classList.contains('coming-soon-section')) {
+                    sec.style.display = '';
+                }
+            });
+            // Ocultar sección coming soon si existe
+            const comingSoonDefault2 = dashboardContent.querySelector('.coming-soon-section');
+            if (comingSoonDefault2) {
+                comingSoonDefault2.remove();
+            }
     }
 }
 
@@ -356,40 +588,16 @@ function handleAppointmentSubmit(e) {
     console.log('Turno agendado:', appointment);
 }
 
-// Simulación de datos en tiempo real
+// Esta función ya no se usa, los datos se cargan desde el backend
+// Se mantiene por compatibilidad pero está deprecated
 function startDataSimulation() {
-    // Actualizar datos cada 30 segundos
-    setInterval(() => {
-        updateDashboardData();
-    }, 30000);
-    
-    // Actualizar datos iniciales
-    updateDashboardData();
+    // Ya no se simula, se carga desde el backend
+    loadPatientData();
 }
 
 function updateDashboardData() {
-    // Simular cambios en los datos
-    const confirmedAppointments = document.getElementById('confirmed-appointments');
-    const consultationsYear = document.getElementById('consultations-year');
-    const activePrescriptions = document.getElementById('active-prescriptions');
-    
-    if (confirmedAppointments) {
-        const currentValue = parseInt(confirmedAppointments.textContent);
-        const newValue = Math.max(0, currentValue + Math.floor(Math.random() * 3) - 1);
-        confirmedAppointments.textContent = newValue;
-    }
-    
-    if (consultationsYear) {
-        const currentValue = parseInt(consultationsYear.textContent);
-        const newValue = Math.max(0, currentValue + Math.floor(Math.random() * 2));
-        consultationsYear.textContent = newValue;
-    }
-    
-    if (activePrescriptions) {
-        const currentValue = parseInt(activePrescriptions.textContent);
-        const newValue = Math.max(0, currentValue + Math.floor(Math.random() * 3) - 1);
-        activePrescriptions.textContent = newValue;
-    }
+    // Ya no se actualiza manualmente, se carga desde el backend
+    loadPatientData();
 }
 
 function updateConfirmedAppointments(change) {
@@ -503,6 +711,459 @@ function downloadPrescriptionPDF(prescriptionId) {
     console.log('Descargando receta PDF:', prescriptionId);
 }
 
+// Cargar perfil del paciente
+async function loadPatientProfile() {
+    const dashboardContent = document.querySelector('.dashboard-content');
+    if (!dashboardContent) return;
+    
+    // Eliminar TODAS las secciones de perfil existentes primero (importante para evitar duplicados)
+    const existingProfiles = dashboardContent.querySelectorAll('.profile-section');
+    existingProfiles.forEach(profile => {
+        profile.remove();
+    });
+    
+    let patient = null;
+    try {
+        const { Api } = await import('./api.js');
+        const patientId = 1; // Esto debería venir del localStorage o del estado de autenticación
+        patient = await Api.get(`v1/Patient/${patientId}`);
+    } catch (error) {
+        console.error('Error al cargar perfil del paciente:', error);
+        showNotification('Error al cargar los datos del perfil. Mostrando datos por defecto.', 'error');
+    }
+    
+    // Crear sección de perfil (con datos del backend o valores por defecto)
+    const profileSection = createProfileSection(patient);
+    dashboardContent.appendChild(profileSection);
+}
+
+// Crear sección de perfil
+function createProfileSection(patient) {
+    const section = document.createElement('div');
+    section.className = 'profile-section';
+    
+    // Datos por defecto si no vienen del backend
+    const defaultData = {
+        name: 'Juan',
+        lastName: 'Pérez',
+        email: 'juan.perez@example.com',
+        phone: '+54 11 1234-5678',
+        dni: '12345678',
+        birthDate: '1990-01-15',
+        address: 'Av. Corrientes 1234',
+        city: 'Buenos Aires',
+        postalCode: 'C1043',
+        emergencyContact: 'María Pérez',
+        emergencyPhone: '+54 11 9876-5432',
+        medicalInsurance: 'OSDE',
+        insuranceNumber: '123456789'
+    };
+    
+    // Combinar datos del backend con valores por defecto
+    const profileData = patient ? {
+        name: patient.name || patient.firstName || defaultData.name,
+        lastName: patient.lastName || patient.surname || defaultData.lastName,
+        email: patient.email || defaultData.email,
+        phone: patient.phone || patient.phoneNumber || defaultData.phone,
+        dni: patient.dni || patient.documentNumber || defaultData.dni,
+        birthDate: patient.birthDate || patient.dateOfBirth || defaultData.birthDate,
+        address: patient.address || patient.streetAddress || defaultData.address,
+        city: patient.city || defaultData.city,
+        postalCode: patient.postalCode || patient.postCode || defaultData.postalCode,
+        emergencyContact: patient.emergencyContact || patient.emergencyContactName || defaultData.emergencyContact,
+        emergencyPhone: patient.emergencyPhone || patient.emergencyContactPhone || defaultData.emergencyPhone,
+        medicalInsurance: patient.medicalInsurance || patient.insurance || defaultData.medicalInsurance,
+        insuranceNumber: patient.insuranceNumber || patient.insuranceId || defaultData.insuranceNumber
+    } : defaultData;
+    
+    section.innerHTML = `
+        <div class="dashboard-section">
+            <div class="section-header">
+                <div>
+                    <h3>Mi Perfil</h3>
+                    <p>Gestiona tu información personal</p>
+                </div>
+                <div class="section-header-actions">
+                    <button class="btn btn-secondary" id="editProfileBtn">
+                        <i class="fas fa-edit"></i>
+                        Editar Perfil
+                    </button>
+                </div>
+            </div>
+            
+            <div class="profile-content" id="profileContent">
+                ${createProfileViewHTML(profileData)}
+            </div>
+        </div>
+    `;
+    
+    // Guardar datos del perfil en el elemento para poder accederlos después
+    section.setAttribute('data-patient', JSON.stringify(profileData));
+    
+    // Agregar event listener para el botón de editar
+    setTimeout(() => {
+        const editBtn = section.querySelector('#editProfileBtn');
+        if (editBtn) {
+            editBtn.addEventListener('click', function() {
+                const savedData = JSON.parse(section.getAttribute('data-patient') || '{}');
+                toggleProfileEdit(savedData);
+            });
+        }
+    }, 100);
+    
+    return section;
+}
+
+// Crear HTML de vista del perfil
+function createProfileViewHTML(patient) {
+    return `
+        <div class="profile-grid">
+            <div class="profile-info-group">
+                <h4 class="info-group-title">Información Personal</h4>
+                <div class="info-item">
+                    <span class="info-label">Nombre:</span>
+                    <span class="info-value" id="profile-name">${patient.name || ''}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Apellido:</span>
+                    <span class="info-value" id="profile-lastName">${patient.lastName || ''}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">DNI:</span>
+                    <span class="info-value" id="profile-dni">${patient.dni || ''}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Fecha de Nacimiento:</span>
+                    <span class="info-value" id="profile-birthDate">${patient.birthDate || ''}</span>
+                </div>
+            </div>
+            
+            <div class="profile-info-group">
+                <h4 class="info-group-title">Información de Contacto</h4>
+                <div class="info-item">
+                    <span class="info-label">Email:</span>
+                    <span class="info-value" id="profile-email">${patient.email || ''}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Teléfono:</span>
+                    <span class="info-value" id="profile-phone">${patient.phone || ''}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Dirección:</span>
+                    <span class="info-value" id="profile-address">${patient.address || ''}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Ciudad:</span>
+                    <span class="info-value" id="profile-city">${patient.city || ''}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Código Postal:</span>
+                    <span class="info-value" id="profile-postalCode">${patient.postalCode || ''}</span>
+                </div>
+            </div>
+            
+            <div class="profile-info-group">
+                <h4 class="info-group-title">Información Médica</h4>
+                <div class="info-item">
+                    <span class="info-label">Obra Social:</span>
+                    <span class="info-value" id="profile-medicalInsurance">${patient.medicalInsurance || ''}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Número de Obra Social:</span>
+                    <span class="info-value" id="profile-insuranceNumber">${patient.insuranceNumber || ''}</span>
+                </div>
+            </div>
+            
+            <div class="profile-info-group">
+                <h4 class="info-group-title">Contacto de Emergencia</h4>
+                <div class="info-item">
+                    <span class="info-label">Nombre:</span>
+                    <span class="info-value" id="profile-emergencyContact">${patient.emergencyContact || ''}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Teléfono:</span>
+                    <span class="info-value" id="profile-emergencyPhone">${patient.emergencyPhone || ''}</span>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// Crear HTML de edición del perfil
+function createProfileEditHTML(patient) {
+    return `
+        <form id="profileEditForm" class="profile-edit-form">
+            <div class="profile-grid">
+                <div class="profile-info-group">
+                    <h4 class="info-group-title">Información Personal</h4>
+                    <div class="form-group">
+                        <label for="edit-name">Nombre:</label>
+                        <input type="text" id="edit-name" name="name" value="${patient.name || ''}" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-lastName">Apellido:</label>
+                        <input type="text" id="edit-lastName" name="lastName" value="${patient.lastName || ''}" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-dni">DNI:</label>
+                        <input type="text" id="edit-dni" name="dni" value="${patient.dni || ''}" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-birthDate">Fecha de Nacimiento:</label>
+                        <input type="date" id="edit-birthDate" name="birthDate" value="${patient.birthDate || ''}" required>
+                    </div>
+                </div>
+                
+                <div class="profile-info-group">
+                    <h4 class="info-group-title">Información de Contacto</h4>
+                    <div class="form-group">
+                        <label for="edit-email">Email:</label>
+                        <input type="email" id="edit-email" name="email" value="${patient.email || ''}" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-phone">Teléfono:</label>
+                        <input type="tel" id="edit-phone" name="phone" value="${patient.phone || ''}" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-address">Dirección:</label>
+                        <input type="text" id="edit-address" name="address" value="${patient.address || ''}" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-city">Ciudad:</label>
+                        <input type="text" id="edit-city" name="city" value="${patient.city || ''}" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-postalCode">Código Postal:</label>
+                        <input type="text" id="edit-postalCode" name="postalCode" value="${patient.postalCode || ''}" required>
+                    </div>
+                </div>
+                
+                <div class="profile-info-group">
+                    <h4 class="info-group-title">Información Médica</h4>
+                    <div class="form-group">
+                        <label for="edit-medicalInsurance">Obra Social:</label>
+                        <input type="text" id="edit-medicalInsurance" name="medicalInsurance" value="${patient.medicalInsurance || ''}">
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-insuranceNumber">Número de Obra Social:</label>
+                        <input type="text" id="edit-insuranceNumber" name="insuranceNumber" value="${patient.insuranceNumber || ''}">
+                    </div>
+                </div>
+                
+                <div class="profile-info-group">
+                    <h4 class="info-group-title">Contacto de Emergencia</h4>
+                    <div class="form-group">
+                        <label for="edit-emergencyContact">Nombre:</label>
+                        <input type="text" id="edit-emergencyContact" name="emergencyContact" value="${patient.emergencyContact || ''}" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-emergencyPhone">Teléfono:</label>
+                        <input type="tel" id="edit-emergencyPhone" name="emergencyPhone" value="${patient.emergencyPhone || ''}" required>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="form-actions" style="margin-top: 2rem; justify-content: flex-end;">
+                <button type="button" class="btn btn-secondary" id="cancelEditBtn">
+                    Cancelar
+                </button>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i>
+                    Guardar Cambios
+                </button>
+            </div>
+        </form>
+    `;
+}
+
+// Alternar entre vista y edición del perfil
+function toggleProfileEdit(patientData) {
+    const profileContent = document.getElementById('profileContent');
+    const editBtn = document.getElementById('editProfileBtn');
+    const profileSection = document.querySelector('.profile-section');
+    
+    if (!profileContent || !editBtn) return;
+    
+    const isEditing = profileContent.querySelector('.profile-edit-form');
+    
+    if (isEditing) {
+        // Cambiar a vista
+        profileContent.innerHTML = createProfileViewHTML(patientData);
+        editBtn.innerHTML = '<i class="fas fa-edit"></i> Editar Perfil';
+        editBtn.className = 'btn btn-secondary';
+        
+        // Actualizar datos guardados
+        if (profileSection) {
+            profileSection.setAttribute('data-patient', JSON.stringify(patientData));
+        }
+        
+        editBtn.onclick = function() { toggleProfileEdit(patientData); };
+    } else {
+        // Cambiar a edición
+        profileContent.innerHTML = createProfileEditHTML(patientData);
+        editBtn.innerHTML = '<i class="fas fa-times"></i> Cancelar';
+        editBtn.className = 'btn btn-secondary';
+        
+        // Agregar event listeners
+        const form = document.getElementById('profileEditForm');
+        const cancelBtn = document.getElementById('cancelEditBtn');
+        
+        if (form) {
+            form.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                await saveProfileChanges(form, patientData);
+            });
+        }
+        
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', function() {
+                toggleProfileEdit(patientData);
+            });
+        }
+        
+        editBtn.onclick = function() { toggleProfileEdit(patientData); };
+    }
+}
+
+// Guardar cambios del perfil
+async function saveProfileChanges(form, originalData) {
+    try {
+        const formData = new FormData(form);
+        const updatedData = {
+            name: formData.get('name'),
+            lastName: formData.get('lastName'),
+            email: formData.get('email'),
+            phone: formData.get('phone'),
+            dni: formData.get('dni'),
+            birthDate: formData.get('birthDate'),
+            address: formData.get('address'),
+            city: formData.get('city'),
+            postalCode: formData.get('postalCode'),
+            medicalInsurance: formData.get('medicalInsurance'),
+            insuranceNumber: formData.get('insuranceNumber'),
+            emergencyContact: formData.get('emergencyContact'),
+            emergencyPhone: formData.get('emergencyPhone')
+        };
+        
+        // Enviar al backend (usar PUT para actualizar)
+        const { Api } = await import('./api.js');
+        const patientId = 1; // Esto debería venir del localStorage o del estado de autenticación
+        await Api.put(`v1/Patient/${patientId}`, updatedData);
+        
+        showNotification('Perfil actualizado exitosamente', 'success');
+        
+        // Actualizar vista con los nuevos datos
+        const profileContent = document.getElementById('profileContent');
+        const profileSection = document.querySelector('.profile-section');
+        
+        if (profileContent) {
+            profileContent.innerHTML = createProfileViewHTML(updatedData);
+        }
+        
+        // Actualizar datos guardados en la sección
+        if (profileSection) {
+            profileSection.setAttribute('data-patient', JSON.stringify(updatedData));
+        }
+        
+        // Actualizar botón
+        const editBtn = document.getElementById('editProfileBtn');
+        if (editBtn) {
+            editBtn.innerHTML = '<i class="fas fa-edit"></i> Editar Perfil';
+            editBtn.className = 'btn btn-secondary';
+            editBtn.onclick = function() { toggleProfileEdit(updatedData); };
+        }
+        
+        // Actualizar nombre de bienvenida si es necesario
+        const welcomeName = document.getElementById('welcome-name');
+        if (welcomeName && updatedData.name) {
+            welcomeName.textContent = `Bienvenido, ${updatedData.name}`;
+        }
+        
+        // Recargar datos del paciente para actualizar toda la información
+        loadPatientData();
+        
+    } catch (error) {
+        console.error('Error al guardar perfil:', error);
+        showNotification('Error al guardar los cambios. Por favor intenta nuevamente.', 'error');
+    }
+}
+
+// Mostrar sección "En construcción"
+function showComingSoonSection(section) {
+    const dashboardContent = document.querySelector('.dashboard-content');
+    if (!dashboardContent) return;
+    
+    // Eliminar sección coming soon anterior si existe
+    const existingComingSoon = dashboardContent.querySelector('.coming-soon-section');
+    if (existingComingSoon) {
+        existingComingSoon.remove();
+    }
+    
+    // Crear sección coming soon
+    const comingSoonSection = document.createElement('div');
+    comingSoonSection.className = 'coming-soon-section';
+    
+    const sectionConfig = {
+        'pagos': {
+            name: 'Pagos',
+            icon: 'fas fa-credit-card',
+            message: 'Esta funcionalidad se implementará a futuro',
+            description: 'Estamos trabajando para brindarte la mejor experiencia. Pronto podrás gestionar tus pagos de manera fácil y segura desde esta plataforma.'
+        },
+        'turnos': {
+            name: 'Mis Turnos',
+            icon: 'fas fa-calendar-alt',
+            message: 'Esta funcionalidad se implementará a futuro',
+            description: 'Estamos trabajando para brindarte la mejor experiencia. Pronto podrás gestionar todos tus turnos médicos desde esta sección.'
+        },
+        'historial': {
+            name: 'Historial Médico',
+            icon: 'fas fa-file-medical',
+            message: 'Esta funcionalidad se implementará a futuro',
+            description: 'Estamos trabajando para brindarte la mejor experiencia. Pronto podrás acceder a todo tu historial médico completo desde esta sección.'
+        }
+    };
+    
+    const config = sectionConfig[section] || {
+        name: section,
+        icon: 'fas fa-clock',
+        message: 'Esta funcionalidad se implementará a futuro',
+        description: 'Estamos trabajando para brindarte la mejor experiencia. Esta funcionalidad estará disponible pronto.'
+    };
+    
+    comingSoonSection.innerHTML = `
+        <div class="dashboard-section">
+            <div class="coming-soon-content">
+                <div class="coming-soon-icon">
+                    <i class="${config.icon}"></i>
+                </div>
+                <h2>${config.name}</h2>
+                <p class="coming-soon-message">${config.message}</p>
+                <p class="coming-soon-description">${config.description}</p>
+                <button class="btn btn-primary" id="comingSoonBackBtn">
+                    <i class="fas fa-home"></i>
+                    Volver al Inicio
+                </button>
+            </div>
+        </div>
+    `;
+    
+    dashboardContent.appendChild(comingSoonSection);
+    
+    // Agregar event listener al botón
+    setTimeout(() => {
+        const backBtn = document.getElementById('comingSoonBackBtn');
+        if (backBtn) {
+            backBtn.addEventListener('click', function() {
+                const inicioBtn = document.querySelector('[data-section="inicio"]');
+                if (inicioBtn) {
+                    inicioBtn.click();
+                }
+            });
+        }
+    }, 100);
+}
+
 // Exportar funciones para uso global
 window.PatientPanel = {
     startVideoCall,
@@ -512,5 +1173,7 @@ window.PatientPanel = {
     viewPrescription,
     closePrescriptionModal,
     showNotification,
-    updateDashboardData
+    updateDashboardData,
+    loadPatientProfile,
+    showComingSoonSection
 };

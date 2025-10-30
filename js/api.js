@@ -21,4 +21,6 @@ async function apiRequest(endpoint, method = "GET", body = null) {
 export const Api = {
   get: (endpoint) => apiRequest(endpoint),
   post: (endpoint, data) => apiRequest(endpoint, "POST", data),
+  put: (endpoint, data) => apiRequest(endpoint, "PUT", data),
+  patch: (endpoint, data) => apiRequest(endpoint, "PATCH", data),
 };

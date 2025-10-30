@@ -9,7 +9,7 @@
 </head>
 <body>
     <div class="login-container">
-        <a href="index.html" class="back-to-home">
+        <a href="cuidarMed.html" class="back-to-home">
             <i class="fas fa-arrow-left"></i>
             Volver al inicio
         </a>
@@ -42,8 +42,8 @@
                 </div>
 
                 <div class="forgot-links">
-                    <a href="#" class="forgot-link" id="forgotPassword">Olvidé mi clave</a>
-                    <a href="#" class="forgot-link" id="resetPassword">Blanqueo de clave</a>
+                    <a href="blanqueo.html" class="forgot-link" id="forgotPassword">Olvidé mi clave</a>
+                    <a href="reseteo.html" class="forgot-link" id="resetPassword">Blanqueo de clave</a>
                 </div>
 
                 <button type="submit" class="login-button">
@@ -99,17 +99,11 @@
             }
         });
 
-        // Funcionalidad para "Olvidé mi clave"
-        document.getElementById('forgotPassword').addEventListener('click', function(e) {
-            e.preventDefault();
-            alert('Se ha enviado un enlace de recuperación a tu email registrado.');
-        });
+        // Funcionalidad para "Olvidé mi clave" - Redirige a blanqueo.html
+        // La navegación se maneja directamente con el href
 
-        // Funcionalidad para "Blanqueo de clave"
-        document.getElementById('resetPassword').addEventListener('click', function(e) {
-            e.preventDefault();
-            alert('Para blanquear tu clave, contacta al administrador del sistema.');
-        });
+        // Funcionalidad para "Blanqueo de clave" - Redirige a reseteo.html
+        // La navegación se maneja directamente con el href
 
         // Funcionalidad para "Regístrate aquí"
         document.getElementById('registerLink').addEventListener('click', function(e) {
