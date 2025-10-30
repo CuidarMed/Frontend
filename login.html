@@ -29,7 +29,7 @@
                     <label for="username">Usuario</label>
                     <div class="input-icon">
                         <i class="fas fa-user"></i>
-                        <input type="text" id="username" name="username" placeholder="Ingresa tu usuario" required>
+                        <input type="text" id="email" name="email" placeholder="Tu Email" required>
                     </div>
                 </div>
 
@@ -68,67 +68,5 @@
         <a href="login.html" class="demo-btn active">Login</a>
         <a href="registro.html" class="demo-btn">Registro</a>
     </div>
-
-    <script>
-        // Funcionalidad del formulario de login
-        document.getElementById('loginForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
-            
-            // Simulación de validación
-            if (username && password) {
-                // Mostrar mensaje de éxito
-                const button = document.querySelector('.login-button');
-                const originalText = button.innerHTML;
-                
-                button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Iniciando sesión...';
-                button.disabled = true;
-                
-                setTimeout(() => {
-                    // Simular redirección según el tipo de usuario
-                    if (username.toLowerCase().includes('doctor') || username.toLowerCase().includes('medico')) {
-                        window.location.href = 'doctor.html';
-                    } else {
-                        window.location.href = 'patient.html';
-                    }
-                }, 2000);
-            } else {
-                alert('Por favor, completa todos los campos');
-            }
-        });
-
-        // Funcionalidad para "Olvidé mi clave"
-        document.getElementById('forgotPassword').addEventListener('click', function(e) {
-            e.preventDefault();
-            alert('Se ha enviado un enlace de recuperación a tu email registrado.');
-        });
-
-        // Funcionalidad para "Blanqueo de clave"
-        document.getElementById('resetPassword').addEventListener('click', function(e) {
-            e.preventDefault();
-            alert('Para blanquear tu clave, contacta al administrador del sistema.');
-        });
-
-        // Funcionalidad para "Regístrate aquí"
-        document.getElementById('registerLink').addEventListener('click', function(e) {
-            e.preventDefault();
-            window.location.href = 'registro.html';
-        });
-
-        // Efecto de focus en los inputs
-        document.querySelectorAll('.form-group input').forEach(input => {
-            input.addEventListener('focus', function() {
-                this.parentElement.querySelector('i').style.color = '#2563eb';
-            });
-            
-            input.addEventListener('blur', function() {
-                if (!this.value) {
-                    this.parentElement.querySelector('i').style.color = '#6b7280';
-                }
-            });
-        });
-    </script>
 </body>
 </html>
