@@ -1,16 +1,14 @@
 const AUTHMS_BASE_URL = "http://localhost:8081/api/v1";
 
-export async function login(email, password)
-{
+export async function login(email, password) {
     const response = await fetch(`${AUTHMS_BASE_URL}/Auth/Login`, {
         method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({email, password})
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
     });
 
-    if (!response.ok)
-    {
-        const error = await response.json().catch(() => ({message: "Error desconocido"}));
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: "Error desconocido" }));
         throw new Error(error.message || "Error al iniciar sesión");
     }
     return await response.json();
@@ -55,4 +53,30 @@ export async function registerUser(userData) {
         console.error("Error en registerUser:", error);
         throw error;
     }
+}
+
+export async function getUserById(userId, token) {
+    if (!userId) {
+        throw new Error("Se requiere un identificador de usuario válido");
+    }
+
+    const response = await fetch(`${AUTHMS_BASE_URL}/User/${userId}`, {
+        method: "GET",
+        headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+    });
+
+    if (response.status === 204) {
+        return null;
+    }
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const message = errorData.message || errorData.Message || response.statusText || "No se pudo obtener el perfil";
+        throw new Error(message);
+    }
+
+    return response.json();
 }

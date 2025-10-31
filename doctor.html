@@ -16,8 +16,8 @@
         <div class="actions">
             <div class="user-menu" id="userMenu">
                 <button class="user-btn" id="userBtn">
-                    <i class="fas fa-user-circle"></i>
-                    <span>Mi cuenta</span>
+                    <img id="userMenuAvatar" class="user-menu-avatar" src="https://icons.veryicon.com/png/o/internet--web/prejudice/user-128.png" alt="Foto de perfil" />
+                    <span id="userMenuName">Mi cuenta</span>
                     <i class="fas fa-chevron-down" style="font-size:0.8rem;"></i>
                 </button>
                 <div class="user-dropdown" id="userDropdown">
@@ -37,11 +37,15 @@
                 <p class="panel-title">Panel Médico</p>
             </div>
             <nav class="sidebar-nav">
+                <a href="#" class="nav-item active" data-section="inicio">
+                    <i class="fas fa-home"></i>
+                    Inicio
+                </a>
                 <a href="#" class="nav-item" data-section="agenda">
                     <i class="fas fa-calendar"></i>
                     Agenda
                 </a>
-                <a href="#" class="nav-item active" data-section="consultas">
+                <a href="#" class="nav-item" data-section="consultas">
                     <i class="fas fa-list"></i>
                     Consultas de hoy
                 </a>
@@ -53,18 +57,23 @@
                     <i class="fas fa-file-medical"></i>
                     Recetas
                 </a>
-                <a href="#" class="nav-item" data-section="configuracion">
-                    <i class="fas fa-cog"></i>
-                    Configuración
+                <a href="#" class="nav-item" data-section="perfil">
+                    <i class="fas fa-user"></i>
+                    Perfil
                 </a>
             </nav>
         </div>
 
         <div class="dashboard-content">
+            <div id="mainDashboardSection">
             <!-- Welcome Section -->
             <div class="welcome-section">
-                <h2 id="welcome-name">Bienvenida, Dra. Ana Martínez</h2>
-                <p>Panel de gestión médica</p>
+                <div class="welcome-header">
+                    <div class="welcome-copy">
+                        <h2 id="welcome-name">Bienvenido</h2>
+                        <p id="welcome-message">Panel de gestión médica</p>
+                    </div>
+                </div>
             </div>
 
             <!-- Summary Cards -->
@@ -154,6 +163,55 @@
                     </div>
                 </div>
             </div>
+
+            </div>
+
+            <!-- Perfil del Profesional -->
+            <div class="dashboard-section profile-section hidden" id="doctorProfileSection">
+                <div class="section-header">
+                    <div>
+                        <h3>Perfil Profesional</h3>
+                        <p>Datos visibles para tus pacientes</p>
+                    </div>
+                    <div class="section-header-actions">
+                        <button class="btn btn-primary" id="editDoctorProfile">
+                            <i class="fas fa-edit"></i>
+                            Editar Perfil
+                        </button>
+                    </div>
+                </div>
+                <div class="profile-card">
+                    <div class="profile-header">
+                        <img id="profile-avatar" class="profile-avatar" src="https://icons.veryicon.com/png/o/internet--web/prejudice/user-128.png" alt="Foto del profesional" />
+                        <div class="profile-summary" id="profileSummary">
+                            <h4 id="profile-name">Dr. Juan Pérez</h4>
+                            <p id="profile-specialty">Especialidad no especificada</p>
+                            <span id="profile-license" class="profile-chip">Matrícula: —</span>
+                        </div>
+                    </div>
+                    <form id="doctorProfileForm" class="profile-grid" novalidate>
+                        <div class="profile-group">
+                            <h5>Información de contacto</h5>
+                            <label class="profile-label" for="profileEmailInput">Email</label>
+                            <input type="email" id="profileEmailInput" name="email" placeholder="correo@ejemplo.com" required disabled>
+
+                            <label class="profile-label" for="profilePhoneInput">Teléfono</label>
+                            <input type="text" id="profilePhoneInput" name="phone" placeholder="Número de contacto" disabled>
+
+                            <label class="profile-label" for="profileLocationInput">Consultorio</label>
+                            <input type="text" id="profileLocationInput" name="location" placeholder="Dirección del consultorio" disabled>
+                        </div>
+                        <div class="profile-group">
+                            <h5>Biografía</h5>
+                            <textarea id="profileBioInput" name="biography" rows="6" placeholder="Comparte tu experiencia, especialidad y enfoque profesional." disabled></textarea>
+                        </div>
+                        <div class="profile-actions hidden" id="profileActions">
+                            <button type="button" class="btn btn-secondary" id="cancelProfileEdit">Cancelar</button>
+                            <button type="submit" class="btn btn-primary" id="saveProfile">Guardar Cambios</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -190,7 +248,6 @@
         </div>
     </div>
 
-    <script type="module" src="js/main.js"></script>
     <script src="js/doctor.js"></script>
     <script>
         (function(){
@@ -216,7 +273,7 @@
                 logoutBtn.addEventListener('click', function(e){
                     e.preventDefault();
                     try { localStorage.clear(); } catch(_) {}
-                    window.location.href = 'cuidarMed.html';
+                    window.location.href = 'index.html';
                 });
             }
         })();

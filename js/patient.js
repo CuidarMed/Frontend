@@ -2,18 +2,73 @@
 let currentUser = null;
 let currentPatient = null;
 let autoRefreshInterval = null;
+let currentPrescriptionData = null;
+let pendingPatientAvatar = null;
+const DEFAULT_AVATAR_URL = "https://icons.veryicon.com/png/o/internet--web/prejudice/user-128.png";
+
+function formatDate(value) {
+    if (!value) return '';
+    let date = value;
+
+    if (typeof value === 'string') {
+        // Normalizar string ISO (YYYY-MM-DD o YYYY-MM-DDTHH:mm:ss)
+        const normalized = value.replace(/T.*/, '');
+        // Crear fecha en formato UTC para evitar problemas de zona horaria
+        const [year, month, day] = normalized.split('-');
+        if (year && month && day) {
+            date = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day)));
+        } else {
+            date = new Date(normalized);
+        }
+    }
+
+    if (value instanceof Date) {
+        date = value;
+    }
+
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+        // Si no se pudo parsear, intentar retornar el valor original formateado
+        if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+            const [year, month, day] = value.split('-');
+            return `${day}/${month}/${year}`;
+        }
+        return value;
+    }
+
+    return date.toLocaleDateString('es-AR', { year: 'numeric', month: '2-digit', day: '2-digit' });
+}
+
+function toISODate(displayDate) {
+    if (!displayDate) return '';
+
+    // If already ISO
+    if (/^\d{4}-\d{2}-\d{2}$/.test(displayDate)) {
+        return displayDate;
+    }
+
+    // Attempt to parse dd/mm/yyyy
+    const match = displayDate.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})$/);
+    if (match) {
+        const [, day, month, year] = match;
+        return `${year}-${month}-${day}`;
+    }
+
+    const date = new Date(displayDate);
+    if (Number.isNaN(date.getTime())) {
+        return '';
+    }
+
+    const month = `${date.getMonth() + 1}`.padStart(2, '0');
+    const day = `${date.getDate()}`.padStart(2, '0');
+    return `${date.getFullYear()}-${month}-${day}`;
+}
 
 document.addEventListener('DOMContentLoaded', async () => {
     await initializePatientPanel();
 });
 
 async function initializePatientPanel() {
-    currentUser = await getAuthenticatedUser();
-
-    if (!currentUser) {
-        window.location.href = 'login.html';
-        return;
-    }
+    await loadUserContext();
 
     setupUserMenu();
     initializeSidebarNavigation();
@@ -22,12 +77,146 @@ async function initializePatientPanel() {
     initializeViewPrescriptionButtons();
     initializeModals();
 
+    updateWelcomeBanner();
+
     await loadPatientData();
+    await loadPatientAppointments();
+    await loadPatientHistory();
+    await loadPatientStats();
 
     if (autoRefreshInterval) {
         clearInterval(autoRefreshInterval);
     }
-    autoRefreshInterval = setInterval(loadPatientData, 30000);
+    autoRefreshInterval = setInterval(async () => {
+        await loadPatientData();
+        await loadPatientAppointments();
+        await loadPatientStats();
+    }, 30000);
+}
+
+async function loadUserContext() {
+    currentUser = await getAuthenticatedUser();
+
+    if (!currentUser) {
+        window.location.href = 'login.html';
+        return;
+    }
+
+    await ensureUserProfile();
+}
+
+async function ensureUserProfile() {
+    const { state } = await import('./state.js');
+
+    const token = state.token;
+    const userId = currentUser?.userId;
+
+    if (!token || !userId) {
+        return;
+    }
+
+    try {
+        const { getUserById } = await import('./apis/authms.js');
+        const profile = await getUserById(userId, token);
+
+        if (profile) {
+            const newImageUrl = profile.imageUrl ?? profile.ImageUrl ?? currentUser.imageUrl;
+            
+            // Verificar si la nueva imagen es diferente de la por defecto
+            const isDefaultImage = newImageUrl === DEFAULT_AVATAR_URL || 
+                                  (newImageUrl && newImageUrl.includes('icons.veryicon.com/png/o/internet--web/prejudice/user-128.png'));
+            
+            // Si tenemos una imagen nueva que no es la por defecto, o si no teníamos imagen, actualizar
+            const shouldUpdateImage = (newImageUrl && !isDefaultImage && newImageUrl.trim() !== '') || 
+                                     !currentUser?.imageUrl ||
+                                     (currentUser?.imageUrl === DEFAULT_AVATAR_URL || 
+                                      (currentUser?.imageUrl && currentUser.imageUrl.includes('icons.veryicon.com/png/o/internet--web/prejudice/user-128.png')));
+
+            const normalizedProfile = {
+                firstName: profile.firstName ?? profile.FirstName ?? currentUser.firstName,
+                lastName: profile.lastName ?? profile.LastName ?? currentUser.lastName,
+                imageUrl: shouldUpdateImage && !isDefaultImage ? newImageUrl : (currentUser.imageUrl || DEFAULT_AVATAR_URL),
+                email: profile.email ?? profile.Email ?? currentUser.email,
+                role: profile.role ?? profile.Role ?? currentUser.role,
+            };
+
+            currentUser = {
+                ...currentUser,
+                ...normalizedProfile,
+            };
+
+            state.user = currentUser;
+            localStorage.setItem('user', JSON.stringify(currentUser));
+
+            updateWelcomeBanner();
+        }
+    } catch (error) {
+        console.warn('No se pudo sincronizar el perfil del usuario', error);
+    }
+}
+
+function getUserAvatarUrl() {
+    // Primero verificar si el paciente tiene un avatar
+    const patientAvatar = currentPatient?.avatarUrl;
+    if (patientAvatar && typeof patientAvatar === 'string' && patientAvatar.trim() && 
+        patientAvatar !== 'null' && patientAvatar !== 'undefined' &&
+        patientAvatar !== DEFAULT_AVATAR_URL &&
+        !patientAvatar.includes('icons.veryicon.com/png/o/internet--web/prejudice/user-128.png')) {
+        return patientAvatar;
+    }
+    
+    // Luego verificar si el usuario tiene una imagen personalizada
+    const candidate = currentUser?.imageUrl;
+    if (candidate && typeof candidate === 'string' && candidate.trim() && 
+        candidate !== 'null' && candidate !== 'undefined' &&
+        candidate !== DEFAULT_AVATAR_URL &&
+        !candidate.includes('icons.veryicon.com/png/o/internet--web/prejudice/user-128.png')) {
+        return candidate;
+    }
+    
+    // Si no hay imagen personalizada, usar la por defecto
+    return DEFAULT_AVATAR_URL;
+}
+
+function getUserDisplayName() {
+    if (currentPatient?.name) {
+        return currentPatient.name;
+    }
+
+    const fullName = [currentUser?.firstName, currentUser?.lastName].filter(Boolean).join(' ').trim();
+
+    if (fullName) {
+        return fullName;
+    }
+
+    return currentUser?.email || 'Paciente';
+}
+
+function updateWelcomeBanner() {
+    const welcomeNameElement = document.getElementById('welcome-name');
+    const welcomeMessageElement = document.getElementById('welcome-message');
+    const userMenuAvatar = document.getElementById('userMenuAvatar');
+    const userMenuName = document.getElementById('userMenuName');
+
+    const displayName = getUserDisplayName();
+    const avatarUrl = getUserAvatarUrl();
+
+    if (welcomeNameElement) {
+        welcomeNameElement.textContent = `Hola, ${displayName}`;
+    }
+
+    if (welcomeMessageElement && !welcomeMessageElement.dataset.custom) {
+        welcomeMessageElement.textContent = 'Aquí está el resumen de tu atención médica';
+    }
+
+    if (userMenuAvatar) {
+        userMenuAvatar.src = avatarUrl;
+        userMenuAvatar.alt = `Foto de ${displayName}`;
+    }
+
+    if (userMenuName) {
+        userMenuName.textContent = currentUser?.firstName ? currentUser.firstName : 'Mi cuenta';
+    }
 }
 
 async function getAuthenticatedUser() {
@@ -46,6 +235,8 @@ function setupUserMenu() {
             window.location.href = 'login.html';
         });
     }
+
+    updateWelcomeBanner();
 }
 
 // Cargar datos del paciente desde el backend
@@ -59,15 +250,27 @@ async function loadPatientData() {
             }
         }
 
+        // Siempre cargar el usuario desde AuthMS para obtener la imagen más reciente
+        await ensureUserProfile();
+
         const { Api } = await import('./api.js');
         const patientResponse = await Api.get(`v1/Patient/User/${currentUser.userId}`);
+        console.log("Paciente obtenido del backend:", {
+            raw: patientResponse,
+            dateOfBirth: patientResponse?.dateOfBirth ?? patientResponse?.DateOfBirth,
+            birthDate: patientResponse?.birthDate
+        });
         currentPatient = normalizePatient(patientResponse);
+        console.log("Paciente normalizado:", {
+            normalized: currentPatient,
+            birthDate: currentPatient?.birthDate
+        });
 
-        // Actualizar nombre de bienvenida
-        const welcomeName = document.getElementById('welcome-name');
-        if (welcomeName) {
-            const displayName = currentPatient?.name || currentUser.email || 'Paciente';
-            welcomeName.textContent = `Bienvenido, ${displayName}`;
+        updateWelcomeBanner();
+
+        const profileSection = document.querySelector('.profile-section');
+        if (profileSection && !profileSection.classList.contains('hidden')) {
+            loadPatientProfile();
         }
 
     } catch (error) {
@@ -78,30 +281,37 @@ async function loadPatientData() {
 
 // Cargar turnos del paciente
 async function loadPatientAppointments() {
+    const appointmentsList = document.getElementById('appointments-list');
+    if (!appointmentsList) return;
+
+    if (!appointmentsList.dataset.defaultContent) {
+        appointmentsList.dataset.defaultContent = appointmentsList.innerHTML;
+    }
+
     try {
         const { Api } = await import('./api.js');
-        const patientId = 1;
+        const patientId = currentPatient?.patientId || currentUser?.userId || 1;
         const appointments = await Api.get(`v1/Patient/${patientId}/Appointments`);
-        
-        const appointmentsList = document.getElementById('appointments-list');
-        if (!appointmentsList) return;
-        
-        // Limpiar solo la lista de turnos
-        appointmentsList.innerHTML = '';
-        
+
         if (appointments && appointments.length > 0) {
+            appointmentsList.innerHTML = '';
+
             appointments.forEach(appointment => {
                 const appointmentCard = createAppointmentCardElement(appointment);
                 appointmentsList.appendChild(appointmentCard);
             });
+
+            initializeViewPrescriptionButtons(appointmentsList);
         } else {
-            // Si no hay turnos, mantener un mensaje
             appointmentsList.innerHTML = '<p style="color: #6b7280; padding: 2rem; text-align: center;">No hay turnos programados</p>';
         }
         
     } catch (error) {
         console.error('Error al cargar turnos:', error);
-        // Mantener HTML por defecto si falla
+        if (appointmentsList.dataset.defaultContent) {
+            appointmentsList.innerHTML = appointmentsList.dataset.defaultContent;
+            initializeViewPrescriptionButtons(appointmentsList);
+        }
     }
 }
 
@@ -109,7 +319,7 @@ async function loadPatientAppointments() {
 async function loadPatientHistory() {
     try {
         const { Api } = await import('./api.js');
-        const patientId = 1;
+        const patientId = currentPatient?.patientId || currentUser?.userId || 1;
         const history = await Api.get(`v1/Patient/${patientId}/History`);
         
         const historyList = document.getElementById('history-list');
@@ -123,6 +333,8 @@ async function loadPatientHistory() {
                 const historyItem = createHistoryItemElement(item);
                 historyList.appendChild(historyItem);
             });
+
+            initializeViewPrescriptionButtons(historyList);
         } else {
             historyList.innerHTML = '<p style="color: #6b7280; padding: 2rem; text-align: center;">No hay historial disponible</p>';
         }
@@ -137,7 +349,7 @@ async function loadPatientHistory() {
 async function loadPatientStats() {
     try {
         const { Api } = await import('./api.js');
-        const patientId = 1;
+        const patientId = currentPatient?.patientId || currentUser?.userId || 1;
         const stats = await Api.get(`v1/Patient/${patientId}/Stats`);
         
         if (stats) {
@@ -170,22 +382,31 @@ function createAppointmentCardElement(appointment) {
     
     const statusClass = appointment.status === 'confirmed' ? 'confirmed' : 'pending';
     const statusText = appointment.status === 'confirmed' ? 'Confirmado' : 'Pendiente';
+    const doctorName = appointment.doctorName || appointment.doctor || 'Profesional sin asignar';
+    const specialty = appointment.specialty || appointment.reason || 'Consulta general';
+    const dateLabel = appointment.date || 'Fecha a confirmar';
+    const timeLabel = appointment.time ? ` · ${appointment.time}` : '';
+    const locationLabel = appointment.location ? ` · ${appointment.location}` : '';
+    const prescriptionKey = appointment.prescriptionId || appointment.prescriptionKey || appointment.date || '';
+    const hasPrescription = Boolean(appointment.prescriptionId || appointment.prescriptionKey || appointment.hasPrescription);
     
     card.innerHTML = `
-        <div class="appointment-icon">
-            <i class="fas fa-calendar-alt"></i>
-        </div>
-        <div class="appointment-info">
-            <h4>${appointment.doctorName || 'Dr. Desconocido'}</h4>
-            <p>${appointment.specialty || 'Sin especialidad'}</p>
-            <span>${appointment.date || ''} - ${appointment.time || ''}</span>
+        <div class="appointment-details">
+            <div class="appointment-date">${dateLabel}</div>
+            <div class="appointment-info">
+                <h4>${doctorName}</h4>
+                <p>${specialty}</p>
+                <span>${dateLabel}${timeLabel}${locationLabel}</span>
+            </div>
         </div>
         <div class="appointment-actions">
             <span class="status ${statusClass}">${statusText}</span>
-            <button class="btn-video" data-doctor="${appointment.doctorName || ''}">
-                <i class="fas fa-video"></i>
-                Videollamada
-            </button>
+            ${hasPrescription ? `
+                <button class="btn btn-secondary btn-view-prescription view-prescription-btn" data-consultation="${prescriptionKey}">
+                    <i class="fas fa-file-medical"></i>
+                    Ver Receta
+                </button>
+            ` : ''}
         </div>
     `;
     
@@ -207,7 +428,7 @@ function createHistoryItemElement(item) {
             <p>${item.description || 'Sin descripción'}</p>
         </div>
         <div class="appointment-actions">
-            <a href="#" class="btn-view-prescription" data-consultation="${item.date || ''}">
+            <a href="#" class="btn-view-prescription view-prescription-btn" data-consultation="${item.date || ''}">
                 <i class="fas fa-file-medical"></i>
                 Ver Receta
             </a>
@@ -241,6 +462,15 @@ function initializeSidebarNavigation() {
 function normalizePatient(rawPatient) {
     if (!rawPatient) return null;
 
+    // Normalizar fecha de nacimiento - puede venir como string ISO o DateOnly
+    let birthDate = rawPatient.birthDate ?? rawPatient.dateOfBirth ?? rawPatient.DateOfBirth ?? '';
+    if (birthDate) {
+        // Si viene como DateOnly de C#, intentar parsearlo
+        if (typeof birthDate === 'string' && /^\d{4}-\d{2}-\d{2}/.test(birthDate)) {
+            birthDate = birthDate.split('T')[0]; // Remover hora si existe
+        }
+    }
+
     return {
         patientId: rawPatient.patientId ?? rawPatient.PatientId ?? null,
         name: rawPatient.name ?? rawPatient.firstName ?? rawPatient.Name ?? '',
@@ -248,8 +478,8 @@ function normalizePatient(rawPatient) {
         email: rawPatient.email ?? '',
         phone: rawPatient.phone ?? rawPatient.Phone ?? '',
         dni: (rawPatient.dni ?? rawPatient.Dni ?? '').toString(),
-        birthDate: rawPatient.birthDate ?? rawPatient.dateOfBirth ?? rawPatient.DateOfBirth ?? '',
-        address: rawPatient.address ?? rawPatient.Adress ?? '',
+        birthDate: birthDate,
+        address: rawPatient.address ?? rawPatient.Address ?? rawPatient.Adress ?? '',
         city: rawPatient.city ?? '',
         postalCode: rawPatient.postalCode ?? '',
         emergencyContact: rawPatient.emergencyContact ?? '',
@@ -257,6 +487,7 @@ function normalizePatient(rawPatient) {
         medicalInsurance: rawPatient.medicalInsurance ?? rawPatient.HealthPlan ?? '',
         insuranceNumber: rawPatient.insuranceNumber ?? rawPatient.MembershipNumber ?? '',
         userId: rawPatient.userId ?? rawPatient.UserId ?? null,
+        avatarUrl: rawPatient.avatarUrl ?? rawPatient.AvatarUrl ?? rawPatient.imageUrl ?? rawPatient.ImageUrl ?? null,
     };
 }
 
@@ -276,12 +507,15 @@ function buildProfileData(patient, user) {
         emergencyPhone: '',
         medicalInsurance: '',
         insuranceNumber: '',
+        avatarUrl: patient?.avatarUrl || getUserAvatarUrl(),
     };
 
     return {
         ...defaults,
         ...patient,
         email: patient?.email || defaults.email,
+        birthDate: formatDate(patient?.birthDate) || defaults.birthDate,
+        avatarUrl: patient?.avatarUrl || getUserAvatarUrl(),
     };
 }
 
@@ -477,14 +711,21 @@ function loadDoctorsBySpecialty() {
 }
 
 // Ver recetas
-function initializeViewPrescriptionButtons() {
-    const viewPrescriptionButtons = document.querySelectorAll('.view-prescription-btn');
+function initializeViewPrescriptionButtons(root = document) {
+    const viewPrescriptionButtons = root.querySelectorAll('.view-prescription-btn');
     
     viewPrescriptionButtons.forEach(button => {
-        button.addEventListener('click', function() {
+        if (button.dataset.bound === 'true') return;
+
+        button.addEventListener('click', function(event) {
+            if (event) {
+                event.preventDefault();
+            }
             const consultationDate = this.getAttribute('data-consultation');
             viewPrescription(consultationDate);
         });
+
+        button.dataset.bound = 'true';
     });
 }
 
@@ -495,6 +736,7 @@ function viewPrescription(consultationDate) {
     if (modal && content) {
         // Simular contenido de receta
         const prescriptionData = getPrescriptionData(consultationDate);
+        currentPrescriptionData = prescriptionData;
         content.innerHTML = generatePrescriptionHTML(prescriptionData);
         
         modal.classList.remove('hidden');
@@ -563,13 +805,13 @@ function generatePrescriptionHTML(data) {
         
         <div class="medication-list">
             <h5>Medicamentos:</h5>
-            ${data.medications.map(med => `
+            ${data.medications && data.medications.length ? data.medications.map(med => `
                 <div class="medication-item">
                     <div class="medication-name">${med.name}</div>
                     <div class="medication-details">Dosis: ${med.dosage}</div>
                     <div class="medication-instructions">Instrucciones: ${med.instructions}</div>
                 </div>
-            `).join('')}
+            `).join('') : '<p class="no-medications">No se registraron medicamentos para esta consulta.</p>'}
         </div>
     `;
 }
@@ -579,18 +821,19 @@ function closePrescriptionModal() {
     if (modal) {
         modal.classList.add('hidden');
     }
+    currentPrescriptionData = null;
 }
 
 // Inicializar modales
 function initializeModals() {
     // Modal de agendar turno
     const appointmentModal = document.getElementById('appointment-modal');
-    const closeAppointmentModal = document.querySelector('#appointment-modal .close-modal');
+    const closeAppointmentModalBtn = document.querySelector('#appointment-modal .close-modal');
     const cancelAppointment = document.getElementById('cancel-appointment');
     const appointmentForm = document.getElementById('appointment-form');
     
-    if (closeAppointmentModal) {
-        closeAppointmentModal.addEventListener('click', closeAppointmentModal);
+    if (closeAppointmentModalBtn) {
+        closeAppointmentModalBtn.addEventListener('click', closeAppointmentModal);
     }
     
     if (cancelAppointment) {
@@ -603,12 +846,12 @@ function initializeModals() {
     
     // Modal de receta
     const prescriptionModal = document.getElementById('prescription-modal');
-    const closePrescriptionModal = document.querySelector('#prescription-modal .close-modal');
+    const closePrescriptionModalBtn = document.querySelector('#prescription-modal .close-modal');
     const closePrescription = document.getElementById('close-prescription');
     const downloadPrescription = document.getElementById('download-prescription');
     
-    if (closePrescriptionModal) {
-        closePrescriptionModal.addEventListener('click', closePrescriptionModal);
+    if (closePrescriptionModalBtn) {
+        closePrescriptionModalBtn.addEventListener('click', closePrescriptionModal);
     }
     
     if (closePrescription) {
@@ -617,8 +860,11 @@ function initializeModals() {
     
     if (downloadPrescription) {
         downloadPrescription.addEventListener('click', function() {
-            showNotification('Descargando receta en PDF...');
-            // Aquí se implementaría la descarga del PDF
+            if (!currentPrescriptionData) {
+                showNotification('No hay receta disponible para descargar', 'error');
+                return;
+            }
+            downloadPrescriptionFile(currentPrescriptionData);
         });
     }
     
@@ -678,6 +924,32 @@ function updateConfirmedAppointments(change) {
         const newValue = Math.max(0, currentValue + change);
         confirmedAppointments.textContent = newValue;
     }
+}
+
+function downloadPrescriptionFile(data) {
+    const lines = [
+        `Receta Médica`,
+        `Fecha: ${data.date || 'N/D'}`,
+        `Paciente: ${data.patient || 'N/D'}`,
+        `Profesional: ${data.doctor || 'N/D'}`,
+        ``,
+        `Medicamentos:`,
+        ...(Array.isArray(data.medications) && data.medications.length > 0
+            ? data.medications.map((med, index) => `${index + 1}. ${med.name || 'Medicamento'} - Dosis: ${med.dosage || 'N/D'} - Indicaciones: ${med.instructions || 'N/D'}`)
+            : ['Sin medicamentos registrados'])
+    ];
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Receta-${data.date || 'sin-fecha'}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    showNotification('Receta descargada correctamente', 'success');
 }
 
 // Sistema de notificaciones
@@ -853,6 +1125,14 @@ function createProfileSection(profileData) {
 function createProfileViewHTML(patient) {
     return `
         <div class="profile-grid">
+            <div class="profile-avatar-card">
+                <img src="${patient.avatarUrl}" alt="Foto de perfil" class="profile-avatar-img" />
+                <div class="profile-avatar-name">${patient.name} ${patient.lastName}</div>
+                <div class="profile-avatar-meta">
+                    <span><strong>DNI:</strong> ${patient.dni || '—'}</span>
+                    <span><strong>Fecha de nacimiento:</strong> ${patient.birthDate || '—'}</span>
+                </div>
+            </div>
             <div class="profile-info-group">
                 <h4 class="info-group-title">Información Personal</h4>
                 <div class="info-item">
@@ -929,6 +1209,15 @@ function createProfileEditHTML(patient) {
     return `
         <form id="profileEditForm" class="profile-edit-form">
             <div class="profile-grid">
+                <div class="profile-avatar-card">
+                    <img src="${patient.avatarUrl}" alt="Foto de perfil" class="profile-avatar-img" id="profileAvatarPreview" />
+                    <button type="button" class="btn btn-secondary" id="profileAvatarTrigger">
+                        <i class="fas fa-camera"></i>
+                        Cambiar foto
+                    </button>
+                    <input type="file" id="profileAvatarInput" accept="image/*" hidden>
+                    <p class="profile-avatar-hint">* La foto se actualizará al guardar los cambios.</p>
+                </div>
                 <div class="profile-info-group">
                     <h4 class="info-group-title">Información Personal</h4>
                     <div class="form-group">
@@ -945,7 +1234,7 @@ function createProfileEditHTML(patient) {
                     </div>
                     <div class="form-group">
                         <label for="edit-birthDate">Fecha de Nacimiento:</label>
-                        <input type="date" id="edit-birthDate" name="birthDate" value="${patient.birthDate || ''}" required>
+                        <input type="date" id="edit-birthDate" name="birthDate" value="${toISODate(patient.birthDate) || ''}" required>
                     </div>
                 </div>
                 
@@ -1031,6 +1320,8 @@ function toggleProfileEdit(patientData) {
         if (profileSection) {
             profileSection.setAttribute('data-patient', JSON.stringify(patientData));
         }
+
+        pendingPatientAvatar = null;
         
         editBtn.onclick = function() { toggleProfileEdit(patientData); };
     } else {
@@ -1052,9 +1343,12 @@ function toggleProfileEdit(patientData) {
         
         if (cancelBtn) {
             cancelBtn.addEventListener('click', function() {
+                pendingPatientAvatar = null;
                 toggleProfileEdit(patientData);
             });
         }
+        
+        setupProfileAvatarEditor(patientData);
         
         editBtn.onclick = function() { toggleProfileEdit(patientData); };
     }
@@ -1064,13 +1358,14 @@ function toggleProfileEdit(patientData) {
 async function saveProfileChanges(form, originalData) {
     try {
         const formData = new FormData(form);
+        const birthDateISO = formData.get('birthDate');
         const updatedData = {
             name: formData.get('name'),
             lastName: formData.get('lastName'),
             email: formData.get('email'),
             phone: formData.get('phone'),
             dni: formData.get('dni'),
-            birthDate: formData.get('birthDate'),
+            birthDate: formatDate(birthDateISO),
             address: formData.get('address'),
             city: formData.get('city'),
             postalCode: formData.get('postalCode'),
@@ -1080,54 +1375,65 @@ async function saveProfileChanges(form, originalData) {
             emergencyPhone: formData.get('emergencyPhone')
         };
         
+        // Preparar payload para el backend con nombres correctos
+        const apiPayload = {
+            Name: updatedData.name,
+            LastName: updatedData.lastName,
+            Dni: parseInt(updatedData.dni, 10) || 0,
+            Adress: updatedData.address,
+            DateOfBirth: birthDateISO ? birthDateISO.split('T')[0] : null, // Asegurar formato YYYY-MM-DD
+            HealthPlan: updatedData.medicalInsurance,
+            MembershipNumber: updatedData.insuranceNumber,
+        };
+
         // Enviar al backend (usar PUT para actualizar)
         const { Api } = await import('./api.js');
         const patientId = currentPatient?.patientId;
+
+        // Log para debugging
+        console.log("Actualizando perfil del paciente:", {
+            patientId,
+            birthDateISO,
+            DateOfBirth: apiPayload.DateOfBirth,
+            payload: apiPayload
+        });
 
         if (!patientId) {
             throw new Error('No se pudo identificar al paciente para actualizar.');
         }
 
-        await Api.patch(`v1/Patient/${patientId}`, updatedData);
+        await Api.patch(`v1/Patient/${patientId}`, apiPayload);
         
         showNotification('Perfil actualizado exitosamente', 'success');
         
-        // Actualizar vista con los nuevos datos
-        const profileContent = document.getElementById('profileContent');
-        const profileSection = document.querySelector('.profile-section');
-        
-        if (profileContent) {
-            profileContent.innerHTML = createProfileViewHTML(updatedData);
-        }
-        
-        // Actualizar datos guardados en la sección
-        if (profileSection) {
-            profileSection.setAttribute('data-patient', JSON.stringify(updatedData));
-        }
-
-        // Actualizar información en memoria
-        currentPatient = {
+        const updatedPatientState = {
             ...currentPatient,
             ...updatedData,
             patientId,
+            avatarUrl: pendingPatientAvatar ?? currentPatient?.avatarUrl ?? getUserAvatarUrl(),
         };
-        
-        // Actualizar botón
-        const editBtn = document.getElementById('editProfileBtn');
-        if (editBtn) {
-            editBtn.innerHTML = '<i class="fas fa-edit"></i> Editar Perfil';
-            editBtn.className = 'btn btn-secondary';
-            editBtn.onclick = function() { toggleProfileEdit(updatedData); };
+
+        currentPatient = updatedPatientState;
+
+        if (pendingPatientAvatar) {
+            currentUser = {
+                ...currentUser,
+                imageUrl: pendingPatientAvatar,
+            };
+            const { state } = await import('./state.js');
+            state.user = currentUser;
+            localStorage.setItem('user', JSON.stringify(currentUser));
         }
-        
-        // Actualizar nombre de bienvenida si es necesario
-        const welcomeName = document.getElementById('welcome-name');
-        if (welcomeName && updatedData.name) {
-            welcomeName.textContent = `Bienvenido, ${updatedData.name}`;
+
+        pendingPatientAvatar = null;
+
+        const profileSection = document.querySelector('.profile-section');
+        if (profileSection) {
+            profileSection.setAttribute('data-patient', JSON.stringify(currentPatient));
         }
-        
-        // Recargar datos del paciente para actualizar toda la información
-        loadPatientData();
+
+        toggleProfileEdit(currentPatient);
+        updateWelcomeBanner();
         
     } catch (error) {
         console.error('Error al guardar perfil:', error);
@@ -1209,6 +1515,50 @@ function showComingSoonSection(section) {
             });
         }
     }, 100);
+}
+
+function setupProfileAvatarEditor(patientData) {
+    pendingPatientAvatar = null;
+
+    const trigger = document.getElementById('profileAvatarTrigger');
+    const input = document.getElementById('profileAvatarInput');
+    const preview = document.getElementById('profileAvatarPreview');
+
+    const currentAvatar = patientData?.avatarUrl || getUserAvatarUrl();
+    if (preview) {
+        preview.src = currentAvatar;
+    }
+
+    if (!trigger || !input || !preview) {
+        return;
+    }
+
+    trigger.addEventListener('click', (event) => {
+        event.preventDefault();
+        input.click();
+    });
+
+    input.addEventListener('change', (event) => {
+        const file = event.target.files?.[0];
+        if (!file) {
+            return;
+        }
+
+        if (!file.type.startsWith('image/')) {
+            showNotification('Seleccioná un archivo de imagen válido.', 'error');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = () => {
+            pendingPatientAvatar = reader.result;
+            preview.src = pendingPatientAvatar;
+        };
+        reader.onerror = () => {
+            showNotification('No pudimos leer la imagen seleccionada.', 'error');
+        };
+        reader.readAsDataURL(file);
+    });
 }
 
 // Exportar funciones para uso global

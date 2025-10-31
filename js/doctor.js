@@ -1,8 +1,199 @@
 // Funcionalidades específicas del panel médico
-document.addEventListener('DOMContentLoaded', function() {
+const DEFAULT_AVATAR_URL = "https://icons.veryicon.com/png/o/internet--web/prejudice/user-128.png";
+let currentUser = null;
+let currentDoctorData = null;
+let autoRefreshInterval = null;
+let currentPrescriptionData = null;
+
+document.addEventListener('DOMContentLoaded', async function() {
+    await loadDoctorContext();
     initializeDoctorPanel();
+    updateDoctorHeader();
     loadDoctorData(); // Cargar datos del backend
 });
+
+async function loadDoctorContext() {
+    const { state, loadUserFromStorage } = await import('./state.js');
+    loadUserFromStorage();
+
+    currentUser = state.user;
+
+    if (!currentUser) {
+        window.location.href = 'login.html';
+        return;
+    }
+
+    await ensureDoctorProfile(state.token);
+}
+
+async function ensureDoctorProfile(token) {
+    const userId = currentUser?.userId;
+
+    if (!token || !userId) {
+        return;
+    }
+
+    // Verificar si la imagen actual es la por defecto o si no hay datos completos
+    const currentImageUrl = currentUser?.imageUrl || '';
+    const isDefaultImage = currentImageUrl === DEFAULT_AVATAR_URL || 
+                          currentImageUrl.includes('icons.veryicon.com/png/o/internet--web/prejudice/user-128.png') ||
+                          !currentImageUrl ||
+                          !currentUser?.firstName || 
+                          !currentUser?.lastName;
+
+    // Siempre buscar actualización si es imagen por defecto o si faltan datos
+    if (isDefaultImage || !currentUser?.firstName || !currentUser?.lastName) {
+        try {
+            const { getUserById } = await import('./apis/authms.js');
+            const profile = await getUserById(userId, token);
+
+            if (profile) {
+                const newImageUrl = profile.imageUrl ?? profile.ImageUrl ?? currentUser.imageUrl;
+                
+                // Solo actualizar si la nueva imagen es diferente de la por defecto o si no teníamos imagen
+                const shouldUpdate = newImageUrl !== DEFAULT_AVATAR_URL && 
+                                   !newImageUrl.includes('icons.veryicon.com/png/o/internet--web/prejudice/user-128.png') &&
+                                   newImageUrl && 
+                                   newImageUrl.trim() !== '';
+
+                if (shouldUpdate || !currentUser?.imageUrl || !currentUser?.firstName || !currentUser?.lastName) {
+                    currentUser = {
+                        ...currentUser,
+                        firstName: profile.firstName ?? profile.FirstName ?? currentUser.firstName,
+                        lastName: profile.lastName ?? profile.LastName ?? currentUser.lastName,
+                        imageUrl: shouldUpdate ? newImageUrl : (currentUser.imageUrl || DEFAULT_AVATAR_URL),
+                        email: profile.email ?? profile.Email ?? currentUser.email,
+                        role: profile.role ?? profile.Role ?? currentUser.role,
+                    };
+
+                    const { state } = await import('./state.js');
+                    state.user = currentUser;
+                    localStorage.setItem('user', JSON.stringify(currentUser));
+
+                    updateDoctorHeader();
+                }
+            }
+        } catch (error) {
+            console.warn('No se pudo sincronizar el perfil del profesional', error);
+        }
+    } else {
+        // Si ya tenemos una imagen personalizada, asegurarnos de que se muestre
+        updateDoctorHeader();
+    }
+}
+
+function getDoctorAvatarUrl() {
+    const candidate = currentUser?.imageUrl;
+    if (candidate && typeof candidate === 'string' && candidate.trim() && candidate !== 'null' && candidate !== 'undefined') {
+        return candidate;
+    }
+    return DEFAULT_AVATAR_URL;
+}
+
+function getDoctorDisplayName(doctorInfo) {
+    const info = doctorInfo || {};
+    const doctorFirstName = info.firstName ?? info.FirstName ?? currentUser?.firstName;
+    const doctorLastName = info.lastName ?? info.LastName ?? currentUser?.lastName;
+    const fullName = [doctorFirstName, doctorLastName].filter(Boolean).join(' ').trim();
+
+    if (fullName) {
+        return fullName;
+    }
+
+    return currentUser?.email || 'Profesional';
+}
+
+function updateDoctorHeader(doctorInfo) {
+    const displayName = getDoctorDisplayName(doctorInfo);
+    const avatarUrl = getDoctorAvatarUrl();
+
+    const welcomeNameElement = document.getElementById('welcome-name');
+    const welcomeMessageElement = document.getElementById('welcome-message');
+    const userMenuAvatar = document.getElementById('userMenuAvatar');
+    const userMenuName = document.getElementById('userMenuName');
+    const profileAvatarElement = document.getElementById('profile-avatar');
+
+    if (welcomeNameElement) {
+        welcomeNameElement.textContent = `Hola, ${displayName}`;
+    }
+
+    if (welcomeMessageElement && !welcomeMessageElement.dataset.custom) {
+        welcomeMessageElement.textContent = 'Panel de gestión médica';
+    }
+
+    if (userMenuAvatar) {
+        userMenuAvatar.src = avatarUrl;
+        userMenuAvatar.alt = `Foto de ${displayName}`;
+    }
+
+    if (userMenuName) {
+        userMenuName.textContent = currentUser?.firstName ? currentUser.firstName : 'Mi cuenta';
+    }
+
+    if (profileAvatarElement) {
+        profileAvatarElement.src = avatarUrl;
+        profileAvatarElement.alt = `Foto de perfil de ${displayName}`;
+    }
+
+    updateDoctorProfileSection(doctorInfo);
+}
+
+function updateDoctorProfileSection(doctorInfo) {
+    const info = doctorInfo || {};
+    const profileSection = document.getElementById('doctorProfileSection');
+    if (!profileSection) {
+        return;
+    }
+
+    const displayName = getDoctorDisplayName(info);
+    const avatarUrl = getDoctorAvatarUrl();
+
+    const avatarElement = document.getElementById('profile-avatar');
+    if (avatarElement) {
+        avatarElement.src = avatarUrl;
+        avatarElement.alt = `Foto de ${displayName}`;
+    }
+
+    const profileName = document.getElementById('profile-name');
+    if (profileName) {
+        profileName.textContent = displayName ? `Dr. ${displayName}` : 'Profesional';
+    }
+
+    const profileSpecialty = document.getElementById('profile-specialty');
+    const specialtyValue = info.specialty ?? info.specialtyName ?? info.Specialty ?? 'Especialidad no especificada';
+    if (profileSpecialty) {
+        profileSpecialty.textContent = specialtyValue;
+    }
+
+    const profileLicense = document.getElementById('profile-license');
+    if (profileLicense) {
+        const license = info.licenseNumber ?? info.matricula ?? info.LicenseNumber ?? '—';
+        profileLicense.textContent = `Matrícula: ${license}`;
+    }
+
+    const profileEmailInput = document.getElementById('profileEmailInput');
+    const profilePhoneInput = document.getElementById('profilePhoneInput');
+    const profileLocationInput = document.getElementById('profileLocationInput');
+    const profileBioInput = document.getElementById('profileBioInput');
+
+    if (profileEmailInput) {
+        profileEmailInput.value = currentUser?.email ?? info.email ?? info.Email ?? '';
+    }
+
+    if (profilePhoneInput) {
+        profilePhoneInput.value = info.phone ?? info.Phone ?? '';
+    }
+
+    if (profileLocationInput) {
+        profileLocationInput.value = info.location ?? info.consultory ?? info.Consultory ?? info.office ?? '';
+    }
+
+    if (profileBioInput) {
+        const bio = info.biography ?? info.Biography ?? '';
+        profileBioInput.value = bio;
+        profileBioInput.placeholder = 'Comparte tu experiencia, especialidad y enfoque profesional.';
+    }
+}
 
 function initializeDoctorPanel() {
     // Inicializar navegación del sidebar
@@ -29,16 +220,12 @@ async function loadDoctorData() {
         // Importar Api dinámicamente si está disponible
         const { Api } = await import('./api.js');
         
-        const doctorId = 1; // Esto debería venir del localStorage o del estado de autenticación
+        const doctorId = currentUser?.userId || 1; // Fallback temporal
         const doctor = await Api.get(`v1/Doctor/${doctorId}`);
-        
-        // Actualizar nombre de bienvenida
-        const welcomeName = document.getElementById('welcome-name');
-        if (welcomeName && doctor && doctor.firstName && doctor.lastName) {
-            const fullName = `${doctor.firstName} ${doctor.lastName}`;
-            welcomeName.textContent = `Bienvenida, Dra. ${fullName}`;
-        }
-        
+
+        currentDoctorData = doctor;
+        updateDoctorHeader(doctor);
+
         // Cargar datos adicionales del doctor (consultas, agenda, etc.)
         await loadTodayConsultations();
         await loadWeeklySchedule();
@@ -255,17 +442,15 @@ function initializeSidebarNavigation() {
             e.preventDefault();
             e.stopPropagation();
             
-            // Remover clase active de todos los elementos
-            freshNavItems.forEach(navItem => navItem.classList.remove('active'));
-            
-            // Agregar clase active al elemento clickeado
-            this.classList.add('active');
-            
             // Obtener la sección
             const section = this.getAttribute('data-section');
+            setActiveNav(section);
             handleSectionNavigation(section);
         });
     });
+
+    setActiveNav('inicio');
+    handleSectionNavigation('inicio');
 }
 
 function handleSectionNavigation(section) {
@@ -282,28 +467,53 @@ function handleSectionNavigation(section) {
     existingComingSoon.forEach(comingSoon => {
         comingSoon.remove();
     });
-    
-    // Ocultar todas las secciones estáticas por defecto
-    const allSections = dashboardContent.querySelectorAll('.dashboard-section, .welcome-section, .summary-cards, .dashboard-grid, .quick-actions');
-    allSections.forEach(sec => {
-        if (!sec.classList.contains('agenda-section') && !sec.classList.contains('coming-soon-section')) {
-            sec.style.display = 'none';
-        }
-    });
-    
-    switch(section) {
+
+    const mainDashboard = document.getElementById('mainDashboardSection');
+    const profileSection = document.getElementById('doctorProfileSection');
+
+    if (mainDashboard) {
+        mainDashboard.style.display = 'none';
+    }
+
+    if (profileSection) {
+        profileSection.style.display = 'none';
+        // Mantener la clase hidden por defecto
+        profileSection.classList.add('hidden');
+    }
+
+    switch (section) {
+        case 'inicio':
+            if (mainDashboard) {
+                mainDashboard.style.display = '';
+            }
+            break;
+        case 'perfil':
+            if (profileSection) {
+                updateDoctorProfileSection(currentDoctorData);
+                profileSection.classList.remove('hidden');
+                profileSection.style.display = '';
+                setProfileFormEditable(false);
+            }
+            break;
         case 'consultas':
         case 'agenda':
         case 'historia':
         case 'recetas':
-        case 'configuracion':
-            // Mostrar página "En construcción" para todas las secciones
             showComingSoonSectionDoctor(section);
             break;
         default:
-            // Mostrar página "En construcción" por defecto
-            showComingSoonSectionDoctor('consultas');
+            if (mainDashboard) {
+                mainDashboard.style.display = '';
+            }
     }
+}
+
+function setActiveNav(section) {
+    const navItems = document.querySelectorAll('.sidebar-nav .nav-item');
+    navItems.forEach(item => {
+        const itemSection = item.getAttribute('data-section');
+        item.classList.toggle('active', itemSection === section);
+    });
 }
 
 // Botones de atención
@@ -575,7 +785,7 @@ function initializeWeeklySchedule() {
 }
 
 // Inicializar agenda semanal
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', () => {
     initializeWeeklySchedule();
 });
 

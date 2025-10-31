@@ -1,158 +1,251 @@
 import { registerUser } from "../apis/authms.js";
+import { Api } from "../api.js";
 
 document.addEventListener("DOMContentLoaded", () => {
     const form = document.getElementById("registerForm");
+    if (!form) return;
+
     const button = document.getElementById("registerButton");
-    const roleToggle = document.getElementById("roleToggle");
     const roleInput = document.getElementById("role");
-    const profileImageInput = document.getElementById("profileImageInput");
-    const profileImagePreview = document.getElementById("profileImagePreview");
-    const selectImageBtn = document.getElementById("selectImageBtn");
-    const profileImageContainer = document.querySelector(".profile-image-preview");
-    
-    console.log("se esta ejecutando register.js");
-    
-    // Obtener las etiquetas del toggle para mostrar feedback visual
-    const toggleLabels = document.querySelectorAll(".toggle-label");
-    
-    // Manejar el toggle switch de rol
-    roleToggle.addEventListener("change", (e) => {
-        const selectedRole = e.target.checked ? "Doctor" : "Patient";
-        roleInput.value = selectedRole;
-        console.log("Toggle cambió. Rol seleccionado:", selectedRole);
-        console.log("Valor del input hidden:", roleInput.value);
-        
-        // Feedback visual: actualizar las etiquetas para mostrar el rol seleccionado
-        if (toggleLabels.length >= 2) {
-            toggleLabels[0].style.fontWeight = selectedRole === "Patient" ? "bold" : "normal";
-            toggleLabels[0].style.color = selectedRole === "Patient" ? "#2563eb" : "#374151";
-            toggleLabels[1].style.fontWeight = selectedRole === "Doctor" ? "bold" : "normal";
-            toggleLabels[1].style.color = selectedRole === "Doctor" ? "#2563eb" : "#374151";
+    const roleCards = Array.from(document.querySelectorAll(".role-card"));
+    const patientFieldsSection = document.getElementById("patientFields");
+    const doctorFieldsSection = document.getElementById("doctorFields");
+
+    const patientFieldInputs = [
+        document.getElementById("patientBirthDate"),
+        document.getElementById("patientDomicile"),
+        document.getElementById("patientHealthPlan"),
+        document.getElementById("patientMembershipNumber"),
+    ];
+
+    const doctorRequiredInputs = [
+        document.getElementById("doctorLicense"),
+    ];
+
+    function setRequired(inputs, enabled) {
+        inputs.filter(Boolean).forEach((input) => {
+            if (enabled) {
+                input.setAttribute("required", "true");
+            } else {
+                input.removeAttribute("required");
+            }
+        });
+    }
+
+    function updateRoleSections(selectedRole) {
+        const isDoctor = selectedRole === "Doctor";
+
+        if (patientFieldsSection) {
+            patientFieldsSection.classList.toggle("hidden", isDoctor);
         }
+
+        if (doctorFieldsSection) {
+            doctorFieldsSection.classList.toggle("hidden", !isDoctor);
+        }
+
+        setRequired(patientFieldInputs, !isDoctor);
+        setRequired(doctorRequiredInputs, isDoctor);
+    }
+
+    function updateRoleCards(selectedRole) {
+        roleCards.forEach((card) => {
+            const isActive = card.dataset.role === selectedRole;
+            card.classList.toggle("active", isActive);
+            card.setAttribute("aria-pressed", isActive ? "true" : "false");
+        });
+    }
+
+    function setRole(newRole) {
+        const normalizedRole = newRole === "Doctor" ? "Doctor" : "Patient";
+        roleInput.value = normalizedRole;
+        updateRoleCards(normalizedRole);
+        updateRoleSections(normalizedRole);
+    }
+
+    roleCards.forEach((card) => {
+        card.addEventListener("click", () => setRole(card.dataset.role));
     });
 
-    // Asegurar que el valor inicial esté establecido correctamente
-    console.log("Valor inicial del rol:", roleInput.value);
-    
-    // Establecer el estado visual inicial
-    if (toggleLabels.length >= 2) {
-        toggleLabels[0].style.fontWeight = "bold";
-        toggleLabels[0].style.color = "#2563eb";
-        toggleLabels[1].style.fontWeight = "normal";
-        toggleLabels[1].style.color = "#374151";
+    setRole(roleInput.value || roleCards[0]?.dataset.role || "Patient");
+
+    async function syncDirectoryProfile(userId, role, userData, patientExtras, doctorExtras) {
+        if (!userId) {
+            console.warn("syncDirectoryProfile: No hay userId");
+            return;
+        }
+
+        try {
+            if (role === "Patient") {
+                const patientResponse = await Api.get(`v1/Patient/User/${userId}`);
+                const patientId = patientResponse?.patientId ?? patientResponse?.PatientId;
+                if (!patientId) {
+                    throw new Error("No se pudo identificar el paciente creado en DirectoryMS");
+                }
+
+                const payload = {
+                    Name: userData.firstName,
+                    LastName: userData.lastName,
+                    Dni: parseInt(userData.dni, 10) || 0,
+                };
+
+                if (patientExtras?.address) payload.Adress = patientExtras.address;
+                if (patientExtras?.birthDate) {
+                    // Asegurar que la fecha esté en formato ISO (YYYY-MM-DD)
+                    let birthDate = patientExtras.birthDate.trim();
+                    if (birthDate) {
+                        // Remover hora si existe y asegurar formato YYYY-MM-DD
+                        birthDate = birthDate.split('T')[0];
+                        // Validar formato
+                        if (/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) {
+                            payload.DateOfBirth = birthDate;
+                            console.log("Enviando fecha de nacimiento al backend:", payload.DateOfBirth);
+                        } else {
+                            console.error("Formato de fecha inválido:", birthDate);
+                        }
+                    } else {
+                        console.warn("Fecha de nacimiento vacía o inválida");
+                    }
+                } else {
+                    console.warn("No se encontró fecha de nacimiento en patientExtras");
+                }
+                if (patientExtras?.healthPlan) payload.HealthPlan = patientExtras.healthPlan;
+                if (patientExtras?.membershipNumber) payload.MembershipNumber = patientExtras.membershipNumber;
+
+                console.log("Payload para actualizar paciente:", JSON.stringify(payload, null, 2));
+                const updateResponse = await Api.patch(`v1/Patient/${patientId}`, payload);
+                console.log("Respuesta de actualización:", updateResponse);
+                console.log("Paciente actualizado exitosamente");
+            } else if (role === "Doctor") {
+                const doctors = await Api.get("v1/Doctor");
+                const doctor = Array.isArray(doctors)
+                    ? doctors.find((d) => (d.userId ?? d.UserId) === userId)
+                    : null;
+
+                if (!doctor) {
+                    throw new Error("No se pudo encontrar el registro de doctor recién creado en DirectoryMS");
+                }
+
+                const doctorId = doctor.doctorId ?? doctor.DoctorId;
+
+                const payload = {
+                    FirstName: userData.firstName,
+                    LastName: userData.lastName,
+                    LicenseNumber: doctorExtras?.licenseNumber || "PENDING",
+                    Biography: doctorExtras?.biography || null,
+                };
+
+                await Api.patch(`v1/Doctor/${doctorId}`, payload);
+            }
+        } catch (error) {
+            console.warn("No se pudo sincronizar la información adicional en DirectoryMS", error);
+        }
     }
-    
-    // Manejar la selección de imagen desde el botón
-    selectImageBtn.addEventListener("click", () => {
-        profileImageInput.click();
-    });
-    
-    // Manejar la selección de imagen desde el preview
-    profileImageContainer.addEventListener("click", () => {
-        profileImageInput.click();
-    });
-    
-    // Manejar el cambio de archivo de imagen
-    profileImageInput.addEventListener("change", (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            // Validar que sea una imagen
-            if (!file.type.startsWith("image/")) {
-                alert("Por favor, selecciona un archivo de imagen válido.");
-                return;
-            }
-            
-            // Validar el tamaño del archivo (máximo 5MB)
-            if (file.size > 5 * 1024 * 1024) {
-                alert("La imagen es demasiado grande. Por favor, selecciona una imagen menor a 5MB.");
-                return;
-            }
-            
-            // Crear una URL para la preview
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                profileImagePreview.src = event.target.result;
-            };
-            reader.readAsDataURL(file);
+
+    form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+
+        // Usar imagen por defecto ya que no hay selector de imagen
+        const imageUrl = "https://icons.veryicon.com/png/o/internet--web/prejudice/user-128.png";
+
+        const selectedRole = roleInput.value || "Patient";
+
+        const passwordValue = document.getElementById("password").value;
+        const confirmPasswordValue = document.getElementById("confirmPassword").value;
+        if (passwordValue !== confirmPasswordValue) {
+            alert("Las contraseñas no coinciden.");
+            return;
         }
-    });
-    
-    form.addEventListener("submit", async (e) => {
-        
-        e.preventDefault()
-        
-        // Obtener la imagen seleccionada y convertirla a base64/data URL
-        let imageUrl = "https://icons.veryicon.com/png/o/internet--web/prejudice/user-128.png"; // Valor por defecto
-        
-        if (profileImageInput.files && profileImageInput.files[0]) {
-            const file = profileImageInput.files[0];
-            try {
-                // Convertir la imagen a base64/data URL
-                const reader = new FileReader();
-                const imageDataUrl = await new Promise((resolve, reject) => {
-                    reader.onload = () => resolve(reader.result);
-                    reader.onerror = reject;
-                    reader.readAsDataURL(file);
-                });
-                imageUrl = imageDataUrl;
-            } catch (error) {
-                console.error("Error al procesar la imagen:", error);
-                alert("Error al procesar la imagen. Se usará la imagen predeterminada.");
-            }
-        }
-        
-        // Obtener el rol del toggle (asegurarse de que esté actualizado)
-        const selectedRole = roleToggle.checked ? "Doctor" : "Patient";
-        roleInput.value = selectedRole;
-        
+
         const userData = {
             firstName: document.getElementById("firstName").value.trim(),
             lastName: document.getElementById("lastName").value.trim(),
             email: document.getElementById("email").value.trim(),
             dni: document.getElementById("dni").value.trim(),
-            password: document.getElementById("password").value,
-            role: selectedRole, // "Patient" o "Doctor" - usar directamente del toggle
-            imageUrl: imageUrl // URL de la imagen (base64 o URL por defecto)
+            password: passwordValue,
+            role: selectedRole,
+            imageUrl,
         };
-        
-        // Validar que todos los campos estén completos
+
         if (!userData.firstName || !userData.lastName || !userData.email || !userData.dni || !userData.password) {
             alert("Por favor, completa todos los campos requeridos.");
             return;
         }
-        
-        // Validar que el rol sea válido
+
         if (userData.role !== "Patient" && userData.role !== "Doctor") {
-            console.error("Rol inválido:", userData.role);
             alert("Error: Rol inválido. Por favor, intenta nuevamente.");
             return;
         }
-        
+
+        const patientExtras = {
+            birthDate: document.getElementById("patientBirthDate")?.value || "",
+            address: document.getElementById("patientDomicile")?.value.trim() || "",
+            healthPlan: document.getElementById("patientHealthPlan")?.value.trim() || "",
+            membershipNumber: document.getElementById("patientMembershipNumber")?.value.trim() || "",
+        };
+
+        const doctorExtras = {
+            licenseNumber: document.getElementById("doctorLicense")?.value.trim() || "",
+            biography: document.getElementById("doctorBiography")?.value.trim() || "",
+        };
+
+        if (selectedRole === "Patient") {
+            const missingPatientField = patientFieldInputs.find((input) => input && !input.value.trim());
+            if (missingPatientField) {
+                alert("Por favor, completa toda la información del paciente.");
+                return;
+            }
+        }
+
+        if (selectedRole === "Doctor") {
+            const missingLicense = doctorRequiredInputs.find((input) => input && !input.value.trim());
+            if (missingLicense) {
+                alert("Por favor, completa la matrícula profesional.");
+                return;
+            }
+        }
+
         button.disabled = true;
         button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creando cuenta...';
+
         try {
-            console.log("=== REGISTRO DE USUARIO ===");
-            console.log("Rol seleccionado del toggle:", roleToggle.checked ? "Doctor" : "Patient");
-            console.log("Rol a enviar:", userData.role);
-            console.log("Datos del usuario:", { 
-                ...userData, 
-                password: "***",
-                imageUrl: userData.imageUrl.length > 100 ? userData.imageUrl.substring(0, 100) + "..." : userData.imageUrl
-            });
+            // Log para debugging
+            console.log("=== DATOS DEL REGISTRO ===");
+            console.log("Fecha de nacimiento:", patientExtras.birthDate);
+            console.log("Role:", selectedRole);
             
             const response = await registerUser(userData);
-            console.log("Respuesta del servidor:", response);
+            const createdUserId = response?.userId ?? response?.UserId;
+
+            if (!createdUserId) {
+                throw new Error("No se recibió el ID del usuario creado");
+            }
+
+            console.log("Usuario creado con ID:", createdUserId);
+            console.log("Respuesta del registro:", response);
+
+            try {
+                console.log("Sincronizando perfil en DirectoryMS...");
+                await syncDirectoryProfile(
+                    createdUserId,
+                    selectedRole,
+                    userData,
+                    patientExtras,
+                    doctorExtras
+                );
+                console.log("Perfil sincronizado exitosamente");
+            } catch (syncError) {
+                console.error("Error al sincronizar perfil (no crítico):", syncError);
+                // No lanzamos el error para no bloquear el registro
+            }
+
             alert(`¡Cuenta creada exitosamente! Tu rol es: ${userData.role}`);
             window.location.href = "login.html";
         } catch (err) {
             console.error("Error al registrar usuario:", err);
-            
-            // Mostrar mensaje de error más detallado
+
             let errorMessage = err.message || "Error desconocido al crear la cuenta.";
-            
-            // Si el error contiene información sobre validación, mostrarla
+
             if (errorMessage.includes("validación") || errorMessage.includes("validation") || errorMessage.includes("obligatorio") || errorMessage.includes("debe")) {
-                // Ya viene formateado del backend
                 alert(`Errores de validación:\n\n${errorMessage}`);
             } else {
                 alert(`Error al crear la cuenta:\n\n${errorMessage}\n\nPor favor, verifica que:\n- Tu contraseña tenga al menos 8 caracteres\n- Tu contraseña contenga mayúsculas, minúsculas, números y símbolos (@$!%*?&_)\n- Tu DNI tenga entre 6 y 12 caracteres\n- Todos los campos estén completos`);
@@ -161,6 +254,5 @@ document.addEventListener("DOMContentLoaded", () => {
             button.disabled = false;
             button.innerHTML = '<i class="fas fa-user-plus"></i> Crear Cuenta';
         }
-    
     });
 });

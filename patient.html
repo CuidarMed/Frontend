@@ -16,8 +16,8 @@
         <div class="actions">
             <div class="user-menu" id="userMenu">
                 <button class="user-btn" id="userBtn">
-                    <i class="fas fa-user-circle"></i>
-                    <span>Mi cuenta</span>
+                    <img id="userMenuAvatar" class="user-menu-avatar" src="https://icons.veryicon.com/png/o/internet--web/prejudice/user-128.png" alt="Foto de perfil" />
+                    <span id="userMenuName">Mi cuenta</span>
                     <i class="fas fa-chevron-down" style="font-size:0.8rem;"></i>
                 </button>
                 <div class="user-dropdown" id="userDropdown">
@@ -65,8 +65,12 @@
         <div class="dashboard-content">
             <!-- Welcome Section -->
             <div class="welcome-section">
-                <h2 id="welcome-name">Bienvenido, Juan</h2>
-                <p>Aquí está el resumen de tu atención médica</p>
+                <div class="welcome-header">
+                    <div class="welcome-copy">
+                        <h2 id="welcome-name">Bienvenido</h2>
+                        <p id="welcome-message">Aquí está el resumen de tu atención médica</p>
+                    </div>
+                </div>
             </div>
 
             <!-- Summary Cards -->
@@ -115,7 +119,40 @@
                     </div>
                 </div>
                 <div class="appointments-list" id="appointments-list">
-                    <!-- Los turnos se cargarán dinámicamente desde el backend -->
+                    <div class="appointment-card">
+                        <div class="appointment-details">
+                            <div class="appointment-date">2025-09-20</div>
+                            <div class="appointment-info">
+                                <h4>Dr. Ana Martinez</h4>
+                                <p>Control rutinario</p>
+                                <span>Consultorio Central · 09:00 hs</span>
+                            </div>
+                        </div>
+                        <div class="appointment-actions">
+                            <span class="status confirmed">Confirmado</span>
+                            <button class="btn btn-secondary btn-view-prescription view-prescription-btn" data-consultation="2025-09-20">
+                                <i class="fas fa-file-medical"></i>
+                                Ver Receta
+                            </button>
+                        </div>
+                    </div>
+                    <div class="appointment-card">
+                        <div class="appointment-details">
+                            <div class="appointment-date">2025-08-15</div>
+                            <div class="appointment-info">
+                                <h4>Dr. Juan López</h4>
+                                <p>Consulta dermatológica</p>
+                                <span>Consultorio Norte · 11:30 hs</span>
+                            </div>
+                        </div>
+                        <div class="appointment-actions">
+                            <span class="status pending">Pendiente</span>
+                            <button class="btn btn-secondary btn-view-prescription view-prescription-btn" data-consultation="2025-08-15">
+                                <i class="fas fa-file-medical"></i>
+                                Ver Receta
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -238,7 +275,7 @@
                 logoutBtn.addEventListener('click', function(e){
                     e.preventDefault();
                     try { localStorage.clear(); } catch(_) {}
-                    window.location.href = 'cuidarMed.html';
+                    window.location.href = 'index.html';
                 });
             }
         })();
