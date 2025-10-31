@@ -1,54 +1,78 @@
 // Funcionalidades específicas del panel del paciente
-document.addEventListener('DOMContentLoaded', function() {
-    initializePatientPanel();
-    loadPatientData(); // Cargar datos del backend
+let currentUser = null;
+let currentPatient = null;
+let autoRefreshInterval = null;
+
+document.addEventListener('DOMContentLoaded', async () => {
+    await initializePatientPanel();
 });
 
-function initializePatientPanel() {
-    // Inicializar navegación del sidebar
+async function initializePatientPanel() {
+    currentUser = await getAuthenticatedUser();
+
+    if (!currentUser) {
+        window.location.href = 'login.html';
+        return;
+    }
+
+    setupUserMenu();
     initializeSidebarNavigation();
-    
-    // Inicializar botones de videollamada
     initializeVideoCallButtons();
-    
-    // Inicializar botón de agendar turno
     initializeScheduleAppointment();
-    
-    // Inicializar botones de ver receta
     initializeViewPrescriptionButtons();
-    
-    // Inicializar modales
     initializeModals();
-    
-    // Cargar datos periódicamente (cada 30 segundos)
-    setInterval(() => {
-        loadPatientData();
-    }, 30000);
+
+    await loadPatientData();
+
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+    }
+    autoRefreshInterval = setInterval(loadPatientData, 30000);
+}
+
+async function getAuthenticatedUser() {
+    const { state, loadUserFromStorage } = await import('./state.js');
+    loadUserFromStorage();
+    return state.user;
+}
+
+function setupUserMenu() {
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', async (event) => {
+            event.preventDefault();
+            const { logout } = await import('./state.js');
+            logout();
+            window.location.href = 'login.html';
+        });
+    }
 }
 
 // Cargar datos del paciente desde el backend
 async function loadPatientData() {
     try {
-        // Importar Api dinámicamente si está disponible
+        if (!currentUser) {
+            currentUser = await getAuthenticatedUser();
+            if (!currentUser) {
+                window.location.href = 'login.html';
+                return;
+            }
+        }
+
         const { Api } = await import('./api.js');
-        
-        const patientId = 1; // Esto debería venir del localStorage o del estado de autenticación
-        const patient = await Api.get(`v1/Patient/${patientId}`);
-        
+        const patientResponse = await Api.get(`v1/Patient/User/${currentUser.userId}`);
+        currentPatient = normalizePatient(patientResponse);
+
         // Actualizar nombre de bienvenida
         const welcomeName = document.getElementById('welcome-name');
-        if (welcomeName && patient && patient.name) {
-            welcomeName.textContent = `Bienvenido, ${patient.name}`;
+        if (welcomeName) {
+            const displayName = currentPatient?.name || currentUser.email || 'Paciente';
+            welcomeName.textContent = `Bienvenido, ${displayName}`;
         }
-        
-        // Cargar datos adicionales del paciente (turnos, historial, etc.)
-        await loadPatientAppointments();
-        await loadPatientHistory();
-        await loadPatientStats();
-        
+
     } catch (error) {
         console.error('Error al cargar datos del paciente:', error);
-        // Si hay error, mantener los valores por defecto del HTML
+        showNotification('No pudimos cargar tus datos. Revisa tu conexión e intenta nuevamente.', 'error');
     }
 }
 
@@ -212,6 +236,53 @@ function initializeSidebarNavigation() {
             handleSectionNavigation(section);
         });
     });
+}
+
+function normalizePatient(rawPatient) {
+    if (!rawPatient) return null;
+
+    return {
+        patientId: rawPatient.patientId ?? rawPatient.PatientId ?? null,
+        name: rawPatient.name ?? rawPatient.firstName ?? rawPatient.Name ?? '',
+        lastName: rawPatient.lastName ?? rawPatient.LastName ?? '',
+        email: rawPatient.email ?? '',
+        phone: rawPatient.phone ?? rawPatient.Phone ?? '',
+        dni: (rawPatient.dni ?? rawPatient.Dni ?? '').toString(),
+        birthDate: rawPatient.birthDate ?? rawPatient.dateOfBirth ?? rawPatient.DateOfBirth ?? '',
+        address: rawPatient.address ?? rawPatient.Adress ?? '',
+        city: rawPatient.city ?? '',
+        postalCode: rawPatient.postalCode ?? '',
+        emergencyContact: rawPatient.emergencyContact ?? '',
+        emergencyPhone: rawPatient.emergencyPhone ?? '',
+        medicalInsurance: rawPatient.medicalInsurance ?? rawPatient.HealthPlan ?? '',
+        insuranceNumber: rawPatient.insuranceNumber ?? rawPatient.MembershipNumber ?? '',
+        userId: rawPatient.userId ?? rawPatient.UserId ?? null,
+    };
+}
+
+function buildProfileData(patient, user) {
+    const defaults = {
+        patientId: patient?.patientId ?? null,
+        name: 'Paciente',
+        lastName: '',
+        email: user?.email || 'sin-correo@cuidarmed.com',
+        phone: '',
+        dni: '',
+        birthDate: '',
+        address: '',
+        city: '',
+        postalCode: '',
+        emergencyContact: '',
+        emergencyPhone: '',
+        medicalInsurance: '',
+        insuranceNumber: '',
+    };
+
+    return {
+        ...defaults,
+        ...patient,
+        email: patient?.email || defaults.email,
+    };
 }
 
 function handleSectionNavigation(section) {
@@ -722,59 +793,23 @@ async function loadPatientProfile() {
         profile.remove();
     });
     
-    let patient = null;
-    try {
-        const { Api } = await import('./api.js');
-        const patientId = 1; // Esto debería venir del localStorage o del estado de autenticación
-        patient = await Api.get(`v1/Patient/${patientId}`);
-    } catch (error) {
-        console.error('Error al cargar perfil del paciente:', error);
-        showNotification('Error al cargar los datos del perfil. Mostrando datos por defecto.', 'error');
+    if (!currentPatient) {
+        await loadPatientData();
     }
-    
+
+    const profileData = buildProfileData(currentPatient, currentUser);
+
     // Crear sección de perfil (con datos del backend o valores por defecto)
-    const profileSection = createProfileSection(patient);
+    const profileSection = createProfileSection(profileData);
     dashboardContent.appendChild(profileSection);
 }
 
 // Crear sección de perfil
-function createProfileSection(patient) {
+function createProfileSection(profileData) {
     const section = document.createElement('div');
     section.className = 'profile-section';
     
-    // Datos por defecto si no vienen del backend
-    const defaultData = {
-        name: 'Juan',
-        lastName: 'Pérez',
-        email: 'juan.perez@example.com',
-        phone: '+54 11 1234-5678',
-        dni: '12345678',
-        birthDate: '1990-01-15',
-        address: 'Av. Corrientes 1234',
-        city: 'Buenos Aires',
-        postalCode: 'C1043',
-        emergencyContact: 'María Pérez',
-        emergencyPhone: '+54 11 9876-5432',
-        medicalInsurance: 'OSDE',
-        insuranceNumber: '123456789'
-    };
-    
-    // Combinar datos del backend con valores por defecto
-    const profileData = patient ? {
-        name: patient.name || patient.firstName || defaultData.name,
-        lastName: patient.lastName || patient.surname || defaultData.lastName,
-        email: patient.email || defaultData.email,
-        phone: patient.phone || patient.phoneNumber || defaultData.phone,
-        dni: patient.dni || patient.documentNumber || defaultData.dni,
-        birthDate: patient.birthDate || patient.dateOfBirth || defaultData.birthDate,
-        address: patient.address || patient.streetAddress || defaultData.address,
-        city: patient.city || defaultData.city,
-        postalCode: patient.postalCode || patient.postCode || defaultData.postalCode,
-        emergencyContact: patient.emergencyContact || patient.emergencyContactName || defaultData.emergencyContact,
-        emergencyPhone: patient.emergencyPhone || patient.emergencyContactPhone || defaultData.emergencyPhone,
-        medicalInsurance: patient.medicalInsurance || patient.insurance || defaultData.medicalInsurance,
-        insuranceNumber: patient.insuranceNumber || patient.insuranceId || defaultData.insuranceNumber
-    } : defaultData;
+    const data = profileData || buildProfileData(null, currentUser);
     
     section.innerHTML = `
         <div class="dashboard-section">
@@ -792,13 +827,13 @@ function createProfileSection(patient) {
             </div>
             
             <div class="profile-content" id="profileContent">
-                ${createProfileViewHTML(profileData)}
+                ${createProfileViewHTML(data)}
             </div>
         </div>
     `;
     
     // Guardar datos del perfil en el elemento para poder accederlos después
-    section.setAttribute('data-patient', JSON.stringify(profileData));
+    section.setAttribute('data-patient', JSON.stringify(data));
     
     // Agregar event listener para el botón de editar
     setTimeout(() => {
@@ -1047,8 +1082,13 @@ async function saveProfileChanges(form, originalData) {
         
         // Enviar al backend (usar PUT para actualizar)
         const { Api } = await import('./api.js');
-        const patientId = 1; // Esto debería venir del localStorage o del estado de autenticación
-        await Api.put(`v1/Patient/${patientId}`, updatedData);
+        const patientId = currentPatient?.patientId;
+
+        if (!patientId) {
+            throw new Error('No se pudo identificar al paciente para actualizar.');
+        }
+
+        await Api.patch(`v1/Patient/${patientId}`, updatedData);
         
         showNotification('Perfil actualizado exitosamente', 'success');
         
@@ -1064,6 +1104,13 @@ async function saveProfileChanges(form, originalData) {
         if (profileSection) {
             profileSection.setAttribute('data-patient', JSON.stringify(updatedData));
         }
+
+        // Actualizar información en memoria
+        currentPatient = {
+            ...currentPatient,
+            ...updatedData,
+            patientId,
+        };
         
         // Actualizar botón
         const editBtn = document.getElementById('editProfileBtn');
