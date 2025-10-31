@@ -265,27 +265,7 @@ async function loadTodayConsultations() {
         // Si falla el backend, mostrar datos de ejemplo
         consultationsList.innerHTML = '';
         
-        // Datos de ejemplo
-        const exampleConsultations = [
-            {
-                patientName: 'Juan Pérez',
-                type: 'Primera consulta',
-                time: '09:00',
-                status: 'waiting'
-            },
-            {
-                patientName: 'María González',
-                type: 'Control',
-                time: '10:00',
-                status: 'in-progress'
-            },
-            {
-                patientName: 'Carlos López',
-                type: 'Seguimiento',
-                time: '11:00',
-                status: 'waiting'
-            }
-        ];
+        
         
         exampleConsultations.forEach(consultation => {
             const consultationItem = createConsultationItemElement(consultation);

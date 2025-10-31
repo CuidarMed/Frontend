@@ -83,7 +83,7 @@
                         <i class="fas fa-users"></i>
                     </div>
                     <div class="card-content">
-                        <div class="card-number" id="patients-today">4</div>
+                        <div class="card-number" id="patients-today">0</div>
                         <div class="card-label">Consultas programadas</div>
                     </div>
                 </div>
@@ -92,7 +92,7 @@
                         <i class="fas fa-calendar-check"></i>
                     </div>
                     <div class="card-content">
-                        <div class="card-number" id="weekly-appointments">35</div>
+                        <div class="card-number" id="weekly-appointments">0</div>
                         <div class="card-label">Turnos asignados</div>
                     </div>
                 </div>
@@ -101,7 +101,7 @@
                         <i class="fas fa-clock"></i>
                     </div>
                     <div class="card-content">
-                        <div class="card-number" id="active-consultation">1</div>
+                        <div class="card-number" id="active-consultation">0</div>
                         <div class="card-label">Consulta activa</div>
                     </div>
                 </div>
@@ -110,7 +110,7 @@
                         <i class="fas fa-file-medical"></i>
                     </div>
                     <div class="card-content">
-                        <div class="card-number" id="prescriptions-today">8</div>
+                        <div class="card-number" id="prescriptions-today">0</div>
                         <div class="card-label">Emitidas hoy</div>
                     </div>
                 </div>
@@ -182,29 +182,24 @@
                 </div>
                 <div class="profile-card">
                     <div class="profile-header">
-                        <img id="profile-avatar" class="profile-avatar" src="https://icons.veryicon.com/png/o/internet--web/prejudice/user-128.png" alt="Foto del profesional" />
-                        <div class="profile-summary" id="profileSummary">
-                            <h4 id="profile-name">Dr. Juan Pérez</h4>
-                            <p id="profile-specialty">Especialidad no especificada</p>
-                            <span id="profile-license" class="profile-chip">Matrícula: —</span>
-                        </div>
+                        
                     </div>
                     <form id="doctorProfileForm" class="profile-grid" novalidate>
                         <div class="profile-group">
                             <h5>Información de contacto</h5>
+                            <label class="profile-label" for="profileLocationInput">Nombre</label>
+                            <label>María</label>
+                            <label class="profile-label" for="profileLocationInput">Apellido</label>
+                            <label>Gómez</label>
                             <label class="profile-label" for="profileEmailInput">Email</label>
                             <input type="email" id="profileEmailInput" name="email" placeholder="correo@ejemplo.com" required disabled>
-
-                            <label class="profile-label" for="profilePhoneInput">Teléfono</label>
-                            <input type="text" id="profilePhoneInput" name="phone" placeholder="Número de contacto" disabled>
-
-                            <label class="profile-label" for="profileLocationInput">Consultorio</label>
-                            <input type="text" id="profileLocationInput" name="location" placeholder="Dirección del consultorio" disabled>
-                        </div>
-                        <div class="profile-group">
+                            <div class="profile-group">
                             <h5>Biografía</h5>
                             <textarea id="profileBioInput" name="biography" rows="6" placeholder="Comparte tu experiencia, especialidad y enfoque profesional." disabled></textarea>
                         </div>
+
+                        </div>
+                        
                         <div class="profile-actions hidden" id="profileActions">
                             <button type="button" class="btn btn-secondary" id="cancelProfileEdit">Cancelar</button>
                             <button type="submit" class="btn btn-primary" id="saveProfile">Guardar Cambios</button>

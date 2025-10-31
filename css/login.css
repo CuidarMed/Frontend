@@ -4,7 +4,12 @@
 *::after {
     box-sizing: border-box;
 }
-
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    line-height: 1.6;
+    color: #333;
+    background-color: #fff;
+}
 .login-container {
     min-height: 100vh;
     background: linear-gradient(135deg, #1e40af 0%, #10b981 100%);
