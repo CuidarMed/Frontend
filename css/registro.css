@@ -129,7 +129,8 @@
         }
 
         .form-group input,
-        .form-group select {
+        .form-group select,
+        .form-group textarea {
             width: 100%;
             padding: 0.875rem 1rem;
             border: 2px solid #e5e7eb;
@@ -141,7 +142,8 @@
         }
 
         .form-group input:focus,
-        .form-group select:focus {
+        .form-group select:focus,
+        .form-group textarea:focus {
             outline: none;
             border-color: #2563eb;
             box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
@@ -171,6 +173,25 @@
         .input-icon input {
             padding-left: 3rem;
             box-sizing: border-box;
+        }
+
+        .role-fields {
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            background: #f9fafb;
+        }
+
+        .role-fields.hidden {
+            display: none;
+        }
+
+        .role-section-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 1rem;
         }
 
         .password-strength {

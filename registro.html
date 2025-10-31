@@ -121,6 +121,42 @@
                     <div class="error-message" id="confirmPasswordError"></div>
                 </div>
 
+                <div class="role-fields role-patient" id="patientFields">
+                    <h3 class="role-section-title">Información del paciente</h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="patientBirthDate">Fecha de nacimiento</label>
+                            <input type="date" id="patientBirthDate" name="patientBirthDate" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="patientDomicile">Dirección</label>
+                            <input type="text" id="patientDomicile" name="patientDomicile" placeholder="Calle y número" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="patientHealthPlan">Obra social</label>
+                            <input type="text" id="patientHealthPlan" name="patientHealthPlan" placeholder="Ej. OSDE" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="patientMembershipNumber">Número de afiliado</label>
+                            <input type="text" id="patientMembershipNumber" name="patientMembershipNumber" placeholder="XXXXXX" required>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="role-fields role-doctor hidden" id="doctorFields">
+                    <h3 class="role-section-title">Información del doctor</h3>
+                    <div class="form-group">
+                        <label for="doctorLicense">Número de matrícula</label>
+                        <input type="text" id="doctorLicense" name="doctorLicense" placeholder="Matrícula profesional">
+                    </div>
+                    <div class="form-group">
+                        <label for="doctorBiography">Biografía profesional</label>
+                        <textarea id="doctorBiography" name="doctorBiography" rows="4" placeholder="Especialidad, experiencia, instituciones, etc."></textarea>
+                    </div>
+                </div>
+
                     <div class="terms-checkbox">
                         <input type="checkbox" id="terms" name="terms" required>
                         <label for="terms">
