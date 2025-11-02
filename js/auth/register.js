@@ -82,38 +82,62 @@ document.addEventListener("DOMContentLoaded", () => {
                     throw new Error("No se pudo identificar el paciente creado en DirectoryMS");
                 }
 
+                // Construir payload con todos los datos del paciente
                 const payload = {
                     Name: userData.firstName,
                     LastName: userData.lastName,
                     Dni: parseInt(userData.dni, 10) || 0,
                 };
 
-                if (patientExtras?.address) payload.Adress = patientExtras.address;
+                // Dirección
+                if (patientExtras?.address && patientExtras.address.trim()) {
+                    payload.Adress = patientExtras.address.trim();
+                }
+                
+                // Fecha de nacimiento - siempre enviarla si está disponible
                 if (patientExtras?.birthDate) {
-                    // Asegurar que la fecha esté en formato ISO (YYYY-MM-DD)
                     let birthDate = patientExtras.birthDate.trim();
                     if (birthDate) {
                         // Remover hora si existe y asegurar formato YYYY-MM-DD
                         birthDate = birthDate.split('T')[0];
-                        // Validar formato
+                        // Validar formato YYYY-MM-DD
                         if (/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) {
+                            // Enviar como string en formato ISO que ASP.NET Core puede convertir a DateOnly
                             payload.DateOfBirth = birthDate;
                             console.log("Enviando fecha de nacimiento al backend:", payload.DateOfBirth);
                         } else {
                             console.error("Formato de fecha inválido:", birthDate);
                         }
-                    } else {
-                        console.warn("Fecha de nacimiento vacía o inválida");
                     }
-                } else {
-                    console.warn("No se encontró fecha de nacimiento en patientExtras");
                 }
-                if (patientExtras?.healthPlan) payload.HealthPlan = patientExtras.healthPlan;
-                if (patientExtras?.membershipNumber) payload.MembershipNumber = patientExtras.membershipNumber;
+                
+                // Obra social - siempre enviarla si está disponible
+                if (patientExtras?.healthPlan && patientExtras.healthPlan.trim()) {
+                    payload.HealthPlan = patientExtras.healthPlan.trim();
+                    console.log("Enviando obra social al backend:", payload.HealthPlan);
+                }
+                
+                // Número de afiliado - siempre enviarlo si está disponible
+                const membershipNumber = patientExtras?.membershipNumber?.trim();
+                if (membershipNumber) {
+                    payload.MembershipNumber = membershipNumber;
+                    console.log("Enviando número de afiliado al backend:", payload.MembershipNumber);
+                } else {
+                    console.warn("Número de afiliado vacío o no disponible:", patientExtras?.membershipNumber);
+                }
 
-                console.log("Payload para actualizar paciente:", JSON.stringify(payload, null, 2));
+                console.log("Payload completo para actualizar paciente:", JSON.stringify(payload, null, 2));
+                console.log("patientExtras original:", JSON.stringify(patientExtras, null, 2));
+                
                 const updateResponse = await Api.patch(`v1/Patient/${patientId}`, payload);
                 console.log("Respuesta de actualización:", updateResponse);
+                
+                // Verificar que los datos se actualizaron correctamente
+                if (updateResponse) {
+                    console.log("Datos actualizados - Obra Social:", updateResponse.HealthPlan || updateResponse.healthPlan);
+                    console.log("Datos actualizados - Número Afiliado:", updateResponse.MembershipNumber || updateResponse.membershipNumber);
+                }
+                
                 console.log("Paciente actualizado exitosamente");
             } else if (role === "Doctor") {
                 const doctors = await Api.get("v1/Doctor");
@@ -131,10 +155,19 @@ document.addEventListener("DOMContentLoaded", () => {
                     FirstName: userData.firstName,
                     LastName: userData.lastName,
                     LicenseNumber: doctorExtras?.licenseNumber || "PENDING",
-                    Biography: doctorExtras?.biography || null,
+                    Specialty: (doctorExtras?.specialty && doctorExtras.specialty.trim()) ? doctorExtras.specialty.trim() : null,
+                    Biography: (doctorExtras?.biography && doctorExtras.biography.trim()) ? doctorExtras.biography.trim() : null,
                 };
 
+                console.log("=== ACTUALIZANDO DOCTOR ===");
+                console.log("Payload para doctor:", JSON.stringify(payload, null, 2));
+                console.log("doctorExtras:", JSON.stringify(doctorExtras, null, 2));
+                console.log("Specialty capturado:", doctorExtras?.specialty);
+                console.log("Specialty en payload:", payload.Specialty);
+
                 await Api.patch(`v1/Doctor/${doctorId}`, payload);
+                
+                console.log("Doctor actualizado exitosamente");
             }
         } catch (error) {
             console.warn("No se pudo sincronizar la información adicional en DirectoryMS", error);
@@ -143,9 +176,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     form.addEventListener("submit", async (event) => {
         event.preventDefault();
-
-        // Usar imagen por defecto ya que no hay selector de imagen
-        const imageUrl = "https://icons.veryicon.com/png/o/internet--web/prejudice/user-128.png";
 
         const selectedRole = roleInput.value || "Patient";
 
@@ -156,6 +186,8 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
+        // Construir userData - ImageUrl es opcional y no se incluye
+        // El backend usará su valor por defecto cuando el campo esté ausente o sea null
         const userData = {
             firstName: document.getElementById("firstName").value.trim(),
             lastName: document.getElementById("lastName").value.trim(),
@@ -163,7 +195,7 @@ document.addEventListener("DOMContentLoaded", () => {
             dni: document.getElementById("dni").value.trim(),
             password: passwordValue,
             role: selectedRole,
-            imageUrl,
+            // No incluir imageUrl explícitamente - el backend lo manejará como opcional
         };
 
         if (!userData.firstName || !userData.lastName || !userData.email || !userData.dni || !userData.password) {
@@ -182,11 +214,25 @@ document.addEventListener("DOMContentLoaded", () => {
             healthPlan: document.getElementById("patientHealthPlan")?.value.trim() || "",
             membershipNumber: document.getElementById("patientMembershipNumber")?.value.trim() || "",
         };
+        
+        // Log para debugging
+        console.log("=== DATOS CAPTURADOS DEL FORMULARIO ===");
+        console.log("patientExtras completo:", JSON.stringify(patientExtras, null, 2));
+        console.log("membershipNumber capturado:", patientExtras.membershipNumber);
+        console.log("membershipNumber elemento:", document.getElementById("patientMembershipNumber")?.value);
+        console.log("healthPlan capturado:", patientExtras.healthPlan);
 
         const doctorExtras = {
             licenseNumber: document.getElementById("doctorLicense")?.value.trim() || "",
+            specialty: document.getElementById("doctorSpecialty")?.value.trim() || "",
             biography: document.getElementById("doctorBiography")?.value.trim() || "",
         };
+        
+        // Log para debugging de especialidad
+        console.log("=== DOCTOR EXTRAS ===");
+        console.log("doctorExtras completo:", JSON.stringify(doctorExtras, null, 2));
+        console.log("specialty capturado:", doctorExtras.specialty);
+        console.log("specialty elemento:", document.getElementById("doctorSpecialty")?.value);
 
         if (selectedRole === "Patient") {
             const missingPatientField = patientFieldInputs.find((input) => input && !input.value.trim());
@@ -245,11 +291,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
             let errorMessage = err.message || "Error desconocido al crear la cuenta.";
 
-            if (errorMessage.includes("validación") || errorMessage.includes("validation") || errorMessage.includes("obligatorio") || errorMessage.includes("debe")) {
-                alert(`Errores de validación:\n\n${errorMessage}`);
-            } else {
-                alert(`Error al crear la cuenta:\n\n${errorMessage}\n\nPor favor, verifica que:\n- Tu contraseña tenga al menos 8 caracteres\n- Tu contraseña contenga mayúsculas, minúsculas, números y símbolos (@$!%*?&_)\n- Tu DNI tenga entre 6 y 12 caracteres\n- Todos los campos estén completos`);
-            }
+            // Limpiar y formatear el mensaje de error
+            // Remover información técnica innecesaria
+            errorMessage = errorMessage
+                .replace(/^Error:\s*/i, '')
+                .replace(/^Error\s+/i, '')
+                .trim();
+
+            // Mostrar solo el mensaje de error específico
+            alert(`Error al crear la cuenta:\n\n${errorMessage}`);
         } finally {
             button.disabled = false;
             button.innerHTML = '<i class="fas fa-user-plus"></i> Crear Cuenta';

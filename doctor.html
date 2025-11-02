@@ -167,45 +167,198 @@
             </div>
 
             <!-- Perfil del Profesional -->
+            <!-- 
+                Modernización del perfil del médico - Manteniendo identidad visual de CuidarMed+
+                Estructura: Breadcrumb → Header sticky → Grid responsivo (4/8 en desktop, stack en mobile)
+                Mantiene todos los IDs y names existentes para compatibilidad con doctor.js
+            -->
             <div class="dashboard-section profile-section hidden" id="doctorProfileSection">
-                <div class="section-header">
-                    <div>
-                        <h3>Perfil Profesional</h3>
-                        <p>Datos visibles para tus pacientes</p>
-                    </div>
-                    <div class="section-header-actions">
-                        <button class="btn btn-primary" id="editDoctorProfile">
+                <!-- Breadcrumb -->
+                <nav class="breadcrumb" aria-label="Breadcrumb">
+                    <a href="#" data-section="inicio" class="breadcrumb-link">Panel Médico</a>
+                    <span class="breadcrumb-separator">/</span>
+                    <span class="breadcrumb-current">Perfil</span>
+                </nav>
+
+                <!-- Page Header (Sticky) -->
+                <header class="profile-page-header" id="profilePageHeader">
+                    <div class="profile-header-content">
+                        <div>
+                            <h2 class="profile-page-title">Perfil Profesional</h2>
+                            <p class="profile-page-subtitle">Datos visibles para tus pacientes</p>
+                        </div>
+                        <button class="btn btn-primary" id="editDoctorProfile" aria-label="Editar perfil">
                             <i class="fas fa-edit"></i>
                             Editar Perfil
                         </button>
                     </div>
-                </div>
-                <div class="profile-card">
-                    <div class="profile-header">
-                        
-                    </div>
-                    <form id="doctorProfileForm" class="profile-grid" novalidate>
-                        <div class="profile-group">
-                            <h5>Información de contacto</h5>
-                            <label class="profile-label" for="profileLocationInput">Nombre</label>
-                            <label>María</label>
-                            <label class="profile-label" for="profileLocationInput">Apellido</label>
-                            <label>Gómez</label>
-                            <label class="profile-label" for="profileEmailInput">Email</label>
-                            <input type="email" id="profileEmailInput" name="email" placeholder="correo@ejemplo.com" required disabled>
-                            <div class="profile-group">
-                            <h5>Biografía</h5>
-                            <textarea id="profileBioInput" name="biography" rows="6" placeholder="Comparte tu experiencia, especialidad y enfoque profesional." disabled></textarea>
-                        </div>
+                </header>
 
+                <!-- Profile Grid -->
+                <main class="profile-grid">
+                    <!-- Sidebar: Foto y Acciones -->
+                    <aside class="profile-sidebar">
+                        <div class="profile-card profile-card--sidebar">
+                            <div class="profile-avatar-section">
+                                <div class="profile-avatar-wrapper">
+                                    <img id="doctor-avatar-preview" 
+                                         src="https://icons.veryicon.com/png/o/internet--web/prejudice/user-128.png" 
+                                         alt="Foto de perfil del médico" 
+                                         class="profile-avatar-main">
+                                </div>
+                                <div class="profile-avatar-controls">
+                                    <label class="profile-label" for="doctor-image-url-input">URL de imagen</label>
+                                    <input type="text" 
+                                           id="doctor-image-url-input" 
+                                           class="profile-input profile-input--url" 
+                                           placeholder="https://ejemplo.com/imagen.jpg"
+                                           aria-describedby="avatar-url-help">
+                                    <p class="profile-help-text" id="avatar-url-help">
+                                        <i class="fas fa-info-circle"></i>
+                                        Ingresa la URL de tu imagen de perfil
+                                    </p>
+                                </div>
+                            </div>
                         </div>
-                        
-                        <div class="profile-actions hidden" id="profileActions">
-                            <button type="button" class="btn btn-secondary" id="cancelProfileEdit">Cancelar</button>
-                            <button type="submit" class="btn btn-primary" id="saveProfile">Guardar Cambios</button>
-                        </div>
-                    </form>
-                </div>
+                    </aside>
+
+                    <!-- Content: Información -->
+                    <section class="profile-content">
+                        <form id="doctorProfileForm" class="profile-form" novalidate>
+                            <!-- Información de contacto -->
+                            <div class="profile-card profile-card--content">
+                                <header class="profile-card-header">
+                                    <h3 class="profile-card-title">
+                                        <i class="fas fa-user-circle" aria-hidden="true"></i>
+                                        Información de contacto
+                                    </h3>
+                                </header>
+                                <div class="profile-card-body">
+                                    <div class="profile-fields-row">
+                                        <div class="profile-field">
+                                            <label class="profile-label" for="profileFirstNameInput">Nombre</label>
+                                            <input type="text" 
+                                                   id="profileFirstNameInput" 
+                                                   name="firstName" 
+                                                   class="profile-input" 
+                                                   placeholder="Nombre" 
+                                                   disabled
+                                                   aria-label="Nombre">
+                                        </div>
+                                        <div class="profile-field">
+                                            <label class="profile-label" for="profileLastNameInput">Apellido</label>
+                                            <input type="text" 
+                                                   id="profileLastNameInput" 
+                                                   name="lastName" 
+                                                   class="profile-input" 
+                                                   placeholder="Apellido" 
+                                                   disabled
+                                                   aria-label="Apellido">
+                                        </div>
+                                    </div>
+                                    <div class="profile-field">
+                                        <label class="profile-label" for="profileEmailInput">Email</label>
+                                        <input type="email" 
+                                               id="profileEmailInput" 
+                                               name="email" 
+                                               class="profile-input" 
+                                               placeholder="correo@ejemplo.com" 
+                                               required 
+                                               disabled
+                                               aria-label="Email">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Información profesional -->
+                            <div class="profile-card profile-card--content">
+                                <header class="profile-card-header">
+                                    <h3 class="profile-card-title">
+                                        <i class="fas fa-stethoscope" aria-hidden="true"></i>
+                                        Información profesional
+                                    </h3>
+                                </header>
+                                <div class="profile-card-body">
+                                    <div class="profile-field">
+                                        <label class="profile-label" for="profileSpecialtyInput">Especialidad</label>
+                                        <div class="profile-specialty-wrapper">
+                                            <input type="text" 
+                                                   id="profileSpecialtyInput" 
+                                                   name="specialty" 
+                                                   class="profile-input" 
+                                                   placeholder="Ej. Cardiología, Pediatría, Neurología, etc." 
+                                                   disabled
+                                                   aria-label="Especialidad">
+                                            <span class="profile-specialty-chip" id="specialtyChip" aria-hidden="true"></span>
+                                        </div>
+                                    </div>
+                                    <!-- Espacio reservado para futuros datos profesionales -->
+                                    <div class="profile-professional-extras" aria-label="Información profesional adicional">
+                                        <!-- Contenedor para Obra social / Modalidad / Horarios (chips) -->
+                                        <div class="profile-chips-container" id="professionalChips" role="list">
+                                            <!-- Los chips se agregarán dinámicamente si hay datos -->
+                                        </div>
+                                        <!-- Ubicación del consultorio -->
+                                        <div class="profile-location" role="group" aria-label="Ubicación del consultorio">
+                                            <i class="fas fa-map-marker-alt" aria-hidden="true"></i>
+                                            <span>Consultorio Onsari</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Biografía -->
+                            <div class="profile-card profile-card--content">
+                                <header class="profile-card-header">
+                                    <h3 class="profile-card-title">
+                                        <i class="fas fa-file-alt" aria-hidden="true"></i>
+                                        Biografía
+                                    </h3>
+                                </header>
+                                <div class="profile-card-body">
+                                    <div class="profile-field">
+                                        <label class="profile-label" for="profileBioInput">Descripción profesional</label>
+                                        <div class="profile-biography-wrapper">
+                                            <textarea id="profileBioInput" 
+                                                      name="biography" 
+                                                      class="profile-textarea" 
+                                                      rows="6" 
+                                                      placeholder="Comparte tu experiencia y enfoque profesional." 
+                                                      disabled
+                                                      aria-label="Biografía profesional"></textarea>
+                                            <button type="button" 
+                                                    class="profile-biography-toggle hidden" 
+                                                    id="bioToggle"
+                                                    aria-expanded="false"
+                                                    aria-controls="profileBioInput">
+                                                <span class="bio-toggle-text">Ver más</span>
+                                                <i class="fas fa-chevron-down" aria-hidden="true"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Acciones del formulario -->
+                            <div class="profile-actions hidden" id="profileActions">
+                                <button type="button" 
+                                        class="btn btn-secondary" 
+                                        id="cancelProfileEdit"
+                                        aria-label="Cancelar edición">
+                                    <i class="fas fa-times" aria-hidden="true"></i>
+                                    Cancelar
+                                </button>
+                                <button type="submit" 
+                                        class="btn btn-primary" 
+                                        id="saveProfile"
+                                        aria-label="Guardar cambios">
+                                    <i class="fas fa-save" aria-hidden="true"></i>
+                                    Guardar Cambios
+                                </button>
+                            </div>
+                        </form>
+                    </section>
+                </main>
             </div>
         </div>
     </div>
@@ -269,6 +422,144 @@
                     e.preventDefault();
                     try { localStorage.clear(); } catch(_) {}
                     window.location.href = 'index.html';
+                });
+            }
+        })();
+
+        /*
+         * Perfil del Médico - JavaScript Mínimo
+         * Funcionalidades:
+         * 1. Preview del avatar al cambiar URL
+         * 2. Header sticky al hacer scroll
+         * 3. Toggle de biografía expandible
+         * 4. Actualización de chip de especialidad
+         */
+        (function() {
+            'use strict';
+
+            // 1. Preview del avatar en tiempo real
+            const avatarUrlInput = document.getElementById('doctor-image-url-input');
+            const avatarPreview = document.getElementById('doctor-avatar-preview');
+            
+            if (avatarUrlInput && avatarPreview) {
+                avatarUrlInput.addEventListener('input', function() {
+                    const url = this.value.trim();
+                    if (url) {
+                        avatarPreview.src = url;
+                        avatarPreview.onerror = function() {
+                            // Si falla la carga, mantener imagen por defecto
+                            this.src = 'https://icons.veryicon.com/png/o/internet--web/prejudice/user-128.png';
+                        };
+                    } else {
+                        avatarPreview.src = 'https://icons.veryicon.com/png/o/internet--web/prejudice/user-128.png';
+                    }
+                });
+            }
+
+            // 2. Header sticky con sombra al hacer scroll
+            const profilePageHeader = document.getElementById('profilePageHeader');
+            const profileSection = document.getElementById('doctorProfileSection');
+            
+            if (profilePageHeader && profileSection) {
+                const observer = new IntersectionObserver(function(entries) {
+                    entries.forEach(function(entry) {
+                        if (entry.intersectionRatio < 1) {
+                            profilePageHeader.classList.add('sticky');
+                        } else {
+                            profilePageHeader.classList.remove('sticky');
+                        }
+                    });
+                }, {
+                    threshold: [0, 1],
+                    rootMargin: '-60px 0px 0px 0px'
+                });
+                
+                // Observar un elemento al inicio del contenido para detectar scroll
+                const headerTrigger = document.createElement('div');
+                headerTrigger.style.position = 'absolute';
+                headerTrigger.style.top = '0';
+                headerTrigger.style.height = '1px';
+                profileSection.insertBefore(headerTrigger, profileSection.firstChild);
+                
+                observer.observe(headerTrigger);
+            }
+
+            // 3. Toggle de biografía expandible
+            const bioTextarea = document.getElementById('profileBioInput');
+            const bioToggle = document.getElementById('bioToggle');
+            
+            function checkBioLength() {
+                if (!bioTextarea || !bioToggle) return;
+                
+                const text = bioTextarea.value || '';
+                const lines = text.split('\n').length;
+                const hasLongContent = lines > 3 || text.length > 200;
+                
+                if (hasLongContent && !bioTextarea.disabled) {
+                    bioToggle.classList.remove('hidden');
+                    bioTextarea.setAttribute('data-expanded', 'false');
+                    bioToggle.setAttribute('aria-expanded', 'false');
+                    bioToggle.querySelector('.bio-toggle-text').textContent = 'Ver más';
+                } else {
+                    bioToggle.classList.add('hidden');
+                }
+            }
+            
+            if (bioToggle && bioTextarea) {
+                // Verificar longitud inicial
+                checkBioLength();
+                
+                // Verificar cuando cambia el contenido
+                bioTextarea.addEventListener('input', checkBioLength);
+                
+                // Toggle de expandir/contraer
+                bioToggle.addEventListener('click', function() {
+                    const isExpanded = bioTextarea.getAttribute('data-expanded') === 'true';
+                    
+                    if (isExpanded) {
+                        bioTextarea.setAttribute('data-expanded', 'false');
+                        bioToggle.setAttribute('aria-expanded', 'false');
+                        bioToggle.querySelector('.bio-toggle-text').textContent = 'Ver más';
+                    } else {
+                        bioTextarea.setAttribute('data-expanded', 'true');
+                        bioToggle.setAttribute('aria-expanded', 'true');
+                        bioToggle.querySelector('.bio-toggle-text').textContent = 'Ver menos';
+                    }
+                });
+            }
+
+            // 4. Actualizar chip de especialidad cuando cambia el input
+            const specialtyInput = document.getElementById('profileSpecialtyInput');
+            const specialtyChip = document.getElementById('specialtyChip');
+            
+            function updateSpecialtyChip() {
+                if (!specialtyInput || !specialtyChip) return;
+                
+                const value = specialtyInput.value.trim();
+                if (value && !specialtyInput.disabled) {
+                    specialtyChip.textContent = value;
+                    specialtyChip.setAttribute('aria-hidden', 'false');
+                } else {
+                    specialtyChip.textContent = '';
+                    specialtyChip.setAttribute('aria-hidden', 'true');
+                }
+            }
+            
+            if (specialtyInput && specialtyChip) {
+                specialtyInput.addEventListener('input', updateSpecialtyChip);
+                // Actualizar al cargar datos existentes
+                setTimeout(updateSpecialtyChip, 500);
+            }
+
+            // 5. Navegación del breadcrumb
+            const breadcrumbLink = document.querySelector('.breadcrumb-link');
+            if (breadcrumbLink) {
+                breadcrumbLink.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const navItem = document.querySelector('.nav-item[data-section="inicio"]');
+                    if (navItem) {
+                        navItem.click();
+                    }
                 });
             }
         })();

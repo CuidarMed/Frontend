@@ -69,13 +69,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function initializePatientPanel() {
     await loadUserContext();
+    
+    // Actualizar el banner inmediatamente con los datos del usuario
+    updateWelcomeBanner();
 
     setupUserMenu();
     initializeSidebarNavigation();
     initializeModals();
 
-    updateWelcomeBanner();
-
+    // loadPatientData() actualizará el banner después de cargar los datos del paciente
     await loadPatientData();
     await loadPatientStats();
 
@@ -143,10 +145,13 @@ async function ensureUserProfile() {
             state.user = currentUser;
             localStorage.setItem('user', JSON.stringify(currentUser));
 
+            // Actualizar el banner después de actualizar el perfil del usuario
             updateWelcomeBanner();
         }
     } catch (error) {
         console.warn('No se pudo sincronizar el perfil del usuario', error);
+        // Aún así, intentar actualizar el banner con los datos disponibles
+        updateWelcomeBanner();
     }
 }
 
@@ -174,17 +179,42 @@ function getUserAvatarUrl() {
 }
 
 function getUserDisplayName() {
+    // Prioridad 1: Nombre completo del paciente (Name + LastName)
+    if (currentPatient) {
+        const patientFirstName = currentPatient.name ?? currentPatient.firstName ?? '';
+        const patientLastName = currentPatient.lastName ?? '';
+        const patientFullName = [patientFirstName, patientLastName].filter(Boolean).join(' ').trim();
+        
+        if (patientFullName) {
+            return patientFullName;
+        }
+    }
+
+    // Prioridad 2: Nombre completo del usuario actual (firstName + lastName)
+    const userFirstName = currentUser?.firstName ?? '';
+    const userLastName = currentUser?.lastName ?? '';
+    const userFullName = [userFirstName, userLastName].filter(Boolean).join(' ').trim();
+
+    if (userFullName) {
+        return userFullName;
+    }
+
+    // Prioridad 3: Solo el nombre del paciente (sin apellido)
     if (currentPatient?.name) {
         return currentPatient.name;
     }
 
-    const fullName = [currentUser?.firstName, currentUser?.lastName].filter(Boolean).join(' ').trim();
-
-    if (fullName) {
-        return fullName;
+    // Prioridad 4: Solo el nombre del usuario
+    if (currentUser?.firstName) {
+        return currentUser.firstName;
     }
 
-    return currentUser?.email || 'Paciente';
+    // Último recurso: Email (solo la parte antes del @) o 'Paciente'
+    if (currentUser?.email) {
+        return currentUser.email.split('@')[0];
+    }
+
+    return 'Paciente';
 }
 
 function updateWelcomeBanner() {
@@ -195,9 +225,18 @@ function updateWelcomeBanner() {
 
     const displayName = getUserDisplayName();
     const avatarUrl = getUserAvatarUrl();
+    
+    console.log("=== ACTUALIZANDO BANNER DE BIENVENIDA ===");
+    console.log("displayName:", displayName);
+    console.log("currentUser:", currentUser);
+    console.log("currentPatient:", currentPatient);
 
     if (welcomeNameElement) {
-        welcomeNameElement.textContent = `Hola, ${displayName}`;
+        const greeting = displayName ? `Hola, ${displayName}` : 'Hola';
+        welcomeNameElement.textContent = greeting;
+        console.log("Texto actualizado en welcome-name:", greeting);
+    } else {
+        console.warn("No se encontró el elemento welcome-name");
     }
 
     if (welcomeMessageElement && !welcomeMessageElement.dataset.custom) {
@@ -250,16 +289,19 @@ async function loadPatientData() {
 
         const { Api } = await import('./api.js');
         const patientResponse = await Api.get(`v1/Patient/User/${currentUser.userId}`);
-        console.log("Paciente obtenido del backend:", {
-            raw: patientResponse,
-            dateOfBirth: patientResponse?.dateOfBirth ?? patientResponse?.DateOfBirth,
-            birthDate: patientResponse?.birthDate
-        });
+        console.log("=== PACIENTE OBTENIDO DEL BACKEND ===");
+        console.log("Respuesta completa (raw):", JSON.stringify(patientResponse, null, 2));
+        console.log("HealthPlan (PascalCase):", patientResponse?.HealthPlan);
+        console.log("healthPlan (camelCase):", patientResponse?.healthPlan);
+        console.log("MembershipNumber (PascalCase):", patientResponse?.MembershipNumber);
+        console.log("membershipNumber (camelCase):", patientResponse?.membershipNumber);
+        console.log("Todos los campos:", Object.keys(patientResponse || {}));
+        
         currentPatient = normalizePatient(patientResponse);
-        console.log("Paciente normalizado:", {
-            normalized: currentPatient,
-            birthDate: currentPatient?.birthDate
-        });
+        console.log("=== PACIENTE NORMALIZADO ===");
+        console.log("medicalInsurance:", currentPatient?.medicalInsurance);
+        console.log("insuranceNumber:", currentPatient?.insuranceNumber);
+        console.log("Datos completos normalizados:", JSON.stringify(currentPatient, null, 2));
 
         updateWelcomeBanner();
 
@@ -338,16 +380,26 @@ function normalizePatient(rawPatient) {
         }
     }
 
+    // Normalizar HealthPlan - puede venir como healthPlan (camelCase) o HealthPlan (PascalCase)
+    let healthPlan = rawPatient.healthPlan ?? rawPatient.HealthPlan ?? '';
+    // Si está vacío o es solo espacios, usar null
+    healthPlan = healthPlan && healthPlan.trim() ? healthPlan.trim() : '';
+    
+    // Normalizar MembershipNumber - puede venir como membershipNumber (camelCase) o MembershipNumber (PascalCase)
+    let membershipNumber = rawPatient.membershipNumber ?? rawPatient.MembershipNumber ?? '';
+    // Si está vacío o es solo espacios, usar null
+    membershipNumber = membershipNumber && membershipNumber.trim() ? membershipNumber.trim() : '';
+
     return {
         patientId: rawPatient.patientId ?? rawPatient.PatientId ?? null,
         name: rawPatient.name ?? rawPatient.firstName ?? rawPatient.Name ?? '',
         lastName: rawPatient.lastName ?? rawPatient.LastName ?? '',
         email: rawPatient.email ?? '',
-       
+        address: rawPatient.address ?? rawPatient.adress ?? rawPatient.Adress ?? '',
         dni: (rawPatient.dni ?? rawPatient.Dni ?? '').toString(),
         birthDate: birthDate,
-        medicalInsurance: rawPatient.medicalInsurance ?? rawPatient.HealthPlan ?? '',
-        insuranceNumber: rawPatient.insuranceNumber ?? rawPatient.MembershipNumber ?? '',
+        medicalInsurance: healthPlan,
+        insuranceNumber: membershipNumber,
         userId: rawPatient.userId ?? rawPatient.UserId ?? null,
     };
 }
@@ -358,6 +410,7 @@ function buildProfileData(patient, user) {
         name: 'Paciente',
         lastName: '',
         email: user?.email || 'sin-correo@cuidarmed.com',
+        address: '',
         birthDate: '',
         medicalInsurance: '',
         insuranceNumber: '',
@@ -635,6 +688,10 @@ function createProfileViewHTML(patient) {
                     <span class="info-value" id="profile-birthDate">${patient.birthDate || ''}</span>
                 </div>
                 <div class="info-item">
+                    <span class="info-label">Dirección:</span>
+                    <span class="info-value" id="profile-address">${patient.address || ''}</span>
+                </div>
+                <div class="info-item">
                     <span class="info-label">Email:</span>
                     <span class="info-value" id="profile-email">${patient.email || ''}</span>
                 </div>
@@ -646,11 +703,11 @@ function createProfileViewHTML(patient) {
                 <h4 class="info-group-title">Información Médica</h4>
                 <div class="info-item">
                     <span class="info-label">Obra Social:</span>
-                    <span class="info-value" id="profile-medicalInsurance">${patient.healthPlan || ''}</span>
+                    <span class="info-value" id="profile-medicalInsurance">${(patient.medicalInsurance && patient.medicalInsurance.trim()) || (patient.healthPlan && patient.healthPlan.trim()) || 'No especificada'}</span>
                 </div>
                 <div class="info-item">
-                    <span class="info-label">Número de Obra Social:</span>
-                    <span class="info-value" id="profile-insuranceNumber">${patient.membershipNumber || ''}</span>
+                    <span class="info-label">Número de Afiliado:</span>
+                    <span class="info-value" id="profile-insuranceNumber">${(patient.insuranceNumber && patient.insuranceNumber.trim()) || (patient.membershipNumber && patient.membershipNumber.trim()) || 'No especificado'}</span>
                 </div>
             </div>
         </div>
@@ -659,9 +716,28 @@ function createProfileViewHTML(patient) {
 
 // Crear HTML de edición del perfil
 function createProfileEditHTML(patient) {
+    const currentAvatarUrl = getUserAvatarUrl();
 
     return `
         <form id="profileEditForm" class="profile-edit-form">
+            <div class="profile-avatar-card" style="margin-bottom: 2rem;">
+                <img id="profile-avatar-preview" src="${currentAvatarUrl}" alt="Avatar" class="profile-avatar-img">
+                <div class="profile-avatar-meta">
+                    <span><strong>Foto de Perfil</strong></span>
+                    <div class="profile-avatar-hint">
+                        <label for="profile-image-url" style="cursor: pointer; color: #2563eb; text-decoration: underline;">
+                            <i class="fas fa-image"></i> Cambiar imagen
+                        </label>
+                        <input type="url" id="profile-image-url" name="imageUrl" 
+                               placeholder="https://ejemplo.com/imagen.jpg" 
+                               style="display: none;">
+                        <input type="text" id="profile-image-url-input" 
+                               placeholder="URL de imagen" 
+                               style="margin-top: 0.5rem; width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 8px;">
+                    </div>
+                </div>
+            </div>
+
             <div class="profile-grid">
 
                 <div class="profile-info-group">
@@ -688,6 +764,11 @@ function createProfileEditHTML(patient) {
                     </div>
 
                     <div class="form-group">
+                        <label for="edit-address">Dirección:</label>
+                        <input type="text" id="edit-address" name="Adress" value="${patient.address || ''}" placeholder="Calle y número">
+                    </div>
+
+                    <div class="form-group">
                         <label for="edit-email">Email:</label>
                         <input type="email" id="edit-email" name="Email" value="${patient.email || ''}" disabled>
                     </div>
@@ -698,12 +779,12 @@ function createProfileEditHTML(patient) {
 
                     <div class="form-group">
                         <label for="edit-HealthPlan">Obra Social:</label>
-                        <input type="text" id="edit-HealthPlan" name="HealthPlan" value="${patient.healthPlan || ''}">
+                        <input type="text" id="edit-HealthPlan" name="HealthPlan" value="${patient.medicalInsurance || ''}">
                     </div>
 
                     <div class="form-group">
-                        <label for="edit-MembershipNumber">Número de Obra Social:</label>
-                        <input type="text" id="edit-MembershipNumber" name="MembershipNumber" value="${patient.membershipNumber || ''}">
+                        <label for="edit-MembershipNumber">Número de Afiliado:</label>
+                        <input type="text" id="edit-MembershipNumber" name="MembershipNumber" value="${patient.insuranceNumber || ''}">
                     </div>
 
                 </div>
@@ -769,6 +850,42 @@ function toggleProfileEdit(patientData) {
     }
 }
 
+// Configurar editor de avatar para el perfil del paciente
+function setupProfileAvatarEditor(patientData) {
+    const imageUrlInput = document.getElementById('profile-image-url-input');
+    const imageUrlHidden = document.getElementById('profile-image-url');
+    const avatarPreview = document.getElementById('profile-avatar-preview');
+    
+    if (!imageUrlInput || !avatarPreview) return;
+    
+    // Actualizar preview cuando cambie la URL
+    imageUrlInput.addEventListener('input', function() {
+        const url = imageUrlInput.value.trim();
+        if (url) {
+            avatarPreview.src = url;
+            avatarPreview.onerror = function() {
+                // Si falla la carga, usar imagen por defecto
+                avatarPreview.src = getUserAvatarUrl();
+            };
+            if (imageUrlHidden) {
+                imageUrlHidden.value = url;
+            }
+        } else {
+            avatarPreview.src = getUserAvatarUrl();
+        }
+    });
+    
+    // Guardar la URL en pendingPatientAvatar cuando cambie
+    imageUrlInput.addEventListener('blur', function() {
+        const url = imageUrlInput.value.trim();
+        if (url) {
+            pendingPatientAvatar = url;
+        } else {
+            pendingPatientAvatar = null;
+        }
+    });
+}
+
 
 // Guardar cambios del perfil
 async function saveProfileChanges(form, originalData) {
@@ -780,6 +897,7 @@ async function saveProfileChanges(form, originalData) {
             lastName: formData.get('LastName'),
             dni: formData.get('Dni'),
             birthDate: birthDateISO ? birthDateISO.split('T')[0] : '', // YYYY-MM-DD
+            address: formData.get('Adress'),
             medicalInsurance: formData.get('HealthPlan'),
             insuranceNumber: formData.get('MembershipNumber'),
         };
@@ -790,6 +908,7 @@ async function saveProfileChanges(form, originalData) {
             LastName: updatedData.lastName,
             Dni: parseInt(updatedData.dni, 10) || 0,
             DateOfBirth: updatedData.birthDate,
+            Adress: updatedData.address,
             HealthPlan: updatedData.medicalInsurance,
             MembershipNumber: updatedData.insuranceNumber,
         };
@@ -811,6 +930,36 @@ async function saveProfileChanges(form, originalData) {
         };
 
         if (pendingPatientAvatar) {
+            // Actualizar imagen del usuario en AuthMS
+            try {
+                const AUTHMS_BASE_URL = "http://localhost:8081/api/v1";
+                const userId = currentUser?.userId;
+                if (userId) {
+                    const updateUserResponse = await fetch(`${AUTHMS_BASE_URL}/User/${userId}`, {
+                        method: "PUT",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": `Bearer ${localStorage.getItem('token') || ''}`,
+                        },
+                        body: JSON.stringify({
+                            FirstName: currentUser.firstName,
+                            LastName: currentUser.lastName,
+                            Email: currentUser.email,
+                            Dni: currentUser.dni,
+                            ImageUrl: pendingPatientAvatar,
+                        }),
+                    });
+                    
+                    if (updateUserResponse.ok) {
+                        console.log('Imagen de usuario actualizada en AuthMS');
+                    } else {
+                        console.warn('No se pudo actualizar la imagen en AuthMS');
+                    }
+                }
+            } catch (error) {
+                console.error('Error al actualizar imagen en AuthMS:', error);
+            }
+            
             currentUser = {
                 ...currentUser,
                 imageUrl: pendingPatientAvatar,

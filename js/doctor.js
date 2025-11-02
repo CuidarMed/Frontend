@@ -7,6 +7,21 @@ let currentPrescriptionData = null;
 
 document.addEventListener('DOMContentLoaded', async function() {
     await loadDoctorContext();
+    
+    // Asegurar que currentUser tenga firstName y lastName antes de continuar
+    if (!currentUser?.firstName || !currentUser?.lastName) {
+        console.log('Faltan firstName o lastName, esperando a que se carguen...');
+        // Dar tiempo para que ensureDoctorProfile termine
+        await new Promise(resolve => setTimeout(resolve, 500));
+        // Re-cargar desde state por si se actualizó
+        const { state } = await import('./state.js');
+        currentUser = state.user;
+    }
+    
+    console.log('currentUser final:', currentUser);
+    console.log('currentUser.firstName:', currentUser?.firstName);
+    console.log('currentUser.lastName:', currentUser?.lastName);
+    
     initializeDoctorPanel();
     updateDoctorHeader();
     loadDoctorData(); // Cargar datos del backend
@@ -17,6 +32,11 @@ async function loadDoctorContext() {
     loadUserFromStorage();
 
     currentUser = state.user;
+    
+    console.log('=== CARGANDO CONTEXTO DEL DOCTOR ===');
+    console.log('currentUser desde localStorage:', currentUser);
+    console.log('currentUser.firstName:', currentUser?.firstName);
+    console.log('currentUser.lastName:', currentUser?.lastName);
 
     if (!currentUser) {
         window.location.href = 'login.html';
@@ -24,61 +44,77 @@ async function loadDoctorContext() {
     }
 
     await ensureDoctorProfile(state.token);
+    
+    // Asegurar que currentUser esté actualizado después de ensureDoctorProfile
+    const { state: updatedState } = await import('./state.js');
+    currentUser = updatedState.user;
+    
+    console.log('currentUser después de ensureDoctorProfile:', currentUser);
+    console.log('currentUser.firstName después:', currentUser?.firstName);
+    console.log('currentUser.lastName después:', currentUser?.lastName);
 }
 
 async function ensureDoctorProfile(token) {
     const userId = currentUser?.userId;
 
     if (!token || !userId) {
+        console.warn('ensureDoctorProfile: No hay token o userId');
         return;
     }
 
-    // Verificar si la imagen actual es la por defecto o si no hay datos completos
-    const currentImageUrl = currentUser?.imageUrl || '';
-    const isDefaultImage = currentImageUrl === DEFAULT_AVATAR_URL || 
-                          currentImageUrl.includes('icons.veryicon.com/png/o/internet--web/prejudice/user-128.png') ||
-                          !currentImageUrl ||
-                          !currentUser?.firstName || 
-                          !currentUser?.lastName;
+    console.log('=== SINCRONIZANDO PERFIL DEL DOCTOR ===');
+    console.log('currentUser antes:', currentUser);
+    console.log('currentUser.firstName:', currentUser?.firstName);
+    console.log('currentUser.lastName:', currentUser?.lastName);
 
-    // Siempre buscar actualización si es imagen por defecto o si faltan datos
-    if (isDefaultImage || !currentUser?.firstName || !currentUser?.lastName) {
-        try {
-            const { getUserById } = await import('./apis/authms.js');
-            const profile = await getUserById(userId, token);
+    // SIEMPRE intentar cargar datos actualizados desde AuthMS para asegurar que tenemos firstName y lastName
+    console.log('Cargando datos completos desde AuthMS...');
+    try {
+        const { getUserById } = await import('./apis/authms.js');
+        const profile = await getUserById(userId, token);
+        
+        console.log('Profile obtenido de AuthMS:', profile);
+        console.log('profile completo:', JSON.stringify(profile, null, 2));
+        console.log('profile.firstName:', profile?.firstName ?? profile?.FirstName);
+        console.log('profile.lastName:', profile?.lastName ?? profile?.LastName);
+        console.log('profile.email:', profile?.email ?? profile?.Email);
 
-            if (profile) {
-                const newImageUrl = profile.imageUrl ?? profile.ImageUrl ?? currentUser.imageUrl;
-                
-                // Solo actualizar si la nueva imagen es diferente de la por defecto o si no teníamos imagen
-                const shouldUpdate = newImageUrl !== DEFAULT_AVATAR_URL && 
-                                   !newImageUrl.includes('icons.veryicon.com/png/o/internet--web/prejudice/user-128.png') &&
-                                   newImageUrl && 
-                                   newImageUrl.trim() !== '';
+        if (profile) {
+            // Actualizar currentUser con todos los datos disponibles
+            const newFirstName = profile.firstName ?? profile.FirstName ?? currentUser?.firstName ?? '';
+            const newLastName = profile.lastName ?? profile.LastName ?? currentUser?.lastName ?? '';
+            const newImageUrl = profile.imageUrl ?? profile.ImageUrl ?? currentUser?.imageUrl;
+            const newEmail = profile.email ?? profile.Email ?? currentUser?.email;
+            const newRole = profile.role ?? profile.Role ?? currentUser?.role;
 
-                if (shouldUpdate || !currentUser?.imageUrl || !currentUser?.firstName || !currentUser?.lastName) {
-                    currentUser = {
-                        ...currentUser,
-                        firstName: profile.firstName ?? profile.FirstName ?? currentUser.firstName,
-                        lastName: profile.lastName ?? profile.LastName ?? currentUser.lastName,
-                        imageUrl: shouldUpdate ? newImageUrl : (currentUser.imageUrl || DEFAULT_AVATAR_URL),
-                        email: profile.email ?? profile.Email ?? currentUser.email,
-                        role: profile.role ?? profile.Role ?? currentUser.role,
-                    };
+            currentUser = {
+                ...currentUser,
+                firstName: newFirstName,
+                FirstName: newFirstName,
+                lastName: newLastName,
+                LastName: newLastName,
+                imageUrl: newImageUrl || DEFAULT_AVATAR_URL,
+                email: newEmail ?? currentUser?.email,
+                role: newRole ?? currentUser?.role,
+                userId: currentUser?.userId ?? profile.userId ?? profile.UserId ?? userId,
+            };
 
-                    const { state } = await import('./state.js');
-                    state.user = currentUser;
-                    localStorage.setItem('user', JSON.stringify(currentUser));
+            console.log('currentUser actualizado:', currentUser);
+            console.log('currentUser.firstName después:', currentUser.firstName);
+            console.log('currentUser.lastName después:', currentUser.lastName);
+            console.log('currentUser.email después:', currentUser.email);
 
-                    updateDoctorHeader();
-                }
-            }
-        } catch (error) {
-            console.warn('No se pudo sincronizar el perfil del profesional', error);
+            const { state } = await import('./state.js');
+            state.user = currentUser;
+            localStorage.setItem('user', JSON.stringify(currentUser));
+
+            updateDoctorHeader();
+        } else {
+            console.warn('No se obtuvo profile de AuthMS');
         }
-    } else {
-        // Si ya tenemos una imagen personalizada, asegurarnos de que se muestre
-        updateDoctorHeader();
+    } catch (error) {
+        console.error('Error al sincronizar el perfil del profesional:', error);
+        console.error('Stack trace:', error.stack);
     }
 }
 
@@ -114,7 +150,19 @@ function updateDoctorHeader(doctorInfo) {
     const profileAvatarElement = document.getElementById('profile-avatar');
 
     if (welcomeNameElement) {
-        welcomeNameElement.textContent = `Hola, ${displayName}`;
+        // Obtener nombre completo del usuario logueado
+        // Prioridad: datos del doctor del backend, luego datos del usuario actual
+        const firstName = doctorInfo?.firstName ?? doctorInfo?.FirstName ?? currentUser?.firstName ?? '';
+        const lastName = doctorInfo?.lastName ?? doctorInfo?.LastName ?? doctorInfo?.Lastname ?? currentUser?.lastName ?? '';
+        const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
+        
+        if (fullName) {
+            welcomeNameElement.textContent = `Hola, Dr ${fullName}`;
+        } else {
+            // Si no hay nombre, intentar obtener del email como fallback
+            const emailName = currentUser?.email?.split('@')[0] || 'Profesional';
+            welcomeNameElement.textContent = `Hola, Dr ${emailName}`;
+        }
     }
 
     if (welcomeMessageElement && !welcomeMessageElement.dataset.custom) {
@@ -145,54 +193,92 @@ function updateDoctorProfileSection(doctorInfo) {
         return;
     }
 
+    console.log('=== ACTUALIZANDO PERFIL DEL DOCTOR ===');
+    console.log('doctorInfo:', doctorInfo);
+    console.log('doctorInfo firstName:', doctorInfo?.firstName ?? doctorInfo?.FirstName);
+    console.log('doctorInfo lastName:', doctorInfo?.lastName ?? doctorInfo?.LastName);
+    console.log('currentUser:', currentUser);
+    console.log('currentUser firstName:', currentUser?.firstName ?? currentUser?.FirstName);
+    console.log('currentUser lastName:', currentUser?.lastName ?? currentUser?.LastName);
+
     const displayName = getDoctorDisplayName(info);
     const avatarUrl = getDoctorAvatarUrl();
 
-    const avatarElement = document.getElementById('profile-avatar');
-    if (avatarElement) {
-        avatarElement.src = avatarUrl;
-        avatarElement.alt = `Foto de ${displayName}`;
+    // Actualizar avatar preview
+    const avatarPreview = document.getElementById('doctor-avatar-preview');
+    if (avatarPreview) {
+        avatarPreview.src = avatarUrl;
+        avatarPreview.alt = `Foto de ${displayName}`;
+        console.log('Avatar actualizado:', avatarUrl);
     }
 
-    const profileName = document.getElementById('profile-name');
-    if (profileName) {
-        profileName.textContent = displayName ? `Dr. ${displayName}` : 'Profesional';
-    }
-
-    const profileSpecialty = document.getElementById('profile-specialty');
-    const specialtyValue = info.specialty ?? info.specialtyName ?? info.Specialty ?? 'Especialidad no especificada';
-    if (profileSpecialty) {
-        profileSpecialty.textContent = specialtyValue;
-    }
-
-    const profileLicense = document.getElementById('profile-license');
-    if (profileLicense) {
-        const license = info.licenseNumber ?? info.matricula ?? info.LicenseNumber ?? '—';
-        profileLicense.textContent = `Matrícula: ${license}`;
-    }
-
+    // Actualizar campos del formulario
+    const profileFirstNameInput = document.getElementById('profileFirstNameInput');
+    const profileLastNameInput = document.getElementById('profileLastNameInput');
     const profileEmailInput = document.getElementById('profileEmailInput');
-    const profilePhoneInput = document.getElementById('profilePhoneInput');
-    const profileLocationInput = document.getElementById('profileLocationInput');
+    const profileSpecialtyInput = document.getElementById('profileSpecialtyInput');
     const profileBioInput = document.getElementById('profileBioInput');
+    const doctorImageUrlInput = document.getElementById('doctor-image-url-input');
 
+    // Nombre - Priorizar datos del doctor del backend, luego del usuario
+    let firstName = '';
+    if (info && (info.firstName || info.FirstName)) {
+        firstName = info.firstName ?? info.FirstName ?? '';
+    } else if (currentUser && (currentUser.firstName || currentUser.FirstName)) {
+        firstName = currentUser.firstName ?? currentUser.FirstName ?? '';
+    }
+    
+    if (profileFirstNameInput) {
+        profileFirstNameInput.value = firstName;
+        console.log('Nombre actualizado:', firstName, '(de doctor:', info?.firstName ?? info?.FirstName, ', de usuario:', currentUser?.firstName ?? currentUser?.FirstName, ')');
+    } else {
+        console.warn('No se encontró el elemento profileFirstNameInput');
+    }
+
+    // Apellido - Priorizar datos del doctor del backend, luego del usuario
+    let lastName = '';
+    if (info && (info.lastName || info.LastName)) {
+        lastName = info.lastName ?? info.LastName ?? '';
+    } else if (currentUser && (currentUser.lastName || currentUser.LastName)) {
+        lastName = currentUser.lastName ?? currentUser.LastName ?? '';
+    }
+    
+    if (profileLastNameInput) {
+        profileLastNameInput.value = lastName;
+        console.log('Apellido actualizado:', lastName, '(de doctor:', info?.lastName ?? info?.LastName, ', de usuario:', currentUser?.lastName ?? currentUser?.LastName, ')');
+    } else {
+        console.warn('No se encontró el elemento profileLastNameInput');
+    }
+
+    // Email
+    const email = currentUser?.email ?? info.email ?? info.Email ?? '';
     if (profileEmailInput) {
-        profileEmailInput.value = currentUser?.email ?? info.email ?? info.Email ?? '';
+        profileEmailInput.value = email;
+        console.log('Email actualizado:', email);
     }
 
-    if (profilePhoneInput) {
-        profilePhoneInput.value = info.phone ?? info.Phone ?? '';
+    // Especialidad
+    const specialty = info.specialty ?? info.Specialty ?? '';
+    if (profileSpecialtyInput) {
+        profileSpecialtyInput.value = specialty;
+        console.log('Especialidad actualizada:', specialty);
     }
 
-    if (profileLocationInput) {
-        profileLocationInput.value = info.location ?? info.consultory ?? info.Consultory ?? info.office ?? '';
-    }
-
+    // Biografía
+    const bio = info.biography ?? info.Biography ?? '';
     if (profileBioInput) {
-        const bio = info.biography ?? info.Biography ?? '';
         profileBioInput.value = bio;
-        profileBioInput.placeholder = 'Comparte tu experiencia, especialidad y enfoque profesional.';
+        console.log('Biografía actualizada:', bio);
     }
+
+    // URL de imagen
+    if (doctorImageUrlInput) {
+        const imageUrl = currentUser?.imageUrl ?? avatarUrl;
+        doctorImageUrlInput.value = imageUrl && imageUrl !== DEFAULT_AVATAR_URL ? imageUrl : '';
+        console.log('URL de imagen actualizada:', imageUrl);
+    }
+
+    console.log('=== PERFIL ACTUALIZADO ===');
 }
 
 function initializeDoctorPanel() {
@@ -208,10 +294,219 @@ function initializeDoctorPanel() {
     // Inicializar modal de receta
     initializePrescriptionModal();
     
+    // Inicializar funcionalidad de editar perfil
+    initializeProfileEditing();
+    
     // Cargar datos periódicamente (cada 30 segundos)
     setInterval(() => {
         loadDoctorData();
     }, 30000);
+}
+
+function initializeProfileEditing() {
+    const editBtn = document.getElementById('editDoctorProfile');
+    const cancelBtn = document.getElementById('cancelProfileEdit');
+    const saveBtn = document.getElementById('saveProfile');
+    const profileForm = document.getElementById('doctorProfileForm');
+
+    if (editBtn) {
+        editBtn.addEventListener('click', function() {
+            setProfileFormEditable(true);
+            // Actualizar el preview de la imagen con la imagen actual
+            const avatarPreview = document.getElementById('doctor-avatar-preview');
+            const imageUrlInput = document.getElementById('doctor-image-url-input');
+            if (avatarPreview) {
+                avatarPreview.src = getDoctorAvatarUrl();
+            }
+            if (imageUrlInput) {
+                imageUrlInput.value = currentUser?.imageUrl || '';
+            }
+        });
+    }
+
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', function() {
+            setProfileFormEditable(false);
+            // Recargar datos originales
+            updateDoctorProfileSection(currentDoctorData);
+        });
+    }
+
+    if (profileForm) {
+        profileForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            try {
+                // Obtener valores del formulario
+                const firstNameInput = document.getElementById('profileFirstNameInput');
+                const lastNameInput = document.getElementById('profileLastNameInput');
+                const emailInput = document.getElementById('profileEmailInput');
+                const specialtyInput = document.getElementById('profileSpecialtyInput');
+                const bioInput = document.getElementById('profileBioInput');
+                const imageUrlInput = document.getElementById('doctor-image-url-input');
+                
+                const firstName = firstNameInput?.value?.trim() || '';
+                const lastName = lastNameInput?.value?.trim() || '';
+                const email = emailInput?.value?.trim() || '';
+                const specialty = specialtyInput?.value?.trim() || '';
+                const biography = bioInput?.value?.trim() || '';
+                const imageUrl = imageUrlInput?.value?.trim() || null;
+                
+                // Validar que haya datos mínimos
+                if (!firstName || !lastName) {
+                    showNotification('El nombre y apellido son obligatorios', 'error');
+                    return;
+                }
+                
+                // Obtener el ID del doctor
+                const doctorId = currentUser?.userId;
+                if (!doctorId) {
+                    showNotification('No se pudo identificar el usuario. Por favor, recarga la página.', 'error');
+                    return;
+                }
+                
+                // Construir el payload según la estructura esperada por el backend
+                const payload = {
+                    FirstName: firstName,
+                    LastName: lastName,
+                    Specialty: specialty || null,
+                    Biography: biography || null,
+                };
+                
+                // Importar Api
+                const { Api } = await import('./api.js');
+                
+                // Guardar en el backend
+                await Api.patch(`v1/Doctor/${doctorId}`, payload);
+                
+                // Actualizar imagen del usuario en AuthMS si se proporcionó
+                if (imageUrl) {
+                    try {
+                        const AUTHMS_BASE_URL = "http://localhost:8081/api/v1";
+                        const updateUserResponse = await fetch(`${AUTHMS_BASE_URL}/User/${doctorId}`, {
+                            method: "PUT",
+                            headers: {
+                                "Content-Type": "application/json",
+                                "Authorization": `Bearer ${localStorage.getItem('token') || ''}`,
+                            },
+                            body: JSON.stringify({
+                                FirstName: currentUser.firstName,
+                                LastName: currentUser.lastName,
+                                Email: currentUser.email,
+                                Dni: currentUser.dni,
+                                ImageUrl: imageUrl,
+                            }),
+                        });
+                        
+                        if (updateUserResponse.ok) {
+                            console.log('Imagen de usuario actualizada en AuthMS');
+                            currentUser.imageUrl = imageUrl;
+                        } else {
+                            console.warn('No se pudo actualizar la imagen en AuthMS');
+                        }
+                    } catch (error) {
+                        console.error('Error al actualizar imagen en AuthMS:', error);
+                    }
+                }
+                
+                // Actualizar los datos locales del usuario
+                if (currentUser) {
+                    currentUser.firstName = firstName;
+                    currentUser.lastName = lastName;
+                    if (email) {
+                        currentUser.email = email;
+                    }
+                    
+                    // Actualizar en localStorage
+                    try {
+                        localStorage.setItem('user', JSON.stringify(currentUser));
+                        const { state } = await import('./state.js');
+                        state.user = currentUser;
+                    } catch (storageError) {
+                        console.warn('No se pudo actualizar el localStorage', storageError);
+                    }
+                }
+                
+                // Recargar datos del doctor desde el backend
+                await loadDoctorData();
+                
+                // Mostrar notificación de éxito
+                showNotification('Perfil actualizado correctamente', 'success');
+                
+                // Desactivar modo edición
+                setProfileFormEditable(false);
+                
+            } catch (error) {
+                console.error('Error al guardar el perfil:', error);
+                const errorMessage = error.message || 'No se pudo guardar el perfil. Por favor, intenta nuevamente.';
+                showNotification(errorMessage, 'error');
+            }
+        });
+    }
+    
+    // Configurar editor de avatar del doctor
+    setupDoctorAvatarEditor();
+}
+
+// Configurar editor de avatar para el perfil del doctor
+function setupDoctorAvatarEditor() {
+    const imageUrlInput = document.getElementById('doctor-image-url-input');
+    const avatarPreview = document.getElementById('doctor-avatar-preview');
+    
+    if (!imageUrlInput || !avatarPreview) return;
+    
+    // Actualizar preview cuando cambie la URL
+    imageUrlInput.addEventListener('input', function() {
+        const url = imageUrlInput.value.trim();
+        if (url) {
+            avatarPreview.src = url;
+            avatarPreview.onerror = function() {
+                // Si falla la carga, usar imagen por defecto
+                avatarPreview.src = getDoctorAvatarUrl();
+            };
+        } else {
+            avatarPreview.src = getDoctorAvatarUrl();
+        }
+    });
+}
+
+function setProfileFormEditable(editable) {
+    const firstNameInput = document.getElementById('profileFirstNameInput');
+    const lastNameInput = document.getElementById('profileLastNameInput');
+    const emailInput = document.getElementById('profileEmailInput');
+    const specialtyInput = document.getElementById('profileSpecialtyInput');
+    const bioInput = document.getElementById('profileBioInput');
+    const editBtn = document.getElementById('editDoctorProfile');
+    const profileActions = document.getElementById('profileActions');
+
+    const inputs = [firstNameInput, lastNameInput, emailInput, specialtyInput, bioInput].filter(Boolean);
+
+    inputs.forEach(input => {
+        if (input) {
+            input.disabled = !editable;
+            if (editable) {
+                input.style.cursor = 'text';
+            } else {
+                input.style.cursor = 'not-allowed';
+            }
+        }
+    });
+
+    if (editBtn) {
+        if (editable) {
+            editBtn.style.display = 'none';
+        } else {
+            editBtn.style.display = 'inline-flex';
+        }
+    }
+
+    if (profileActions) {
+        if (editable) {
+            profileActions.classList.remove('hidden');
+        } else {
+            profileActions.classList.add('hidden');
+        }
+    }
 }
 
 // Cargar datos del doctor desde el backend
@@ -220,11 +515,86 @@ async function loadDoctorData() {
         // Importar Api dinámicamente si está disponible
         const { Api } = await import('./api.js');
         
-        const doctorId = currentUser?.userId || 1; // Fallback temporal
-        const doctor = await Api.get(`v1/Doctor/${doctorId}`);
+        const userId = currentUser?.userId;
+        if (!userId) {
+            console.error('No hay userId disponible');
+            return;
+        }
+        
+        console.log('=== CARGANDO DATOS DEL DOCTOR ===');
+        console.log('userId:', userId);
+        console.log('currentUser:', currentUser);
+        
+        // Intentar obtener doctor por UserId usando el endpoint específico
+        let doctor = null;
+        try {
+            console.log('Intentando obtener doctor por UserId desde DirectoryMS...');
+            console.log('userId:', userId);
+            doctor = await Api.get(`v1/Doctor/User/${userId}`);
+            console.log('✓ Doctor obtenido desde DirectoryMS:', doctor);
+            if (doctor) {
+                console.log('Doctor data:', {
+                    doctorId: doctor.doctorId ?? doctor.DoctorId,
+                    firstName: doctor.firstName ?? doctor.FirstName,
+                    lastName: doctor.lastName ?? doctor.LastName,
+                    specialty: doctor.specialty ?? doctor.Specialty,
+                    biography: doctor.biography ?? doctor.Biography,
+                    licenseNumber: doctor.licenseNumber ?? doctor.LicenseNumber,
+                    userId: doctor.userId ?? doctor.UserId
+                });
+            }
+        } catch (err) {
+            console.error('Error al obtener doctor por UserId:', err);
+            console.error('Mensaje de error:', err.message);
+            // Si el endpoint no existe o falla, intentar obtener todos y buscar
+            try {
+                console.log('Intentando obtener todos los doctores como fallback...');
+                const doctors = await Api.get('v1/Doctor');
+                console.log('Lista de doctores recibida:', doctors);
+                if (Array.isArray(doctors)) {
+                    doctor = doctors.find(d => {
+                        const dUserId = d.userId ?? d.UserId;
+                        return dUserId === userId;
+                    });
+                    if (doctor) {
+                        console.log('✓ Doctor encontrado en la lista:', doctor);
+                    }
+                }
+            } catch (fallbackErr) {
+                console.error('Error en fallback al buscar doctor:', fallbackErr);
+            }
+        }
+        
+        // Si aún no se encontró, usar datos del usuario actual como fallback
+        if (!doctor) {
+            console.warn('No se encontró doctor en DirectoryMS, usando datos del usuario como fallback');
+            // Crear un objeto doctor con los datos del usuario
+            doctor = {
+                firstName: currentUser?.firstName ?? currentUser?.FirstName ?? '',
+                FirstName: currentUser?.firstName ?? currentUser?.FirstName ?? '',
+                lastName: currentUser?.lastName ?? currentUser?.LastName ?? '',
+                LastName: currentUser?.lastName ?? currentUser?.LastName ?? '',
+                userId: currentUser?.userId ?? currentUser?.UserId,
+                UserId: currentUser?.userId ?? currentUser?.UserId,
+                specialty: null,
+                Specialty: null,
+                biography: null,
+                Biography: null,
+                licenseNumber: null,
+                LicenseNumber: null
+            };
+            console.log('Doctor de fallback creado:', doctor);
+        }
 
+        console.log('Doctor final encontrado:', doctor);
         currentDoctorData = doctor;
         updateDoctorHeader(doctor);
+        
+        // Actualizar la sección de perfil si está visible
+        const profileSection = document.getElementById('doctorProfileSection');
+        if (profileSection && !profileSection.classList.contains('hidden')) {
+            updateDoctorProfileSection(doctor);
+        }
 
         // Cargar datos adicionales del doctor (consultas, agenda, etc.)
         await loadTodayConsultations();
@@ -233,7 +603,14 @@ async function loadDoctorData() {
         
     } catch (error) {
         console.error('Error al cargar datos del doctor:', error);
-        // Si hay error, mantener los valores por defecto del HTML
+        console.error('Stack trace:', error.stack);
+        // Si hay error, actualizar header con datos del usuario actual
+        updateDoctorHeader(null);
+        // También actualizar perfil con datos del usuario si está visible
+        const profileSection = document.getElementById('doctorProfileSection');
+        if (profileSection && !profileSection.classList.contains('hidden')) {
+            updateDoctorProfileSection(null);
+        }
     }
 }
 
@@ -262,15 +639,8 @@ async function loadTodayConsultations() {
         
     } catch (error) {
         console.error('Error al cargar consultas:', error);
-        // Si falla el backend, mostrar datos de ejemplo
-        consultationsList.innerHTML = '';
-        
-        
-        
-        exampleConsultations.forEach(consultation => {
-            const consultationItem = createConsultationItemElement(consultation);
-            consultationsList.appendChild(consultationItem);
-        });
+        // Si falla el backend, mostrar mensaje
+        consultationsList.innerHTML = '<p style="color: #6b7280; padding: 2rem; text-align: center;">No se pudieron cargar las consultas del día</p>';
     }
     
     // Reinicializar botones de atención después de cargar las consultas
@@ -418,14 +788,15 @@ function initializeSidebarNavigation() {
     const freshNavItems = document.querySelectorAll('.sidebar-nav .nav-item');
     
     freshNavItems.forEach(item => {
-        item.addEventListener('click', function(e) {
+        item.addEventListener('click', async function(e) {
             e.preventDefault();
             e.stopPropagation();
             
             // Obtener la sección
             const section = this.getAttribute('data-section');
+            console.log('Navegación clickeada:', section);
             setActiveNav(section);
-            handleSectionNavigation(section);
+            await handleSectionNavigation(section);
         });
     });
 
@@ -433,7 +804,7 @@ function initializeSidebarNavigation() {
     handleSectionNavigation('inicio');
 }
 
-function handleSectionNavigation(section) {
+async function handleSectionNavigation(section) {
     const dashboardContent = document.querySelector('.dashboard-content');
     if (!dashboardContent) return;
     
@@ -469,10 +840,21 @@ function handleSectionNavigation(section) {
             break;
         case 'perfil':
             if (profileSection) {
+                console.log('Navegando a perfil...');
+                // Cargar datos del doctor si no están disponibles
+                if (!currentDoctorData) {
+                    console.log('No hay datos del doctor, cargando...');
+                    await loadDoctorData();
+                }
+                // Actualizar datos del perfil
                 updateDoctorProfileSection(currentDoctorData);
+                // Mostrar sección de perfil
                 profileSection.classList.remove('hidden');
                 profileSection.style.display = '';
                 setProfileFormEditable(false);
+                console.log('Perfil mostrado');
+            } else {
+                console.error('No se encontró la sección de perfil');
             }
             break;
         case 'consultas':
@@ -673,12 +1055,22 @@ function updatePrescriptionsToday(change) {
 
 // Sistema de notificaciones
 function showNotification(message, type = 'info') {
+    // Determinar el icono según el tipo
+    let iconClass = 'fa-info-circle';
+    if (type === 'success') {
+        iconClass = 'fa-check-circle';
+    } else if (type === 'error') {
+        iconClass = 'fa-exclamation-circle';
+    } else if (type === 'warning') {
+        iconClass = 'fa-exclamation-triangle';
+    }
+    
     // Crear elemento de notificación
     const notification = document.createElement('div');
     notification.className = `notification notification-${type}`;
     notification.innerHTML = `
         <div class="notification-content">
-            <i class="fas fa-info-circle"></i>
+            <i class="fas ${iconClass}"></i>
             <span>${message}</span>
         </div>
     `;
