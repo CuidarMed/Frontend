@@ -32,14 +32,14 @@
 }
 
 .breadcrumb-link {
-    color: #2563eb;
+    color: #10b981;
     text-decoration: none;
     transition: color 0.2s ease;
     font-weight: 500;
 }
 
 .breadcrumb-link:hover {
-    color: #1e40af;
+    color: #059669;
     text-decoration: underline;
 }
 
@@ -153,14 +153,14 @@
     border-radius: 50%;
     object-fit: cover;
     border: 4px solid #ffffff;
-    box-shadow: 0 8px 24px rgba(37, 99, 235, 0.15);
+    box-shadow: 0 8px 24px rgba(16, 185, 129, 0.15);
     transition: all 0.3s ease;
     background: #e2e8f0;
     display: block;
 }
 
 .profile-avatar-wrapper:hover .profile-avatar-main {
-    box-shadow: 0 12px 32px rgba(37, 99, 235, 0.25);
+    box-shadow: 0 12px 32px rgba(16, 185, 129, 0.25);
     transform: scale(1.02);
 }
 
@@ -184,7 +184,7 @@
 }
 
 .profile-help-text i {
-    color: #2563eb;
+    color: #10b981;
     font-size: 0.9rem;
 }
 
@@ -241,7 +241,7 @@
 }
 
 .profile-card-title i {
-    color: #2563eb;
+    color: #10b981;
     font-size: 1.35rem;
 }
 
@@ -308,15 +308,15 @@
 .profile-input:focus,
 .profile-textarea:focus {
     outline: none;
-    border-color: #2563eb;
-    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+    border-color: #10b981;
+    box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.1);
     background: #ffffff;
 }
 
 .profile-input:not(:disabled):focus,
 .profile-textarea:not(:disabled):focus {
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
 }
 
 .profile-textarea {
@@ -422,7 +422,7 @@
 }
 
 .profile-location i {
-    color: #2563eb;
+    color: #10b981;
     font-size: 1rem;
 }
 
@@ -459,7 +459,7 @@
     margin-top: 1rem;
     background: transparent;
     border: 1px solid #e5e7eb;
-    color: #2563eb;
+    color: #10b981;
     padding: 0.625rem 1rem;
     border-radius: 8px;
     font-size: 0.875rem;
@@ -473,8 +473,8 @@
 
 .profile-biography-toggle:hover {
     background: #f3f4f6;
-    border-color: #2563eb;
-    color: #1e40af;
+    border-color: #10b981;
+    color: #059669;
 }
 
 .profile-biography-toggle i {
@@ -629,16 +629,16 @@ body {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
-    border: 1px solid rgba(37, 99, 235, 0.2);
+    background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+    border: 1px solid rgba(16, 185, 129, 0.2);
     padding: 0.5rem 1rem;
     border-radius: 12px;
     cursor: pointer;
-    color: #1e40af;
+    color: #059669;
     font-size: 0.9rem;
     font-weight: 600;
     transition: all 0.3s ease;
-    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.15);
+    box-shadow: 0 2px 6px rgba(16, 185, 129, 0.15);
 }
 
 .user-menu-avatar {
@@ -647,17 +647,17 @@ body {
     border-radius: 50%;
     object-fit: cover;
     border: 2px solid #ffffff;
-    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.2);
+    box-shadow: 0 2px 6px rgba(16, 185, 129, 0.2);
     transition: transform 0.3s ease;
     background-color: #f1f5f9;
 }
 
 .user-btn:hover {
-    background: linear-gradient(135deg, #bfdbfe 0%, #93c5fd 100%);
-    border-color: rgba(37, 99, 235, 0.3);
+    background: linear-gradient(135deg, #a7f3d0 0%, #6ee7b7 100%);
+    border-color: rgba(16, 185, 129, 0.3);
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
-    color: #1e3a8a;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+    color: #047857;
 }
 
 .user-btn:hover .user-menu-avatar {
@@ -665,9 +665,9 @@ body {
 }
 
 .user-menu.active .user-btn {
-    background: linear-gradient(135deg, #93c5fd 0%, #60a5fa 100%);
-    border-color: rgba(37, 99, 235, 0.4);
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+    background: linear-gradient(135deg, #6ee7b7 0%, #34d399 100%);
+    border-color: rgba(16, 185, 129, 0.4);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
 }
 
 .user-btn i.fa-chevron-down {
@@ -734,7 +734,7 @@ body {
     top: 0;
     height: 100%;
     width: 3px;
-    background: linear-gradient(180deg, #2563eb 0%, #10b981 100%);
+    background: linear-gradient(180deg, #10b981 0%, #059669 100%);
     transform: scaleY(0);
     transition: transform 0.25s ease;
 }
@@ -788,7 +788,7 @@ body {
     gap: 0.5rem;
     font-size: 1.25rem;
     font-weight: bold;
-    color: #2563eb;
+    color: #10b981;
     margin-bottom: 0.5rem;
 }
 
@@ -821,7 +821,7 @@ body {
 }
 
 .nav-item.active {
-    background: #2563eb;
+    background: #10b981;
     color: white;
     border-radius: 8px;
 }
@@ -865,6 +865,10 @@ body {
 
 .welcome-section {
     margin-bottom: 2.5rem;
+    background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+    border-radius: 16px;
+    padding: 2rem;
+    box-shadow: 0 4px 20px rgba(16, 185, 129, 0.15);
 }
 
 .welcome-header {
@@ -885,19 +889,20 @@ body {
     border-radius: 24px;
     object-fit: cover;
     border: 3px solid #ffffff;
-    box-shadow: 0 6px 18px rgba(37, 99, 235, 0.2);
+    box-shadow: 0 6px 18px rgba(16, 185, 129, 0.2);
     background: #e2e8f0;
 }
 
 .welcome-section h2 {
     font-size: 2.4rem;
-    color: #1f2937;
+    color: #047857;
     margin-bottom: 0.5rem;
+    font-weight: 700;
 }
 
 .welcome-section p,
 .welcome-copy p {
-    color: #6b7280;
+    color: #065f46;
     font-size: 1.05rem;
     margin-bottom: 0;
 }
@@ -928,7 +933,7 @@ body {
 .card-icon {
     width: 60px;
     height: 60px;
-    background: #dbeafe;
+    background: #d1fae5;
     border-radius: 12px;
     display: flex;
     align-items: center;
@@ -937,7 +942,7 @@ body {
 
 .card-icon i {
     font-size: 1.5rem;
-    color: #2563eb;
+    color: #10b981;
 }
 
 .card-icon.green {
@@ -1018,14 +1023,14 @@ body {
 }
 
 .consultation-item:hover {
-    background: #f1f5f9;
-    border-color: #2563eb;
+    background: #f0fdf4;
+    border-color: #10b981;
 }
 
 .consultation-icon {
     width: 40px;
     height: 40px;
-    background: #dbeafe;
+    background: #d1fae5;
     border-radius: 8px;
     display: flex;
     align-items: center;
@@ -1033,7 +1038,7 @@ body {
 }
 
 .consultation-icon i {
-    color: #2563eb;
+    color: #10b981;
 }
 
 .consultation-info {
@@ -1153,7 +1158,7 @@ body {
 .schedule-day-badge {
     width: 48px;
     height: 48px;
-    background: #dbeafe;
+    background: #d1fae5;
     border-radius: 50%;
     display: flex;
     flex-direction: column;
@@ -1161,7 +1166,7 @@ body {
     justify-content: center;
     font-size: 0.75rem;
     font-weight: 600;
-    color: #2563eb;
+    color: #10b981;
 }
 
 .schedule-day-badge .day-abbr {
@@ -1207,8 +1212,8 @@ body {
 }
 
 .schedule-item:hover {
-    background: #f8fafc;
-    border-color: #2563eb;
+    background: #f0fdf4;
+    border-color: #10b981;
 }
 
 .schedule-item > span {
@@ -1261,8 +1266,8 @@ body {
 }
 
 .agenda-day-item:hover {
-    border-color: #2563eb;
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
+    border-color: #10b981;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
     transform: translateY(-2px);
 }
 
@@ -1289,7 +1294,7 @@ body {
 }
 
 .agenda-day-item:hover .day-details {
-    color: #2563eb;
+    color: #10b981;
 }
 
 /* Coming Soon Section */
@@ -1307,18 +1312,18 @@ body {
 .coming-soon-icon {
     width: 120px;
     height: 120px;
-    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     margin: 0 auto 2rem;
-    box-shadow: 0 4px 20px rgba(37, 99, 235, 0.2);
+    box-shadow: 0 4px 20px rgba(16, 185, 129, 0.2);
 }
 
 .coming-soon-icon i {
     font-size: 3rem;
-    color: #2563eb;
+    color: #10b981;
 }
 
 .coming-soon-content h2 {
@@ -1330,7 +1335,7 @@ body {
 
 .coming-soon-message {
     font-size: 1.5rem;
-    color: #2563eb;
+    color: #10b981;
     font-weight: 600;
     margin-bottom: 1rem;
 }
@@ -1389,14 +1394,14 @@ body {
 }
 
 .action-btn:hover {
-    background: #dbeafe;
-    border-color: #2563eb;
+    background: #d1fae5;
+    border-color: #10b981;
     transform: translateY(-2px);
 }
 
 .action-btn i {
     font-size: 2rem;
-    color: #2563eb;
+    color: #10b981;
 }
 
 .action-btn span {
@@ -1552,8 +1557,8 @@ body {
 .form-group input:focus,
 .form-group textarea:focus {
     outline: none;
-    border-color: #2563eb;
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    border-color: #10b981;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
 }
 
 .form-actions {

@@ -20,6 +20,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const doctorRequiredInputs = [
         document.getElementById("doctorLicense"),
+        document.getElementById("doctorSpecialty"),
     ];
 
     function setRequired(inputs, enabled) {
@@ -140,33 +141,63 @@ document.addEventListener("DOMContentLoaded", () => {
                 
                 console.log("Paciente actualizado exitosamente");
             } else if (role === "Doctor") {
-                const doctors = await Api.get("v1/Doctor");
-                const doctor = Array.isArray(doctors)
-                    ? doctors.find((d) => (d.userId ?? d.UserId) === userId)
-                    : null;
+                // Intentar obtener el doctor por UserId con retry
+                let doctor = null;
+                let attempts = 0;
+                const maxAttempts = 5;
+                
+                while (!doctor && attempts < maxAttempts) {
+                    try {
+                        // Usar el endpoint específico para obtener doctor por UserId
+                        doctor = await Api.get(`v1/Doctor/User/${userId}`);
+                        
+                        if (!doctor && attempts < maxAttempts - 1) {
+                            console.log(`Doctor no encontrado, intentando nuevamente... (intento ${attempts + 1}/${maxAttempts})`);
+                            await new Promise(resolve => setTimeout(resolve, 500));
+                        }
+                    } catch (err) {
+                        // Si es 404, el doctor aún no existe, intentar de nuevo
+                        if (err.message && err.message.includes("404")) {
+                            console.log(`Doctor aún no disponible (404), intentando nuevamente... (intento ${attempts + 1}/${maxAttempts})`);
+                        } else {
+                            console.error(`Error al buscar doctor (intento ${attempts + 1}):`, err);
+                        }
+                        if (attempts < maxAttempts - 1) {
+                            await new Promise(resolve => setTimeout(resolve, 500));
+                        }
+                    }
+                    attempts++;
+                }
 
                 if (!doctor) {
-                    throw new Error("No se pudo encontrar el registro de doctor recién creado en DirectoryMS");
+                    throw new Error(`No se pudo encontrar el registro de doctor recién creado en DirectoryMS para userId ${userId} después de ${maxAttempts} intentos. Asegúrate de que DirectoryMS esté corriendo.`);
                 }
 
                 const doctorId = doctor.doctorId ?? doctor.DoctorId;
+                
+                if (!doctorId) {
+                    throw new Error("No se pudo obtener el ID del doctor");
+                }
 
                 const payload = {
                     FirstName: userData.firstName,
                     LastName: userData.lastName,
-                    LicenseNumber: doctorExtras?.licenseNumber || "PENDING",
+                    LicenseNumber: (doctorExtras?.licenseNumber && doctorExtras.licenseNumber.trim()) ? doctorExtras.licenseNumber.trim() : "PENDING",
                     Specialty: (doctorExtras?.specialty && doctorExtras.specialty.trim()) ? doctorExtras.specialty.trim() : null,
                     Biography: (doctorExtras?.biography && doctorExtras.biography.trim()) ? doctorExtras.biography.trim() : null,
                 };
 
                 console.log("=== ACTUALIZANDO DOCTOR ===");
+                console.log("doctorId:", doctorId);
                 console.log("Payload para doctor:", JSON.stringify(payload, null, 2));
                 console.log("doctorExtras:", JSON.stringify(doctorExtras, null, 2));
                 console.log("Specialty capturado:", doctorExtras?.specialty);
                 console.log("Specialty en payload:", payload.Specialty);
+                console.log("LicenseNumber en payload:", payload.LicenseNumber);
+                console.log("Biography en payload:", payload.Biography);
 
-                await Api.patch(`v1/Doctor/${doctorId}`, payload);
-                
+                const updateResponse = await Api.patch(`v1/Doctor/${doctorId}`, payload);
+                console.log("Respuesta de actualización:", updateResponse);
                 console.log("Doctor actualizado exitosamente");
             }
         } catch (error) {
@@ -186,8 +217,7 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-        // Construir userData - ImageUrl es opcional y no se incluye
-        // El backend usará su valor por defecto cuando el campo esté ausente o sea null
+        // Construir userData - ImageUrl se envía como null para que el backend use su valor por defecto
         const userData = {
             firstName: document.getElementById("firstName").value.trim(),
             lastName: document.getElementById("lastName").value.trim(),
@@ -195,7 +225,7 @@ document.addEventListener("DOMContentLoaded", () => {
             dni: document.getElementById("dni").value.trim(),
             password: passwordValue,
             role: selectedRole,
-            // No incluir imageUrl explícitamente - el backend lo manejará como opcional
+            imageUrl: null // Enviar explícitamente null para que el backend use el valor por defecto
         };
 
         if (!userData.firstName || !userData.lastName || !userData.email || !userData.dni || !userData.password) {
@@ -248,6 +278,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 alert("Por favor, completa la matrícula profesional.");
                 return;
             }
+            
+            // Validar que la especialidad esté seleccionada
+            const specialtySelect = document.getElementById("doctorSpecialty");
+            if (!specialtySelect || !specialtySelect.value || specialtySelect.value.trim() === "") {
+                alert("Por favor, selecciona una especialidad.");
+                specialtySelect?.focus();
+                return;
+            }
         }
 
         button.disabled = true;
@@ -271,6 +309,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
             try {
                 console.log("Sincronizando perfil en DirectoryMS...");
+                // Esperar un poco para asegurar que el doctor se haya creado en DirectoryMS
+                if (selectedRole === "Doctor") {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
                 await syncDirectoryProfile(
                     createdUserId,
                     selectedRole,
@@ -280,8 +322,24 @@ document.addEventListener("DOMContentLoaded", () => {
                 );
                 console.log("Perfil sincronizado exitosamente");
             } catch (syncError) {
-                console.error("Error al sincronizar perfil (no crítico):", syncError);
-                // No lanzamos el error para no bloquear el registro
+                console.error("Error al sincronizar perfil:", syncError);
+                
+                // Determinar el tipo de error para dar un mensaje más específico
+                let errorMessage = syncError.message || syncError.toString();
+                let userMessage = "Advertencia: Se creó tu cuenta pero no se pudieron guardar algunos datos adicionales.";
+                
+                if (errorMessage.includes("404") || errorMessage.includes("Not Found")) {
+                    userMessage += "\n\nEl servicio DirectoryMS no pudo encontrar tu perfil. Asegúrate de que DirectoryMS esté corriendo.";
+                } else if (errorMessage.includes("connection") || errorMessage.includes("refused") || errorMessage.includes("ERR_CONNECTION")) {
+                    userMessage += "\n\nNo se pudo conectar a DirectoryMS. Verifica que el servicio esté corriendo en Docker o IIS Express.";
+                } else if (errorMessage.includes("intentos")) {
+                    userMessage += "\n\nDirectoryMS no respondió a tiempo. El servicio puede no estar disponible o puede necesitar reiniciarse.";
+                }
+                
+                userMessage += "\n\nPor favor, actualiza tu perfil después de iniciar sesión para completar la información.";
+                userMessage += `\n\nError técnico: ${errorMessage}`;
+                
+                alert(userMessage);
             }
 
             alert(`¡Cuenta creada exitosamente! Tu rol es: ${userData.role}`);

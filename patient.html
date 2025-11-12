@@ -120,18 +120,6 @@
                 </div>
             </div>
 
-            <!-- Historial Médico Reciente Section -->
-            <div class="dashboard-section">
-                <div class="section-header">
-                    <div>
-                        <h3>Historial Médico Reciente</h3>
-                        <p>Últimas consultas realizadas</p>
-                    </div>
-                </div>
-                <div class="history-list" id="history-list">
-                    <!-- El historial se cargará dinámicamente desde el backend -->
-                </div>
-            </div>
         </div>
     </div>
 
@@ -144,46 +132,52 @@
             </div>
             <div class="modal-body">
                 <form id="appointment-form">
-                    <div class="form-group">
-                        <label for="specialty">Especialidad:</label>
-                        <select id="specialty" name="specialty" required>
-                            <option value="">Seleccionar especialidad</option>
-                            <option value="cardiologia">Cardiología</option>
-                            <option value="dermatologia">Dermatología</option>
-                            <option value="traumatologia">Traumatología</option>
-                            <option value="pediatria">Pediatría</option>
-                            <option value="ginecologia">Ginecología</option>
-                        </select>
+                    <div class="appointment-form-top">
+                        <div class="form-group">
+                            <label for="specialty">Especialidad:</label>
+                            <select id="specialty" name="specialty" required>
+                                <option value="">Seleccionar especialidad</option>
+                                <option value="cardiologia">Cardiología</option>
+                                <option value="dermatologia">Dermatología</option>
+                                <option value="traumatologia">Traumatología</option>
+                                <option value="pediatria">Pediatría</option>
+                                <option value="ginecologia">Ginecología</option>
+                                <option value="neurologia">Neurología</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="doctor">Médico:</label>
+                            <select id="doctor" name="doctor" required>
+                                <option value="">Seleccionar médico</option>
+                            </select>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label for="doctor">Médico:</label>
-                        <select id="doctor" name="doctor" required>
-                            <option value="">Seleccionar médico</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="date">Fecha:</label>
-                        <input type="date" id="date" name="date" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="time">Hora:</label>
-                        <select id="time" name="time" required>
-                            <option value="">Seleccionar hora</option>
-                            <option value="09:00">09:00</option>
-                            <option value="10:00">10:00</option>
-                            <option value="11:00">11:00</option>
-                            <option value="14:00">14:00</option>
-                            <option value="15:00">15:00</option>
-                            <option value="16:00">16:00</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="reason">Motivo de consulta:</label>
-                        <textarea id="reason" name="reason" rows="3" required></textarea>
-                    </div>
-                    <div class="form-actions">
-                        <button type="button" class="btn btn-secondary" id="cancel-appointment">Cancelar</button>
-                        <button type="submit" class="btn btn-primary">Agendar Turno</button>
+                    <div class="appointment-form-main">
+                        <div class="appointment-form-left">
+                            <div class="form-group">
+                                <label for="date">Fecha:</label>
+                                <div class="custom-date-picker-wrapper">
+                                    <input type="date" id="date" name="date" required style="display: none;">
+                                    <div id="custom-calendar" class="custom-calendar"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="appointment-form-right">
+                            <div class="form-group">
+                                <label for="time">Hora:</label>
+                                <select id="time" name="time" required>
+                                    <option value="">Seleccionar hora</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="reason">Motivo de consulta:</label>
+                                <textarea id="reason" name="reason" rows="5" required placeholder="Describe el motivo de tu consulta..."></textarea>
+                            </div>
+                            <div class="form-actions">
+                                <button type="button" class="btn btn-secondary" id="cancel-appointment">Cancelar</button>
+                                <button type="submit" class="btn btn-primary">Agendar Turno</button>
+                            </div>
+                        </div>
                     </div>
                 </form>
             </div>

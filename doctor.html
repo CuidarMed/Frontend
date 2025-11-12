@@ -282,13 +282,21 @@
                                     <div class="profile-field">
                                         <label class="profile-label" for="profileSpecialtyInput">Especialidad</label>
                                         <div class="profile-specialty-wrapper">
-                                            <input type="text" 
+                                            <select 
                                                    id="profileSpecialtyInput" 
                                                    name="specialty" 
                                                    class="profile-input" 
-                                                   placeholder="Ej. Cardiología, Pediatría, Neurología, etc." 
                                                    disabled
                                                    aria-label="Especialidad">
+                                                <option value="">Seleccionar especialidad</option>
+                                                <option value="Neurologo">Neurologo</option>
+                                                <option value="Pediatra">Pediatra</option>
+                                                <option value="Clinico">Clinico</option>
+                                                <option value="Cardiologo">Cardiologo</option>
+                                                <option value="Cirujano">Cirujano</option>
+                                                <option value="Dermatologo">Dermatologo</option>
+                                                <option value="Psiquiatra">Psiquiatra</option>
+                                            </select>
                                             <span class="profile-specialty-chip" id="specialtyChip" aria-hidden="true"></span>
                                         </div>
                                     </div>
@@ -566,6 +574,9 @@
     </script>
 </body>
 </html>
+
+
+
 
 
 

@@ -1,7 +1,33 @@
-const AUTHMS_BASE_URL = "http://localhost:8081/api/v1";
+// Usar el cliente API centralizado que maneja múltiples puertos
+// El puerto correcto es 8082 (Docker) o 5093 (IIS Express)
+const AUTHMS_BASE_URLS = [
+    "http://localhost:8082/api/v1",
+    "http://127.0.0.1:8082/api/v1",
+    "http://localhost:5093/api/v1",
+    "http://127.0.0.1:5093/api/v1"
+];
+
+async function tryFetch(url, options) {
+    let lastError = null;
+    for (const baseUrl of AUTHMS_BASE_URLS) {
+        try {
+            const fullUrl = url.startsWith('http') ? url : `${baseUrl}${url.startsWith('/') ? '' : '/'}${url}`;
+            const response = await fetch(fullUrl, { ...options, signal: AbortSignal.timeout(8000) });
+            // Si la respuesta es válida (incluso si es un error HTTP), devolverla
+            if (response.status !== 0 && response.status !== undefined) {
+                return response;
+            }
+        } catch (err) {
+            lastError = err;
+            // Continuar con el siguiente URL
+            continue;
+        }
+    }
+    throw lastError || new Error("No se pudo conectar a AuthMS. Verifica que el servicio esté corriendo.");
+}
 
 export async function login(email, password) {
-    const response = await fetch(`${AUTHMS_BASE_URL}/Auth/Login`, {
+    const response = await tryFetch("/Auth/Login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -16,7 +42,7 @@ export async function login(email, password) {
 
 export async function registerUser(userData) {
     try {
-        const response = await fetch(`${AUTHMS_BASE_URL}/User`, {
+        const response = await tryFetch("/User", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify(userData)
@@ -60,7 +86,7 @@ export async function getUserById(userId, token) {
         throw new Error("Se requiere un identificador de usuario válido");
     }
 
-    const response = await fetch(`${AUTHMS_BASE_URL}/User/${userId}`, {
+    const response = await tryFetch(`/User/${userId}`, {
         method: "GET",
         headers: {
             "Content-Type": "application/json",
