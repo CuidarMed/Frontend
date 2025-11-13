@@ -937,7 +937,89 @@ function initializeSidebarNavigation() {
     setActiveNav('inicio');
     handleSectionNavigation('inicio');
 }
+// ============================
+// HISTORIA CLÍNICA DEL DOCTOR
+// ============================
 
+async function loadDoctorHistory() {
+    const listEl = document.getElementById("doctor-history-list");
+    if (!listEl) return;
+
+    listEl.innerHTML = `
+        <tr><td colspan="5" style="text-align:center; padding:20px;">
+            <i class="fas fa-spinner fa-spin"></i> Cargando historial...
+        </td></tr>
+    `;
+
+    try {
+        const doctorId = currentDoctor?.doctorId || currentDoctor?.DoctorId;
+
+        const { ApiClinical, Api } = await import("./api.js");
+
+        const now = new Date();
+        const from = new Date(now.getFullYear() - 3, 0, 1);
+
+        const history = await ApiClinical.get(
+            `v1/Encounter?doctorId=${doctorId}&from=${from.toISOString()}&to=${now.toISOString()}`
+        );
+
+        const encounters = Array.isArray(history) ? history : history?.value || [];
+
+        // Obtener info de pacientes
+        const patientIds = [...new Set(encounters.map(x => x.patientId || x.PatientId))];
+        const patientsMap = new Map();
+
+        for (const pid of patientIds) {
+            try {
+                const patient = await Api.get(`v1/Patient/${pid}`);
+                patientsMap.set(pid, `${patient.firstName} ${patient.lastName}`);
+            } catch {
+                patientsMap.set(pid, "Paciente desconocido");
+            }
+        }
+
+        // Renderizar filas
+        listEl.innerHTML = encounters.map(enc => {
+            const date = new Date(enc.date || enc.Date);
+            const patientId = enc.patientId || enc.PatientId;
+
+            return `
+                <tr>
+                    <td>${date.toLocaleDateString("es-AR")}</td>
+                    <td>${patientsMap.get(patientId)}</td>
+                    <td>${enc.diagnosis || enc.Diagnosis || "—"}</td>
+                    <td>${enc.treatment || enc.Treatment || "—"}</td>
+                    <td>
+                        <button class="btn-history-action" onclick="viewEncounterDetails(${enc.encounterId || enc.EncounterId})">
+                            <i class="fas fa-eye"></i> Ver
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join("");
+
+    } catch (error) {
+        console.error("Error cargando historia clínica:", error);
+        listEl.innerHTML = `
+            <tr><td colspan="5" style="text-align:center; padding:20px;">
+                No se pudo cargar el historial
+            </td></tr>
+        `;
+    }
+}
+
+// ------------------------------
+// Buscador de historia clínica
+// ------------------------------
+document.getElementById("historySearchInput")?.addEventListener("input", function () {
+    const term = this.value.toLowerCase();
+    const rows = document.querySelectorAll("#doctor-history-list tr");
+
+    rows.forEach(row => {
+        const text = row.innerText.toLowerCase();
+        row.style.display = text.includes(term) ? "" : "none";
+    });
+});
 async function handleSectionNavigation(section) {
     const dashboardContent = document.querySelector('.dashboard-content');
     if (!dashboardContent) return;
@@ -951,6 +1033,10 @@ async function handleSectionNavigation(section) {
     const existingComingSoon = dashboardContent.querySelectorAll('.coming-soon-section');
     existingComingSoon.forEach(comingSoon => {
         comingSoon.remove();
+    });
+    const existingPatients = dashboardContent.querySelectorAll('.patients-section');
+    existingPatients.forEach(patients => {
+        patients.remove();
     });
 
     const mainDashboard = document.getElementById('mainDashboardSection');

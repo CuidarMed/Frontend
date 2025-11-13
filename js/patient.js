@@ -37,7 +37,10 @@ function formatDate(value) {
 
     return date.toLocaleDateString('es-AR', { year: 'numeric', month: '2-digit', day: '2-digit' });
 }
-
+function getActiveSection() {
+    const activeItem = document.querySelector(".nav-item.active");
+    return activeItem ? activeItem.dataset.section : null;
+}
 function toISODate(displayDate) {
     if (!displayDate) return '';
 
@@ -66,32 +69,6 @@ function toISODate(displayDate) {
 document.addEventListener('DOMContentLoaded', async () => {
     await initializePatientPanel();
 });
-
-async function initializePatientPanel() {
-    await loadUserContext();
-    
-    // Actualizar el banner inmediatamente con los datos del usuario
-    updateWelcomeBanner();
-
-    setupUserMenu();
-    initializeSidebarNavigation();
-    initializeModals();
-
-    // loadPatientData() actualizará el banner después de cargar los datos del paciente
-    await loadPatientData();
-    await loadPatientStats();
-    await loadPatientAppointments();
-    // loadPatientHistory() solo se carga cuando se navega a la sección de historial
-
-    if (autoRefreshInterval) {
-        clearInterval(autoRefreshInterval);
-    }
-    autoRefreshInterval = setInterval(async () => {
-        await loadPatientData();
-        await loadPatientAppointments();
-        await loadPatientStats();
-    }, 30000);
-}
 
 async function loadUserContext() {
     currentUser = await getAuthenticatedUser();
@@ -1098,7 +1075,150 @@ function showComingSoonSection(section) {
     }, 100);
 }
 
-// Cargar turnos del paciente desde SchedulingMS
+/* -------------------------------------------------------------
+   RENDER INICIO — SOLO 3 PRÓXIMOS TURNOS
+-------------------------------------------------------------- */
+function renderAppointmentsHome(appointments) {
+
+    return appointments.map(apt => {
+        const aptStart = new Date(apt.startTime || apt.StartTime);
+        const aptEnd = new Date(apt.endTime || apt.EndTime);
+
+        const dateStr = aptStart.toLocaleDateString("es-AR", {
+            weekday: "long",
+            day: "numeric",
+            month: "long"
+        });
+
+        const timeStr = `${aptStart.toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit'})} - 
+                         ${aptEnd.toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit'})}`;
+
+        // Doctor
+        const d = window.doctorsMap.get(apt.doctorId || apt.DoctorId) || {};
+        const doctorName = d.name || "Dr. Desconocido";
+        const specialty = d.specialty || "Especialidad no disponible";
+
+        const status = (apt.status || apt.Status || "SCHEDULED").toLowerCase();
+
+        const statusMap = {
+            scheduled: "Programado",
+            confirmed: "Confirmado",
+            cancelled: "Cancelado",
+            completed: "Completado",
+            in_progress: "En curso"
+        };
+
+        return `
+            <div class="appointment-card ${status}">
+                <div class="appointment-card-header">
+                    <div class="appointment-time-info">
+                        <i class="fas fa-calendar-day"></i>
+                        <div>
+                            <strong>${dateStr}</strong><br>
+                            ${timeStr}
+                        </div>
+                    </div>
+
+                    <div class="appointment-status-badge status-${status}">
+                        <i class="fas fa-tag"></i>
+                        <span>${statusMap[status] || status}</span>
+                    </div>
+                </div>
+
+                <div class="appointment-card-body mini">
+                    <i class="fas fa-stethoscope"></i>
+                    <span><strong>${doctorName}</strong> — ${specialty}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+
+/* -------------------------------------------------------------
+   RENDER COMPLETO — MIS TURNOS
+-------------------------------------------------------------- */
+function renderAppointmentsFull(appointments) {
+
+    return appointments.map(apt => {
+
+        const aptStart = new Date(apt.startTime || apt.StartTime);
+        const aptEnd = new Date(apt.endTime || apt.EndTime);
+
+        const dateStr = aptStart.toLocaleDateString("es-AR", {
+            weekday: "long",
+            day: "numeric",
+            month: "long"
+        });
+
+        const timeStr = `${aptStart.toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit'})} -
+                         ${aptEnd.toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit'})}`;
+
+        // Doctor
+        const d = window.doctorsMap.get(apt.doctorId || apt.DoctorId) || {};
+        const doctorName = d.name || "Dr. Desconocido";
+        const specialty = d.specialty || "Especialidad no disponible";
+
+        const reason = apt.reason || apt.Reason || apt.reasonText || "Sin motivo especificado";
+
+        const status = (apt.status || apt.Status || "SCHEDULED").toLowerCase();
+
+        const statusMap = {
+            scheduled: "Programado",
+            confirmed: "Confirmado",
+            cancelled: "Cancelado",
+            completed: "Completado",
+            in_progress: "En curso"
+        };
+
+        const appointmentId = apt.appointmentId || apt.AppointmentId;
+        const canCancel = status === "confirmed" || status === "scheduled";
+
+        return `
+            <div class="appointment-card ${status}">
+
+                <div class="appointment-card-header">
+                    <div class="appointment-time-info">
+                        <i class="fas fa-calendar-day"></i>
+                        <div>
+                            <strong>${dateStr}</strong><br>
+                            ${timeStr}
+                        </div>
+                    </div>
+
+                    <div class="appointment-status-badge status-${status}">
+                        <i class="fas fa-tag"></i>
+                        <span>${statusMap[status] || status}</span>
+                    </div>
+                </div>
+
+                <div class="appointment-card-body">
+                    <div class="appointment-reason-box">
+                        <i class="fas fa-stethoscope"></i>
+                        <div>
+                            <strong>${doctorName}</strong> — ${specialty}
+                            <p>${reason}</p>
+                        </div>
+                    </div>
+                </div>
+
+                ${canCancel ? `
+                <div class="appointment-card-footer">
+                    <button class="btn btn-danger btn-cancel-appointment"
+                            onclick="cancelAppointment(${appointmentId})">
+                        <i class="fas fa-times-circle"></i>
+                        Cancelar Turno
+                    </button>
+                </div>` : ""}
+            </div>
+        `;
+    }).join('');
+}
+
+
+/* -------------------------------------------------------------
+   CARGAR TURNOS — ENRIQUECIDO CON INFO DEL DOCTOR
+-------------------------------------------------------------- */
 async function loadPatientAppointments() {
     try {
         if (!currentPatient?.patientId) {
@@ -1106,15 +1226,13 @@ async function loadPatientAppointments() {
             return;
         }
 
-        const { ApiScheduling } = await import('./api.js');
+        const { ApiScheduling, Api } = await import('./api.js');
         const appointmentsResponse = await ApiScheduling.get(`v1/Appointments?patientId=${currentPatient.patientId}`);
-        
-        // El API puede devolver un objeto con 'value' o directamente un array
-        const appointments = Array.isArray(appointmentsResponse) ? appointmentsResponse : (appointmentsResponse?.value || appointmentsResponse || []);
-        
-        console.log('=== CARGANDO TURNOS DEL PACIENTE ===');
-        console.log('Appointments recibidos:', appointments);
-        
+
+        const appointments = Array.isArray(appointmentsResponse)
+            ? appointmentsResponse
+            : (appointmentsResponse?.value || appointmentsResponse || []);
+
         const appointmentsList = document.getElementById('appointments-list');
         if (!appointmentsList) return;
 
@@ -1123,142 +1241,67 @@ async function loadPatientAppointments() {
                 <div class="empty-state">
                     <i class="fas fa-calendar-times"></i>
                     <p>No tienes turnos programados</p>
-                </div>
-            `;
+                </div>`;
             return;
         }
 
-        // Ordenar turnos por fecha (más próximos primero)
-        appointments.sort((a, b) => {
-            const dateA = new Date(a.startTime || a.StartTime);
-            const dateB = new Date(b.startTime || b.StartTime);
-            return dateA - dateB;
-        });
+        // Ordenar por fecha
+        appointments.sort((a, b) =>
+            new Date(a.startTime || a.StartTime) -
+            new Date(b.startTime || b.StartTime)
+        );
 
-        // Agrupar turnos por fecha
-        const appointmentsByDate = {};
-        appointments.forEach(apt => {
-            const startTime = new Date(apt.startTime || apt.StartTime);
-            const dateKey = formatDate(startTime);
-            if (!appointmentsByDate[dateKey]) {
-                appointmentsByDate[dateKey] = [];
+        /* --------------------------------------------------
+           OBTENER INFO DEL DOCTOR (DirectoryMS)
+        -------------------------------------------------- */
+        const doctorIds = [...new Set(appointments.map(a => a.doctorId || a.DoctorId))];
+        const doctorsMap = new Map();
+
+        for (const id of doctorIds) {
+            try {
+                const d = await Api.get(`v1/Doctor/${id}`);
+                doctorsMap.set(id, {
+                    name: `Dr. ${d.firstName || d.FirstName || ''} ${d.lastName || d.LastName || ''}`.trim(),
+                    specialty: d.specialty || d.Specialty || "Especialidad no disponible"
+                });
+            } catch {
+                doctorsMap.set(id, {
+                    name: "Dr. Desconocido",
+                    specialty: "Especialidad no disponible"
+                });
             }
-            appointmentsByDate[dateKey].push(apt);
-        });
+        }
 
-        // Renderizar turnos agrupados por fecha
-        appointmentsList.innerHTML = Object.keys(appointmentsByDate).map(dateKey => {
-            const dayAppointments = appointmentsByDate[dateKey];
-            const firstAppointment = dayAppointments[0];
-            const startTime = new Date(firstAppointment.startTime || firstAppointment.StartTime);
-            const dayOfWeek = startTime.toLocaleDateString('es-AR', { weekday: 'long' });
-            const capitalizedDay = dayOfWeek.charAt(0).toUpperCase() + dayOfWeek.slice(1);
-            
-            return `
-                <div class="appointment-day-group">
-                    <div class="appointment-day-header">
-                        <div class="appointment-day-icon">
-                            <i class="fas fa-calendar-day"></i>
-                        </div>
-                        <div class="appointment-day-info">
-                            <h4>${capitalizedDay}</h4>
-                            <p>${dateKey}</p>
-                        </div>
-                    </div>
-                    <div class="appointment-day-cards">
-                        ${dayAppointments.map(apt => {
-                            const aptStartTime = new Date(apt.startTime || apt.StartTime);
-                            const aptEndTime = new Date(apt.endTime || apt.EndTime);
-                            const status = apt.status || apt.Status || 'SCHEDULED';
-                            const reason = apt.reason || apt.Reason || apt.reasonText || apt.ReasonText || null;
-                            const displayReason = reason && reason.trim() ? reason.trim() : 'Sin motivo especificado';
-                            const appointmentId = apt.appointmentId || apt.AppointmentId;
-                            
-                            // Mapear estados a español
-                            const statusMap = {
-                                'SCHEDULED': 'Programado',
-                                'CONFIRMED': 'Confirmado',
-                                'CANCELLED': 'Cancelado',
-                                'COMPLETED': 'Completado',
-                                'RESCHEDULED': 'Reprogramado',
-                                'NO_SHOW': 'No asistió',
-                                'IN_PROGRESS': 'En curso'
-                            };
-                            const statusText = statusMap[status] || status;
-                            
-                            const statusClass = status.toLowerCase() === 'confirmed' ? 'confirmed' : 
-                                               status.toLowerCase() === 'cancelled' ? 'cancelled' :
-                                               status.toLowerCase() === 'completed' ? 'completed' :
-                                               status.toLowerCase() === 'scheduled' ? 'scheduled' : 'pending';
-                            
-                            const canCancel = status === 'CONFIRMED' || status === 'SCHEDULED';
-                            
-                            return `
-                                <div class="appointment-card ${statusClass}">
-                                    <div class="appointment-card-header">
-                                        <div class="appointment-time-info">
-                                            <div class="appointment-time-icon">
-                                                <i class="fas fa-clock"></i>
-                                            </div>
-                                            <div class="appointment-time-text">
-                                                <div class="appointment-time-range">
-                                                    ${aptStartTime.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })} - ${aptEndTime.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="appointment-status-badge status-${statusClass}">
-                                            <i class="fas ${statusClass === 'confirmed' ? 'fa-check-circle' : 
-                                                              statusClass === 'scheduled' ? 'fa-calendar-check' :
-                                                              statusClass === 'cancelled' ? 'fa-times-circle' :
-                                                              statusClass === 'completed' ? 'fa-check-double' : 'fa-hourglass-half'}"></i>
-                                            <span>${statusText}</span>
-                                        </div>
-                                    </div>
-                                    <div class="appointment-card-body">
-                                        <div class="appointment-reason-box">
-                                            <i class="fas fa-stethoscope"></i>
-                                            <div class="appointment-reason-content">
-                                                <strong>Motivo de consulta:</strong>
-                                                <p>${displayReason}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    ${canCancel ? `
-                                    <div class="appointment-card-footer">
-                                        <button class="btn btn-danger btn-cancel-appointment" onclick="cancelAppointment(${appointmentId})" title="Cancelar este turno">
-                                            <i class="fas fa-times-circle"></i>
-                                            <span>Cancelar Turno</span>
-                                        </button>
-                                    </div>
-                                    ` : ''}
-                                </div>
-                            `;
-                        }).join('')}
-                    </div>
-                </div>
-            `;
-        }).join('');
+        // Guardamos global
+        window.doctorsMap = doctorsMap;
 
-        // Actualizar contador de turnos confirmados
-        const confirmedCount = appointments.filter(a => (a.status || a.Status) === 'CONFIRMED').length;
-        const confirmedAppointmentsEl = document.getElementById('confirmed-appointments');
-        if (confirmedAppointmentsEl) {
-            confirmedAppointmentsEl.textContent = confirmedCount;
+        /* --------------------------------------------------
+           MOSTRAR SEGÚN LA SECCIÓN ACTIVA
+        -------------------------------------------------- */
+        const activeSection = getActiveSection();
+
+        if (activeSection === "inicio") {
+            const latestAppointments = appointments.slice(0, 3);
+            appointmentsList.innerHTML = renderAppointmentsHome(latestAppointments);
+        }
+        else if (activeSection === "turnos") {
+            appointmentsList.innerHTML = renderAppointmentsFull(appointments);
         }
 
     } catch (error) {
         console.error('Error al cargar turnos:', error);
+
         const appointmentsList = document.getElementById('appointments-list');
         if (appointmentsList) {
             appointmentsList.innerHTML = `
                 <div class="empty-state">
                     <i class="fas fa-exclamation-triangle"></i>
                     <p>No se pudieron cargar los turnos</p>
-                </div>
-            `;
+                </div>`;
         }
     }
 }
+
 
 // Cancelar turno
 window.cancelAppointment = async function(appointmentId) {
@@ -1289,6 +1332,167 @@ window.cancelAppointment = async function(appointmentId) {
         }
     }
 };
+
+// -----------------------------------------------------
+// HISTORIAL MÉDICO RECIENTE (solo 3 últimas consultas)
+// -----------------------------------------------------
+async function loadRecentPatientHistory() {
+    const historyList = document.getElementById("history-list-inicio");
+    if (!historyList) return;
+
+    try {
+        const patientId = currentPatient?.patientId;
+        if (!patientId) {
+            historyList.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-file-medical"></i>
+                    <p>No hay historial médico disponible</p>
+                </div>`;
+            return;
+        }
+
+        const { ApiClinical, Api } = await import("./api.js");
+
+        const now = new Date();
+        const from = new Date(now.getFullYear() - 1, 0, 1);
+
+        const response = await ApiClinical.get(
+            `v1/Encounter?patientId=${patientId}&from=${from.toISOString()}&to=${now.toISOString()}`
+        );
+
+        const encounters = Array.isArray(response)
+            ? response
+            : response?.value || [];
+
+        if (encounters.length === 0) {
+            historyList.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-file-medical"></i>
+                    <p>No hay consultas recientes</p>
+                </div>`;
+            return;
+        }
+
+        // Ordenar por fecha descendente
+        encounters.sort((a, b) =>
+            new Date(b.date || b.Date) - new Date(a.date || a.Date)
+        );
+
+        // Tomar solo 3
+        const lastThree = encounters.slice(0, 3);
+
+        // Obtener doctores
+        const doctorIds = [...new Set(lastThree.map(e => e.doctorId || e.DoctorId))];
+        const doctorsMap = new Map();
+
+        for (const id of doctorIds) {
+            try {
+                const d = await Api.get(`v1/Doctor/${id}`);
+                doctorsMap.set(id, {
+                    name: `Dr. ${d.firstName || d.FirstName} ${d.lastName || d.LastName}`.trim(),
+                });
+            } catch {
+                doctorsMap.set(id, { name: "Dr. Desconocido" });
+            }
+        }
+
+        historyList.innerHTML = lastThree
+    .map(enc => {
+        const encounterId = enc.encounterId || enc.EncounterId;
+        const date = new Date(enc.date || enc.Date);
+
+        const doctorName =
+            doctorsMap.get(enc.doctorId || enc.DoctorId)?.name ||
+            "Dr. Desconocido";
+
+        const reason =
+            enc.reasons || enc.Reasons || enc.reason || "Motivo no registrado";
+
+        return `
+        <div class="encounter-mini-card">
+
+            <!-- Columna izquierda -->
+            <div class="encounter-mini-left">
+
+                <div class="encounter-mini-top">
+                    <i class="fas fa-calendar-day"></i>
+                    <span class="date-text">${date.toLocaleDateString("es-AR")}</span>
+
+                    <i class="fas fa-user-md"></i>
+                    <span class="doctor-text">${doctorName}</span>
+                </div>
+
+                <div class="encounter-mini-bottom">
+                    <i class="fas fa-stethoscope"></i>
+                    <span><strong>Motivo:</strong> ${reason}</span>
+                </div>
+
+            </div>
+
+            <!-- Botón -->
+            <div class="encounter-mini-footer">
+                <button class="btn btn-primary btn-sm" onclick="viewEncounterDetails(${encounterId})">
+                    <i class="fas fa-file-prescription"></i>
+                    Ver receta
+                </button>
+            </div>
+
+        </div>
+        `;
+    })
+    .join("");
+
+
+    } catch (error) {
+        console.error(error);
+        historyList.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-exclamation-triangle"></i>
+                <p>Error cargando historial médico</p>
+            </div>`;
+    }
+}
+
+
+// -----------------------------------------------------
+// INITIALIZE PATIENT PANEL — VERSIÓN FINAL CORREGIDA
+// -----------------------------------------------------
+async function initializePatientPanel() {
+    await loadUserContext();
+    
+    // Mostrar nombre apenas carga
+    updateWelcomeBanner();
+
+    setupUserMenu();
+    initializeSidebarNavigation();
+    initializeModals();
+
+    // Carga inicial
+    await loadPatientData();
+    await loadPatientStats();
+    await loadPatientAppointments();
+    await loadRecentPatientHistory(); 
+
+    // No cargamos loadPatientHistory() aquí
+    // Se usará más adelante cuando haya sección completa
+
+    // Auto refresco cada 30s
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+    }
+
+    autoRefreshInterval = setInterval(async () => {
+        await loadPatientData();
+        await loadPatientAppointments();
+        await loadPatientStats();
+        await loadRecentPatientHistory(); 
+    }, 30000);
+}
+
+
+
+
+
 
 // Cargar historial médico desde ClinicalMS
 async function loadPatientHistory() {
@@ -1338,7 +1542,7 @@ async function loadPatientHistory() {
         
         for (const doctorId of doctorIds) {
             try {
-                const doctor = await Api.get(`v1/Doctors/${doctorId}`);
+                const doctor = await Api.get(`v1/Doctor/${doctorId}`);
                 if (doctor) {
                     const fullName = `${doctor.firstName || doctor.FirstName || ''} ${doctor.lastName || doctor.LastName || ''}`.trim();
                     doctorsMap.set(doctorId, fullName || `Dr. ID ${doctorId}`);

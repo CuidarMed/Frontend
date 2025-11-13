@@ -149,7 +149,7 @@ body {
 .dashboard {
     display: flex;
     min-height: 100vh;
-    padding-top: 60px;
+
 }
 
 .dashboard-sidebar {
@@ -236,6 +236,7 @@ body {
     border-radius: 16px;
     padding: 2rem;
     margin-bottom: 2rem;
+    margin-top: 70px;
     box-shadow: 0 4px 20px rgba(37, 99, 235, 0.15);
 }
 
@@ -1608,4 +1609,92 @@ body {
     .info-value {
         text-align: left;
     }
+}
+/* --- Mini historial médico (3 últimos) --- */
+
+.encounter-mini-card {
+    background: #fff;
+    padding: 14px 18px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    margin-bottom: 14px;
+
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+}
+
+/* Columna izquierda */
+.encounter-mini-left {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* Fecha y doctor en una línea */
+.encounter-mini-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.95rem;
+}
+
+/* Fecha */
+.encounter-mini-top .date-text {
+    font-weight: 600;
+    color: #1f2937;
+}
+
+/* Doctor destacado */
+.encounter-mini-top .doctor-text {
+    font-weight: 600;
+    color: #2563eb; /* Azul suave */
+}
+
+/* Motivo con fondo suave */
+.encounter-mini-bottom {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+
+    background: #f3f4f6; /* Gris muy suave */
+    padding: 8px 12px;
+    border-radius: 8px;
+
+    font-size: 0.9rem;
+    color: #374151;
+}
+
+.encounter-mini-bottom strong {
+    color: #111827;
+}
+
+.encounter-mini-bottom i {
+    color: #6b7280;
+}
+
+/* Botón Ver receta */
+.encounter-mini-footer {
+    display: flex;
+    align-items: center;
+}
+
+.btn-sm {
+    padding: 7px 14px;
+    font-size: 0.85rem;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-primary {
+    background: #2563eb;
+    color: white;
+    border: none;
+}
+
+.btn-primary:hover {
+    background: #2563eb;
 }
