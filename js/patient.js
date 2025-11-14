@@ -1,19 +1,21 @@
-// Funcionalidades específicas del panel del paciente
+// Estado global
 let currentUser = null;
 let currentPatient = null;
 let autoRefreshInterval = null;
-let currentPrescriptionData = null;
 let pendingPatientAvatar = null;
+
 const DEFAULT_AVATAR_URL = "https://icons.veryicon.com/png/o/internet--web/prejudice/user-128.png";
+
+// ============================================
+// UTILIDADES
+// ============================================
 
 function formatDate(value) {
     if (!value) return '';
     let date = value;
 
     if (typeof value === 'string') {
-        // Normalizar string ISO (YYYY-MM-DD o YYYY-MM-DDTHH:mm:ss)
         const normalized = value.replace(/T.*/, '');
-        // Crear fecha en formato UTC para evitar problemas de zona horaria
         const [year, month, day] = normalized.split('-');
         if (year && month && day) {
             date = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day)));
@@ -22,12 +24,8 @@ function formatDate(value) {
         }
     }
 
-    if (value instanceof Date) {
-        date = value;
-    }
-
+    if (value instanceof Date) date = value;
     if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
-        // Si no se pudo parsear, intentar retornar el valor original formateado
         if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) {
             const [year, month, day] = value.split('-');
             return `${day}/${month}/${year}`;
@@ -37,19 +35,19 @@ function formatDate(value) {
 
     return date.toLocaleDateString('es-AR', { year: 'numeric', month: '2-digit', day: '2-digit' });
 }
-function getActiveSection() {
-    const activeItem = document.querySelector(".nav-item.active");
-    return activeItem ? activeItem.dataset.section : null;
+
+function formatTime(date) {
+    if (!date) return '';
+    const d = new Date(date);
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
 }
+
 function toISODate(displayDate) {
     if (!displayDate) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(displayDate)) return displayDate;
 
-    // If already ISO
-    if (/^\d{4}-\d{2}-\d{2}$/.test(displayDate)) {
-        return displayDate;
-    }
-
-    // Attempt to parse dd/mm/yyyy
     const match = displayDate.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})$/);
     if (match) {
         const [, day, month, year] = match;
@@ -57,14 +55,21 @@ function toISODate(displayDate) {
     }
 
     const date = new Date(displayDate);
-    if (Number.isNaN(date.getTime())) {
-        return '';
-    }
+    if (Number.isNaN(date.getTime())) return '';
 
     const month = `${date.getMonth() + 1}`.padStart(2, '0');
     const day = `${date.getDate()}`.padStart(2, '0');
     return `${date.getFullYear()}-${month}-${day}`;
 }
+
+function getActiveSection() {
+    const activeItem = document.querySelector(".nav-item.active");
+    return activeItem ? activeItem.dataset.section : null;
+}
+
+
+
+
 
 document.addEventListener('DOMContentLoaded', async () => {
     await initializePatientPanel();
@@ -368,12 +373,14 @@ function normalizePatient(rawPatient) {
     let membershipNumber = rawPatient.membershipNumber ?? rawPatient.MembershipNumber ?? '';
     // Si está vacío o es solo espacios, usar null
     membershipNumber = membershipNumber && membershipNumber.trim() ? membershipNumber.trim() : '';
+    
 
     return {
         patientId: rawPatient.patientId ?? rawPatient.PatientId ?? null,
         name: rawPatient.name ?? rawPatient.firstName ?? rawPatient.Name ?? '',
         lastName: rawPatient.lastName ?? rawPatient.LastName ?? '',
         email: rawPatient.email ?? '',
+        phone: rawPatient.phone ?? rawPatient.Phone ?? '',        
         address: rawPatient.address ?? rawPatient.adress ?? rawPatient.Adress ?? '',
         dni: (rawPatient.dni ?? rawPatient.Dni ?? '').toString(),
         birthDate: birthDate,
@@ -390,6 +397,7 @@ function buildProfileData(patient, user) {
         lastName: '',
         email: user?.email || 'sin-correo@cuidarmed.com',
         address: '',
+        phone: '',
         birthDate: '',
         medicalInsurance: '',
         insuranceNumber: '',
@@ -404,9 +412,12 @@ function buildProfileData(patient, user) {
 }
 
 function handleSectionNavigation(section) {
+    
     const dashboardContent = document.querySelector('.dashboard-content');
     if (!dashboardContent) return;
     
+    const fullHistory = dashboardContent.querySelectorAll('.history-full-section');
+    fullHistory.forEach(h => h.remove());
     // Ocultar todas las secciones
     const allSections = dashboardContent.querySelectorAll('.dashboard-section, .welcome-section, .summary-cards');
     allSections.forEach(sec => {
@@ -686,48 +697,81 @@ function createProfileSection(profileData) {
 
 // Crear HTML de vista del perfil
 function createProfileViewHTML(patient) {
+    const currentAvatarUrl = getUserAvatarUrl();
+    
     return `
-        <div class="profile-grid">
-            
-            <div class="profile-info-group">
-                <h4 class="info-group-title">Información Personal</h4>
-                <div class="info-item">
-                    <span class="info-label">Nombre:</span>
-                    <span class="info-value" id="profile-name">${patient.name || ''}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-label">Apellido:</span>
-                    <span class="info-value" id="profile-lastName">${patient.lastName || ''}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-label">DNI:</span>
-                    <span class="info-value" id="profile-dni">${patient.dni || ''}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-label">Fecha de Nacimiento:</span>
-                    <span class="info-value" id="profile-birthDate">${patient.birthDate || ''}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-label">Dirección:</span>
-                    <span class="info-value" id="profile-address">${patient.address || ''}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-label">Email:</span>
-                    <span class="info-value" id="profile-email">${patient.email || ''}</span>
+        <div class="profile-container-modern">
+            <div class="profile-header-card">
+                <div class="profile-avatar-section">
+                    <img src="${currentAvatarUrl}" alt="Avatar" class="profile-avatar-large">
+                    <div class="profile-basic-info">
+                        <h2 class="profile-name">${patient.name || ''} ${patient.lastName || ''}</h2>
+                        <p class="profile-email">${patient.email || ''}</p>
+                    </div>
                 </div>
             </div>
-            
-            
-            
-            <div class="profile-info-group">
-                <h4 class="info-group-title">Información Médica</h4>
-                <div class="info-item">
-                    <span class="info-label">Obra Social:</span>
-                    <span class="info-value" id="profile-medicalInsurance">${(patient.medicalInsurance && patient.medicalInsurance.trim()) || (patient.healthPlan && patient.healthPlan.trim()) || 'No especificada'}</span>
+
+            <div class="profile-content-card">
+                <div class="profile-section">
+                    <div class="section-header">
+                        <div class="section-icon-wrapper" style="background: #3b82f6;">
+                            <i class="fas fa-user"></i>
+                        </div>
+                        <h3 class="section-title">Información Personal</h3>
+                    </div>
+                    <p class="section-subtitle">Actualiza tus datos personales</p>
+
+                    <div class="info-grid">
+                        <div class="info-field">
+                            <label class="field-label">Nombre</label>
+                            <div class="field-value">${patient.name || '-'}</div>
+                        </div>
+                        <div class="info-field">
+                            <label class="field-label">Apellido</label>
+                            <div class="field-value">${patient.lastName || '-'}</div>
+                        </div>
+                        <div class="info-field">
+                            <label class="field-label">Email</label>
+                            <div class="field-value">${patient.email || '-'}</div>
+                        </div>
+                        <div class="info-field">
+                            <label class="field-label">Teléfono</label>
+                            <div class="field-value">${patient.phone || '-'}</div>
+                        </div>
+                        <div class="info-field">
+                            <label class="field-label">DNI</label>
+                            <div class="field-value">${patient.dni || '-'}</div>
+                        </div>
+                        <div class="info-field">
+                            <label class="field-label">Fecha de Nacimiento</label>
+                            <div class="field-value">${patient.birthDate || '-'}</div>
+                        </div>
+                        <div class="info-field full-width">
+                            <label class="field-label">Dirección</label>
+                            <div class="field-value">${patient.address || '-'}</div>
+                        </div>
+                    </div>
                 </div>
-                <div class="info-item">
-                    <span class="info-label">Número de Afiliado:</span>
-                    <span class="info-value" id="profile-insuranceNumber">${(patient.insuranceNumber && patient.insuranceNumber.trim()) || (patient.membershipNumber && patient.membershipNumber.trim()) || 'No especificado'}</span>
+
+                <div class="profile-section">
+                    <div class="section-header">
+                        <div class="section-icon-wrapper" style="background: #10b981;">
+                            <i class="fas fa-notes-medical"></i>
+                        </div>
+                        <h3 class="section-title">Información Médica</h3>
+                    </div>
+                    <p class="section-subtitle">Información de cobertura médica</p>
+
+                    <div class="info-grid">
+                        <div class="info-field">
+                            <label class="field-label">Obra Social</label>
+                            <div class="field-value">${patient.medicalInsurance || patient.healthPlan || 'No especificada'}</div>
+                        </div>
+                        <div class="info-field">
+                            <label class="field-label">Número de Afiliado</label>
+                            <div class="field-value">${patient.insuranceNumber || patient.membershipNumber || 'No especificado'}</div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -739,92 +783,140 @@ function createProfileEditHTML(patient) {
     const currentAvatarUrl = getUserAvatarUrl();
 
     return `
-        <form id="profileEditForm" class="profile-edit-form">
-            <div class="profile-avatar-card" style="margin-bottom: 2rem;">
-                <img id="profile-avatar-preview" src="${currentAvatarUrl}" alt="Avatar" class="profile-avatar-img">
-                <div class="profile-avatar-meta">
-                    <span><strong>Foto de Perfil</strong></span>
-                    <div class="profile-avatar-hint">
-                        <label for="profile-image-url" style="cursor: pointer; color: #2563eb; text-decoration: underline;">
-                            <i class="fas fa-image"></i> Cambiar imagen
-                        </label>
-                        <input type="url" id="profile-image-url" name="imageUrl" 
-                               placeholder="https://ejemplo.com/imagen.jpg" 
-                               style="display: none;">
-                        <input type="text" id="profile-image-url-input" 
-                               placeholder="URL de imagen" 
-                               style="margin-top: 0.5rem; width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 8px;">
-                    </div>
-                </div>
-            </div>
-
-            <div class="profile-grid">
-
-                <div class="profile-info-group">
-                    <h4 class="info-group-title">Información Personal</h4>
-
-                    <div class="form-group">
-                        <label for="edit-name">Nombre:</label>
-                        <input type="text" id="edit-name" name="Name" value="${patient.name || ''}" required>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="edit-lastName">Apellido:</label>
-                        <input type="text" id="edit-lastName" name="LastName" value="${patient.lastName || ''}" required>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="edit-dni">DNI:</label>
-                        <input type="text" id="edit-dni" name="Dni" value="${patient.dni || ''}" required>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="edit-birthDate">Fecha de Nacimiento:</label>
-                        <input type="date" id="edit-birthDate" name="DateOfBirth" value="${toISODate(patient.birthDate) || ''}" required>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="edit-address">Dirección:</label>
-                        <input type="text" id="edit-address" name="Adress" value="${patient.address || ''}" placeholder="Calle y número">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="edit-email">Email:</label>
-                        <input type="email" id="edit-email" name="Email" value="${patient.email || ''}" disabled>
+        <form id="profileEditForm" class="profile-edit-modern">
+            <div class="profile-container-modern">
+                <div class="profile-header-card">
+                    <div class="profile-avatar-edit-section">
+                        <div class="avatar-upload-wrapper">
+                            <img id="profile-avatar-preview" src="${currentAvatarUrl}" alt="Avatar" class="profile-avatar-large">
+                            <button type="button" class="avatar-change-btn" id="changeAvatarBtn">
+                                <i class="fas fa-camera"></i>
+                            </button>
+                        </div>
+                        <div class="avatar-upload-info">
+                            <h3 style="margin: 0 0 0.5rem 0; font-size: 1.1rem; color: #1f2937;">Foto de Perfil</h3>
+                            <p style="margin: 0 0 1rem 0; color: #6b7280; font-size: 0.9rem;">Actualiza tu foto de perfil</p>
+                            <input type="url" id="profile-image-url" 
+                                   placeholder="https://ejemplo.com/tu-foto.jpg" 
+                                   class="url-input">
+                        </div>
                     </div>
                 </div>
 
-                <div class="profile-info-group">
-                    <h4 class="info-group-title">Información Médica</h4>
+                <div class="profile-content-card">
+                    <div class="profile-section">
+                        <div class="section-header">
+                            <div class="section-icon-wrapper" style="background: #3b82f6;">
+                                <i class="fas fa-user"></i>
+                            </div>
+                            <h3 class="section-title">Información Personal</h3>
+                        </div>
+                        <p class="section-subtitle">Actualiza tus datos personales</p>
 
-                    <div class="form-group">
-                        <label for="edit-HealthPlan">Obra Social:</label>
-                        <input type="text" id="edit-HealthPlan" name="HealthPlan" value="${patient.medicalInsurance || ''}">
+                        <div class="form-grid">
+                            <div class="form-field">
+                                <label for="edit-name">Nombre</label>
+                                <input type="text" id="edit-name" name="Name" value="${patient.name || ''}" required>
+                            </div>
+
+                            <div class="form-field">
+                                <label for="edit-lastName">Apellido</label>
+                                <input type="text" id="edit-lastName" name="LastName" value="${patient.lastName || ''}" required>
+                            </div>
+
+                            <div class="form-field">
+                                <label for="edit-email">Email</label>
+                                <input type="email" id="edit-email" name="Email" value="${patient.email || ''}" disabled>
+                                <small class="field-hint">El email no puede ser modificado</small>
+                            </div>
+
+                            <div class="form-field">
+                                <label for="edit-phone">Teléfono</label>
+                                <input type="tel" id="edit-phone" name="Phone" value="${patient.phone || ''}" placeholder="+54 9 11 1234-5678">
+                            </div>
+
+                            <div class="form-field">
+                                <label for="edit-dni">DNI</label>
+                                <input type="text" id="edit-dni" name="Dni" value="${patient.dni || ''}" required>
+                            </div>
+
+                            <div class="form-field">
+                                <label for="edit-birthDate">Fecha de Nacimiento</label>
+                                <input type="date" id="edit-birthDate" name="DateOfBirth" value="${toISODate(patient.birthDate) || ''}" required>
+                            </div>
+
+                            <div class="form-field full-width">
+                                <label for="edit-address">Dirección</label>
+                                <input type="text" id="edit-address" name="Adress" value="${patient.address || ''}" placeholder="Calle, número, ciudad">
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="form-group">
-                        <label for="edit-MembershipNumber">Número de Afiliado:</label>
-                        <input type="text" id="edit-MembershipNumber" name="MembershipNumber" value="${patient.insuranceNumber || ''}">
+                    <div class="profile-section">
+                        <div class="section-header">
+                            <div class="section-icon-wrapper" style="background: #10b981;">
+                                <i class="fas fa-notes-medical"></i>
+                            </div>
+                            <h3 class="section-title">Información Médica</h3>
+                        </div>
+                        <p class="section-subtitle">Información de cobertura médica</p>
+
+                        <div class="form-grid">
+                            <div class="form-field">
+                                <label for="edit-HealthPlan">Obra Social</label>
+                                <input type="text" id="edit-HealthPlan" name="HealthPlan" value="${patient.medicalInsurance || ''}" placeholder="Ej: OSDE, Swiss Medical">
+                            </div>
+
+                            <div class="form-field">
+                                <label for="edit-MembershipNumber">Número de Afiliado</label>
+                                <input type="text" id="edit-MembershipNumber" name="MembershipNumber" value="${patient.insuranceNumber || ''}" placeholder="123456789">
+                            </div>
+                        </div>
                     </div>
 
+                    <div class="form-actions">
+                        <button type="button" class="btn-cancel" id="cancelEditBtn">
+                            Cancelar
+                        </button>
+                        <button type="submit" class="btn-save">
+                            <i class="fas fa-save"></i>
+                            Guardar Cambios
+                        </button>
+                    </div>
                 </div>
-
-            </div>
-
-            <div class="form-actions" style="margin-top: 2rem; justify-content: flex-end;">
-                <button type="button" class="btn btn-secondary" id="cancelEditBtn">
-                    Cancelar
-                </button>
-
-                <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-save"></i>
-                    Guardar Cambios
-                </button>
             </div>
         </form>
     `;
 }
+// Inicializar el preview de la imagen
+function initProfileImagePreview() {
+    const imageUrlInput = document.getElementById('profile-image-url');
+    const avatarPreview = document.getElementById('profile-avatar-preview');
+    const changeAvatarBtn = document.getElementById('changeAvatarBtn');
 
+    if (changeAvatarBtn) {
+        changeAvatarBtn.addEventListener('click', function() {
+            imageUrlInput.focus();
+        });
+    }
+
+    if (imageUrlInput && avatarPreview) {
+        imageUrlInput.addEventListener('input', function(e) {
+            const url = e.target.value.trim();
+            if (url) {
+                avatarPreview.src = url;
+                avatarPreview.onerror = function() {
+                    avatarPreview.src = getUserAvatarUrl();
+                };
+            }
+        });
+    }
+}
+
+// Llamar cuando se carga el formulario de edición
+document.addEventListener('DOMContentLoaded', function() {
+    initProfileImagePreview();
+});
 
 // Alternar entre vista y edición del perfil
 function toggleProfileEdit(patientData) {
@@ -834,9 +926,10 @@ function toggleProfileEdit(patientData) {
 
     if (!profileContent || !editBtn) return;
 
-    const isEditing = profileContent.querySelector('.profile-edit-form');
+    const isEditing = profileContent.querySelector('.profile-edit-modern');
 
     if (isEditing) {
+        // Cambiar a modo vista
         profileContent.innerHTML = createProfileViewHTML(patientData);
         editBtn.innerHTML = '<i class="fas fa-edit"></i> Editar Perfil';
         editBtn.className = 'btn btn-secondary';
@@ -846,10 +939,12 @@ function toggleProfileEdit(patientData) {
         pendingPatientAvatar = null;
     } 
     else {
+        // Cambiar a modo edición
         profileContent.innerHTML = createProfileEditHTML(patientData);
-
-        editBtn.innerHTML = '<i class="fas fa-times"></i>';
+        editBtn.innerHTML = '<i class="fas fa-times"></i> Cancelar';
         editBtn.className = 'btn btn-secondary';
+        
+        // Configurar listeners del formulario
         const form = document.getElementById('profileEditForm');
         const cancelBtn = document.getElementById('cancelEditBtn');
 
@@ -866,58 +961,94 @@ function toggleProfileEdit(patientData) {
                 toggleProfileEdit(patientData);
             });
         }
+        
+        // Configurar editor de avatar
         setupProfileAvatarEditor(patientData);
     }
 }
 
 // Configurar editor de avatar para el perfil del paciente
 function setupProfileAvatarEditor(patientData) {
-    const imageUrlInput = document.getElementById('profile-image-url-input');
-    const imageUrlHidden = document.getElementById('profile-image-url');
+    const imageUrlInput = document.getElementById('profile-image-url');
     const avatarPreview = document.getElementById('profile-avatar-preview');
+    const changeAvatarBtn = document.getElementById('changeAvatarBtn');
     
     if (!imageUrlInput || !avatarPreview) return;
+    
+    // Focus en el input cuando se hace clic en el botón de cámara
+    if (changeAvatarBtn) {
+        changeAvatarBtn.addEventListener('click', function() {
+            imageUrlInput.focus();
+        });
+    }
     
     // Actualizar preview cuando cambie la URL
     imageUrlInput.addEventListener('input', function() {
         const url = imageUrlInput.value.trim();
         if (url) {
-            avatarPreview.src = url;
-            avatarPreview.onerror = function() {
-                // Si falla la carga, usar imagen por defecto
-                avatarPreview.src = getUserAvatarUrl();
-            };
-            if (imageUrlHidden) {
-                imageUrlHidden.value = url;
+            // Validar que sea una URL válida
+            try {
+                new URL(url);
+                avatarPreview.src = url;
+                pendingPatientAvatar = url;
+                
+                avatarPreview.onerror = function() {
+                    // Si falla la carga, mostrar error visual
+                    avatarPreview.src = getUserAvatarUrl();
+                    imageUrlInput.style.borderColor = '#ef4444';
+                    showNotification('No se pudo cargar la imagen. Verifica la URL.', 'error');
+                    pendingPatientAvatar = null;
+                };
+                
+                avatarPreview.onload = function() {
+                    // Imagen cargada exitosamente
+                    imageUrlInput.style.borderColor = '#10b981';
+                };
+            } catch (error) {
+                imageUrlInput.style.borderColor = '#ef4444';
             }
         } else {
             avatarPreview.src = getUserAvatarUrl();
+            imageUrlInput.style.borderColor = '#e5e7eb';
+            pendingPatientAvatar = null;
         }
     });
     
-    // Guardar la URL en pendingPatientAvatar cuando cambie
+    // Guardar la URL en pendingPatientAvatar cuando pierda el foco
     imageUrlInput.addEventListener('blur', function() {
         const url = imageUrlInput.value.trim();
         if (url) {
-            pendingPatientAvatar = url;
-        } else {
-            pendingPatientAvatar = null;
+            try {
+                new URL(url);
+                pendingPatientAvatar = url;
+            } catch (error) {
+                pendingPatientAvatar = null;
+            }
         }
     });
 }
 
 
 // Guardar cambios del perfil
+// Guardar cambios del perfil
 async function saveProfileChanges(form, originalData) {
     try {
+        // Mostrar loading
+        const submitBtn = form.querySelector('.btn-save');
+        const originalBtnText = submitBtn.innerHTML;
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+
         const formData = new FormData(form);
-        const birthDateISO = formData.get('DateOfBirth'); // coincide con el name del input
+        const birthDateISO = formData.get('DateOfBirth');
+        
         const updatedData = {
             name: formData.get('Name'),
             lastName: formData.get('LastName'),
             dni: formData.get('Dni'),
-            birthDate: birthDateISO ? birthDateISO.split('T')[0] : '', // YYYY-MM-DD
+            birthDate: birthDateISO ? birthDateISO.split('T')[0] : '',
             address: formData.get('Adress'),
+            phone: formData.get('Phone'),
             medicalInsurance: formData.get('HealthPlan'),
             insuranceNumber: formData.get('MembershipNumber'),
         };
@@ -929,17 +1060,19 @@ async function saveProfileChanges(form, originalData) {
             Dni: parseInt(updatedData.dni, 10) || 0,
             DateOfBirth: updatedData.birthDate,
             Adress: updatedData.address,
+            Phone: updatedData.phone,
             HealthPlan: updatedData.medicalInsurance,
             MembershipNumber: updatedData.insuranceNumber,
         };
 
         const { Api } = await import('./api.js');
         const patientId = currentPatient?.patientId;
-        if (!patientId) throw new Error('No se pudo identificar al paciente para actualizar.');
+        if (!patientId) {
+            throw new Error('No se pudo identificar al paciente para actualizar.');
+        }
 
+        // Actualizar datos del paciente
         await Api.patch(`v1/Patient/${patientId}`, apiPayload);
-
-        showNotification('Perfil actualizado exitosamente', 'success');
 
         // Actualizar el estado global
         currentPatient = {
@@ -949,11 +1082,12 @@ async function saveProfileChanges(form, originalData) {
             avatarUrl: pendingPatientAvatar ?? currentPatient?.avatarUrl ?? getUserAvatarUrl(),
         };
 
+        // Si hay una nueva imagen de avatar, actualizar en AuthMS
         if (pendingPatientAvatar) {
-            // Actualizar imagen del usuario en AuthMS
             try {
                 const AUTHMS_BASE_URL = "http://localhost:8081/api/v1";
                 const userId = currentUser?.userId;
+                
                 if (userId) {
                     const updateUserResponse = await fetch(`${AUTHMS_BASE_URL}/User/${userId}`, {
                         method: "PUT",
@@ -971,39 +1105,74 @@ async function saveProfileChanges(form, originalData) {
                     });
                     
                     if (updateUserResponse.ok) {
-                        console.log('Imagen de usuario actualizada en AuthMS');
+                        console.log('✓ Imagen de usuario actualizada en AuthMS');
+                        
+                        // Actualizar estado del usuario
+                        currentUser = {
+                            ...currentUser,
+                            imageUrl: pendingPatientAvatar,
+                        };
+                        
+                        const { state } = await import('./state.js');
+                        state.user = currentUser;
+                        localStorage.setItem('user', JSON.stringify(currentUser));
+                        
+                        // Actualizar avatar en toda la UI
+                        updateAllAvatars(pendingPatientAvatar);
                     } else {
-                        console.warn('No se pudo actualizar la imagen en AuthMS');
+                        console.warn('⚠ No se pudo actualizar la imagen en AuthMS');
                     }
                 }
             } catch (error) {
                 console.error('Error al actualizar imagen en AuthMS:', error);
             }
-            
-            currentUser = {
-                ...currentUser,
-                imageUrl: pendingPatientAvatar,
-            };
-            const { state } = await import('./state.js');
-            state.user = currentUser;
-            localStorage.setItem('user', JSON.stringify(currentUser));
         }
+        
         pendingPatientAvatar = null;
 
-        // Actualizar el HTML con los nuevos datos
+        // Actualizar el atributo data-patient
         const profileSection = document.querySelector('.profile-section');
         if (profileSection) {
             profileSection.setAttribute('data-patient', JSON.stringify(currentPatient));
         }
 
+        // Mostrar notificación de éxito
+        showNotification('✓ Perfil actualizado exitosamente', 'success');
+
+        // Volver a modo vista
         toggleProfileEdit(currentPatient);
-        updateWelcomeBanner();
+        
+        // Actualizar banner de bienvenida si existe
+        if (typeof updateWelcomeBanner === 'function') {
+            updateWelcomeBanner();
+        }
 
     } catch (error) {
         console.error('Error al guardar perfil:', error);
         showNotification('Error al guardar los cambios. Por favor intenta nuevamente.', 'error');
+        
+        // Restaurar botón
+        const submitBtn = form.querySelector('.btn-save');
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fas fa-save"></i> Guardar Cambios';
+        }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // Mostrar sección "En construcción"
 function showComingSoonSection(section) {
@@ -1079,19 +1248,16 @@ function showComingSoonSection(section) {
    RENDER INICIO — SOLO 3 PRÓXIMOS TURNOS
 -------------------------------------------------------------- */
 function renderAppointmentsHome(appointments) {
-
     return appointments.map(apt => {
         const aptStart = new Date(apt.startTime || apt.StartTime);
-        const aptEnd = new Date(apt.endTime || apt.EndTime);
 
-        const dateStr = aptStart.toLocaleDateString("es-AR", {
-            weekday: "long",
-            day: "numeric",
-            month: "long"
-        });
-
-        const timeStr = `${aptStart.toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit'})} - 
-                         ${aptEnd.toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit'})}`;
+        // Formatear fecha: "2025-10-15 - 10:00"
+        const year = aptStart.getFullYear();
+        const month = String(aptStart.getMonth() + 1).padStart(2, '0');
+        const day = String(aptStart.getDate()).padStart(2, '0');
+        const time = aptStart.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+        
+        const dateStr = `${year}-${month}-${day} - ${time}`;
 
         // Doctor
         const d = window.doctorsMap.get(apt.doctorId || apt.DoctorId) || {};
@@ -1099,60 +1265,59 @@ function renderAppointmentsHome(appointments) {
         const specialty = d.specialty || "Especialidad no disponible";
 
         const status = (apt.status || apt.Status || "SCHEDULED").toLowerCase();
-
         const statusMap = {
             scheduled: "Programado",
             confirmed: "Confirmado",
             cancelled: "Cancelado",
             completed: "Completado",
-            in_progress: "En curso"
+            in_progress: "En curso",
+            pending: "Pendiente",
+            no_show: "Ausente",
+            rescheduled: "Reprogramado"
         };
 
         return `
-            <div class="appointment-card ${status}">
-                <div class="appointment-card-header">
-                    <div class="appointment-time-info">
-                        <i class="fas fa-calendar-day"></i>
-                        <div>
-                            <strong>${dateStr}</strong><br>
-                            ${timeStr}
-                        </div>
-                    </div>
+            <div class="appointment-home-card">
+                <!-- Icono Calendario -->
+                <div class="appointment-home-icon">
+                    <i class="fas fa-calendar-day"></i>
+                </div>
 
-                    <div class="appointment-status-badge status-${status}">
-                        <i class="fas fa-tag"></i>
-                        <span>${statusMap[status] || status}</span>
+                <!-- Contenido -->
+                <div class="appointment-home-content">
+                    <h4 class="appointment-home-doctor">${doctorName}</h4>
+                    <div class="appointment-home-specialty">${specialty}</div>
+                    <div class="appointment-home-datetime">
+                        <i class="fas fa-clock"></i>
+                        <span>${dateStr}</span>
                     </div>
                 </div>
 
-                <div class="appointment-card-body mini">
-                    <i class="fas fa-stethoscope"></i>
-                    <span><strong>${doctorName}</strong> — ${specialty}</span>
+                <!-- Badge de Estado -->
+                <div class="appointment-clean-status status-${status}">
+                    ${statusMap[status] || status}
                 </div>
             </div>
         `;
     }).join('');
 }
 
-
 /* -------------------------------------------------------------
-   RENDER COMPLETO — MIS TURNOS
+   RENDER COMPLETO — MIS TURNOS (CLASES ÚNICAS)
 -------------------------------------------------------------- */
 function renderAppointmentsFull(appointments) {
-
     return appointments.map(apt => {
-
         const aptStart = new Date(apt.startTime || apt.StartTime);
         const aptEnd = new Date(apt.endTime || apt.EndTime);
 
-        const dateStr = aptStart.toLocaleDateString("es-AR", {
-            weekday: "long",
-            day: "numeric",
-            month: "long"
-        });
-
-        const timeStr = `${aptStart.toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit'})} -
-                         ${aptEnd.toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit'})}`;
+        // Formatear fecha: "jueves, 20 de noviembre de 2025 - 12:30"
+        const weekday = aptStart.toLocaleDateString("es-AR", { weekday: "long" });
+        const day = aptStart.getDate();
+        const month = aptStart.toLocaleDateString("es-AR", { month: "long" });
+        const year = aptStart.getFullYear();
+        const time = aptStart.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+        
+        const dateTimeStr = `${weekday}, ${day} de ${month} de ${year} - ${time}`;
 
         // Doctor
         const d = window.doctorsMap.get(apt.doctorId || apt.DoctorId) || {};
@@ -1162,59 +1327,60 @@ function renderAppointmentsFull(appointments) {
         const reason = apt.reason || apt.Reason || apt.reasonText || "Sin motivo especificado";
 
         const status = (apt.status || apt.Status || "SCHEDULED").toLowerCase();
-
         const statusMap = {
             scheduled: "Programado",
             confirmed: "Confirmado",
             cancelled: "Cancelado",
             completed: "Completado",
-            in_progress: "En curso"
+            in_progress: "En curso",
+            no_show: "Ausente",
+            rescheduled: "Reprogramado"
         };
 
         const appointmentId = apt.appointmentId || apt.AppointmentId;
-        const canCancel = status === "confirmed" || status === "scheduled";
+        const canCancel = status === "confirmed" || status === "scheduled"|| status === "rescheduled";
 
         return `
-            <div class="appointment-card ${status}">
+            <div class="appointment-clean-card">
+                <!-- Icono Calendario -->
+                <div class="appointment-clean-icon">
+                    <i class="fas fa-calendar-alt"></i>
+                </div>
 
-                <div class="appointment-card-header">
-                    <div class="appointment-time-info">
-                        <i class="fas fa-calendar-day"></i>
-                        <div>
-                            <strong>${dateStr}</strong><br>
-                            ${timeStr}
-                        </div>
+                <!-- Contenido Principal -->
+                <div class="appointment-clean-content">
+                    <div class="appointment-clean-header">
+                        <h4 class="appointment-clean-doctor">${doctorName}</h4>
+                        <span class="appointment-clean-status status-${status}">
+                            ${statusMap[status] || status}
+                        </span>
                     </div>
-
-                    <div class="appointment-status-badge status-${status}">
-                        <i class="fas fa-tag"></i>
-                        <span>${statusMap[status] || status}</span>
+                    
+                    <div class="appointment-clean-specialty">${specialty}</div>
+                    
+                    <div class="appointment-clean-datetime">
+                    
+                        <i class="fa-regular fa-clock"></i>
+                        <span>${dateTimeStr}</span>
+                    </div>
+                    
+                    <div class="appointment-clean-reason">
+                        <strong>Motivo:</strong> ${reason}
                     </div>
                 </div>
 
-                <div class="appointment-card-body">
-                    <div class="appointment-reason-box">
-                        <i class="fas fa-stethoscope"></i>
-                        <div>
-                            <strong>${doctorName}</strong> — ${specialty}
-                            <p>${reason}</p>
-                        </div>
-                    </div>
-                </div>
-
+                <!-- Botón Cancelar -->
                 ${canCancel ? `
-                <div class="appointment-card-footer">
-                    <button class="btn btn-danger btn-cancel-appointment"
-                            onclick="cancelAppointment(${appointmentId})">
-                        <i class="fas fa-times-circle"></i>
-                        Cancelar Turno
+                <div class="appointment-clean-actions">
+                    <button class="btn-clean-cancel" onclick="cancelAppointment(${appointmentId})" title="Cancelar turno">
+                        <i class="fas fa-times"></i>
+                        Cancelar
                     </button>
                 </div>` : ""}
             </div>
         `;
     }).join('');
 }
-
 
 /* -------------------------------------------------------------
    CARGAR TURNOS — ENRIQUECIDO CON INFO DEL DOCTOR
@@ -1300,6 +1466,7 @@ async function loadPatientAppointments() {
                 </div>`;
         }
     }
+    console.log("currentPatient", currentPatient);
 }
 
 
@@ -1373,13 +1540,10 @@ async function loadRecentPatientHistory() {
             return;
         }
 
-        // Ordenar por fecha descendente
-        encounters.sort((a, b) =>
-            new Date(b.date || b.Date) - new Date(a.date || a.Date)
-        );
-
-        // Tomar solo 3
-        const lastThree = encounters.slice(0, 3);
+        // Ordenar por fecha descendente y tomar solo 3
+        const lastThree = encounters
+            .sort((a, b) => new Date(b.date || b.Date) - new Date(a.date || a.Date))
+            .slice(0, 3);
 
         // Obtener doctores
         const doctorIds = [...new Set(lastThree.map(e => e.doctorId || e.DoctorId))];
@@ -1388,60 +1552,50 @@ async function loadRecentPatientHistory() {
         for (const id of doctorIds) {
             try {
                 const d = await Api.get(`v1/Doctor/${id}`);
-                doctorsMap.set(id, {
-                    name: `Dr. ${d.firstName || d.FirstName} ${d.lastName || d.LastName}`.trim(),
-                });
+                const fullName = `Dr. ${d.firstName || d.FirstName || ''} ${d.lastName || d.LastName || ''}`.trim();
+                doctorsMap.set(id, fullName || `Dr. ${id}`);
             } catch {
-                doctorsMap.set(id, { name: "Dr. Desconocido" });
+                doctorsMap.set(id, `Dr. ${id}`);
             }
         }
 
         historyList.innerHTML = lastThree
-    .map(enc => {
-        const encounterId = enc.encounterId || enc.EncounterId;
-        const date = new Date(enc.date || enc.Date);
+            .map(enc => {
+                const encounterId = enc.encounterId || enc.EncounterId;
+                const date = new Date(enc.date || enc.Date);
+                const doctorName = doctorsMap.get(enc.doctorId || enc.DoctorId) || 'Dr. Desconocido';
+                const reason = enc.reasons || enc.Reasons || enc.reason || "Control rutinario";
+                const assessment = enc.assessment || enc.Assessment || '';
+                const summary = assessment || subjective || '';
+                
+                // Formatear fecha: "2025-09-20"
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                const dateStr = `${year}-${month}-${day}`;
 
-        const doctorName =
-            doctorsMap.get(enc.doctorId || enc.DoctorId)?.name ||
-            "Dr. Desconocido";
-
-        const reason =
-            enc.reasons || enc.Reasons || enc.reason || "Motivo no registrado";
-
-        return `
-        <div class="encounter-mini-card">
-
-            <!-- Columna izquierda -->
-            <div class="encounter-mini-left">
-
-                <div class="encounter-mini-top">
-                    <i class="fas fa-calendar-day"></i>
-                    <span class="date-text">${date.toLocaleDateString("es-AR")}</span>
-
-                    <i class="fas fa-user-md"></i>
-                    <span class="doctor-text">${doctorName}</span>
-                </div>
-
-                <div class="encounter-mini-bottom">
-                    <i class="fas fa-stethoscope"></i>
-                    <span><strong>Motivo:</strong> ${reason}</span>
-                </div>
-
-            </div>
-
-            <!-- Botón -->
-            <div class="encounter-mini-footer">
-                <button class="btn btn-primary btn-sm" onclick="viewEncounterDetails(${encounterId})">
-                    <i class="fas fa-file-prescription"></i>
-                    Ver receta
-                </button>
-            </div>
-
-        </div>
-        `;
-    })
-    .join("");
-
+                return `
+                    <div class="history-compact-card">
+                        <div class="history-compact-content">
+                            <div class="history-compact-left">
+                                <div class="history-compact-date">
+                                    <i class="fas fa-calendar-alt"></i>
+                                    ${dateStr}
+                                    <span class="history-doctor-separator">|</span>
+                                    <i class="fas fa-user-md"></i>
+                                    ${doctorName}
+                                </div>
+                                <div class="history-compact-reason"><strong>Diagnóstico: </strong>${assessment}</div>
+                            </div>
+                        </div>
+                        <button class="btn-history-view" onclick="viewEncounterDetails(${encounterId})">
+                            <i class="fas fa-file-prescription"></i>
+                            Ver Receta
+                        </button>
+                    </div>
+                `;
+            })
+            .join("");
 
     } catch (error) {
         console.error(error);
@@ -1453,6 +1607,170 @@ async function loadRecentPatientHistory() {
     }
 }
 
+
+// -----------------------------------------------------
+// HISTORIAL MÉDICO COMPLETO - Actualizado
+// -----------------------------------------------------
+async function loadPatientHistoryFull() {
+    const historyListFull = document.getElementById('history-list-full');
+    if (!historyListFull) {
+        setTimeout(loadPatientHistoryFull, 100);
+        return;
+    }
+
+    try {
+        historyListFull.innerHTML = `
+            <div class="loading-spinner">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>Cargando historial médico...</p>
+            </div>
+        `;
+
+        // Cargar datos del paciente si no están
+        if (!currentPatient?.patientId) {
+            if (!currentUser) currentUser = await getAuthenticatedUser();
+            if (!currentUser) {
+                historyListFull.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <p>No se pudo identificar al usuario</p>
+                    </div>
+                `;
+                return;
+            }
+
+            try {
+                const { Api } = await import('./api.js');
+                const patientResponse = await Api.get(`v1/Patient/User/${currentUser.userId}`);
+                if (patientResponse) currentPatient = normalizePatient(patientResponse);
+            } catch (err) {
+                console.error('Error al cargar datos del paciente:', err);
+            }
+        }
+
+        const patientId = currentPatient?.patientId || currentPatient?.PatientId || currentUser?.userId;
+        if (!patientId) {
+            historyListFull.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>No se pudo identificar al paciente</p>
+                </div>
+            `;
+            return;
+        }
+
+        const { ApiClinical, Api } = await import('./api.js');
+        const now = new Date();
+        const from = new Date(now.getFullYear() - 5, 0, 1);
+
+        // Obtener encounters
+        const encountersResponse = await ApiClinical.get(
+            `v1/Encounter?patientId=${patientId}&from=${from.toISOString()}&to=${now.toISOString()}`
+        );
+        const encounters = Array.isArray(encountersResponse)
+            ? encountersResponse
+            : encountersResponse?.value || [];
+
+        if (!encounters.length) {
+            historyListFull.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-file-medical"></i>
+                    <p>No hay historial médico disponible</p>
+                </div>
+            `;
+            return;
+        }
+
+        // Obtener info de doctores
+        const doctorIds = [...new Set(encounters.map(e => e.doctorId || e.DoctorId).filter(Boolean))];
+        const doctorsMap = new Map();
+
+        for (const doctorId of doctorIds) {
+            try {
+                const doctor = await Api.get(`v1/Doctor/${doctorId}`);
+                if (doctor) {
+                    const fullName = `Dr. ${doctor.firstName || doctor.FirstName || ''} ${doctor.lastName || doctor.LastName || ''}`.trim();
+                    doctorsMap.set(doctorId, {
+                        fullName: fullName || `Dr. ${doctorId}`,
+                        specialty: doctor.specialty || doctor.Specialty || ''
+                    });
+                }
+            } catch {
+                doctorsMap.set(doctorId, { fullName: `Dr. ${doctorId}`, specialty: '' });
+            }
+        }
+
+        // Ordenar por fecha más reciente
+        encounters.sort((a, b) => new Date(b.date || b.Date || 0) - new Date(a.date || a.Date || 0));
+
+        // Renderizar encounters con diseño actualizado
+        historyListFull.innerHTML = encounters.map(enc => {
+            const encounterId = enc.encounterId || enc.EncounterId;
+            const date = new Date(enc.date || enc.Date);
+            const doctorId = enc.doctorId || enc.DoctorId;
+            const doctorInfo = doctorsMap.get(doctorId) || { fullName: 'Dr. Sin nombre', specialty: '' };
+            const reasons = enc.reasons || enc.Reasons || enc.reason || enc.Reason || 'Consulta general';
+
+            // Formatear fecha: "2025-09-20"
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const dateStr = `${year}-${month}-${day}`;
+
+            // Resumen de evaluación
+            const subjective = enc.subjective || enc.Subjective || enc.subjetive || enc.Subjetive || '';
+            const assessment = enc.assessment || enc.Assessment || '';
+            const summary = assessment || subjective || '';
+            const summaryText = summary ? (summary.length > 150 ? summary.substring(0, 150) + '...' : summary) : '';
+
+            return `
+                <div class="history-full-card">
+                    <!-- Header con fecha, doctor y botón -->
+                    <div class="history-full-header">
+                        <div class="history-full-info">
+                            <div class="history-full-date">
+                                <i class="fas fa-calendar-alt"></i>
+                                ${dateStr}
+                            </div>
+                            <div class="history-full-doctor">
+                                <i class="fas fa-user-md"></i>
+                                ${doctorInfo.fullName}
+                                ${doctorInfo.specialty ? `<span class="history-full-specialty">– ${doctorInfo.specialty}</span>` : ''}
+                            </div>
+                        </div>
+                        <button class="btn-history-details" onclick="viewEncounterDetails(${encounterId})">
+                            <i class="fas fa-eye"></i>
+                            Ver detalles
+                        </button>
+                    </div>
+
+                    <!-- Body con motivo y resumen -->
+                    <div class="history-full-body">
+                        <div class="history-full-reason">
+                            <i class="fas fa-stethoscope"></i>
+                            <strong>Motivo:</strong> ${reasons}
+                        </div>
+                        ${summaryText ? `
+                        <div class="history-full-summary">
+                            <strong>Diagnóstico:</strong>
+                            <p>${summaryText}</p>
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+    } catch (error) {
+        console.error('Error al cargar historial médico completo:', error);
+        historyListFull.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-exclamation-triangle"></i>
+                <p>No se pudo cargar el historial médico</p>
+            </div>
+        `;
+    }
+}
 
 // -----------------------------------------------------
 // INITIALIZE PATIENT PANEL — VERSIÓN FINAL CORREGIDA
@@ -2726,191 +3044,9 @@ async function handleAppointmentSubmit(e) {
     }
 }
 
-// Cargar historial completo (para la sección dedicada)
-async function loadPatientHistoryFull() {
-    const historyListFull = document.getElementById('history-list-full');
-    if (!historyListFull) {
-        // Si no existe el contenedor, esperar un momento y reintentar
-        setTimeout(loadPatientHistoryFull, 100);
-        return;
-    }
-    
-    try {
-        // Mostrar loading mientras se obtiene el patientId
-        historyListFull.innerHTML = `
-            <div class="loading-spinner">
-                <i class="fas fa-spinner fa-spin"></i>
-                <p>Cargando historial médico...</p>
-            </div>
-        `;
-        
-        // Si currentPatient no está cargado, intentar cargarlo primero
-        if (!currentPatient?.patientId) {
-            console.log('currentPatient no está cargado, intentando cargar datos del paciente...');
-            
-            // Intentar cargar los datos del paciente
-            if (!currentUser) {
-                currentUser = await getAuthenticatedUser();
-                if (!currentUser) {
-                    historyListFull.innerHTML = `
-                        <div class="empty-state">
-                            <i class="fas fa-exclamation-triangle" style="font-size: 3rem; color: #ef4444; margin-bottom: 1rem;"></i>
-                            <p style="color: #6b7280; font-size: 1.1rem;">No se pudo identificar al usuario</p>
-                        </div>
-                    `;
-                    return;
-                }
-            }
-            
-            // Cargar datos del paciente
-            try {
-                const { Api } = await import('./api.js');
-                const patientResponse = await Api.get(`v1/Patient/User/${currentUser.userId}`);
-                if (patientResponse) {
-                    currentPatient = normalizePatient(patientResponse);
-                    console.log('currentPatient cargado:', currentPatient);
-                }
-            } catch (err) {
-                console.error('Error al cargar datos del paciente:', err);
-            }
-        }
-        
-        // Obtener patientId: primero de currentPatient, luego de currentUser como fallback
-        const patientId = currentPatient?.patientId || currentPatient?.PatientId || currentUser?.userId;
-        
-        if (!patientId) {
-            historyListFull.innerHTML = `
-                <div class="empty-state">
-                    <i class="fas fa-exclamation-triangle" style="font-size: 3rem; color: #ef4444; margin-bottom: 1rem;"></i>
-                    <p style="color: #6b7280; font-size: 1.1rem;">No se pudo identificar al paciente</p>
-                    <p style="color: #9ca3af; font-size: 0.9rem; margin-top: 0.5rem;">Por favor, recarga la página</p>
-                </div>
-            `;
-            return;
-        }
 
-        const { ApiClinical, Api } = await import('./api.js');
-        const now = new Date();
-        const from = new Date(now.getFullYear() - 5, 0, 1); // Últimos 5 años
-        const to = now;
 
-        // Obtener encounters desde ClinicalMS usando el patientId obtenido
-        console.log('=== CARGANDO HISTORIAL MÉDICO ===');
-        console.log('patientId:', patientId);
-        console.log('from:', from.toISOString());
-        console.log('to:', to.toISOString());
-        
-        const encountersResponse = await ApiClinical.get(`v1/Encounter?patientId=${patientId}&from=${from.toISOString()}&to=${to.toISOString()}`);
-        console.log('Respuesta de ClinicalMS:', encountersResponse);
-        
-        const encounters = Array.isArray(encountersResponse) ? encountersResponse : (encountersResponse?.value || []);
-        console.log('Encounters procesados:', encounters);
-        console.log('Cantidad de encounters:', encounters.length);
-        
-        if (!encounters || encounters.length === 0) {
-            historyListFull.innerHTML = `
-                <div class="empty-state">
-                    <i class="fas fa-file-medical" style="font-size: 3rem; color: #9ca3af; margin-bottom: 1rem;"></i>
-                    <p style="color: #6b7280; font-size: 1.1rem;">No hay historial médico disponible</p>
-                    <p style="color: #9ca3af; font-size: 0.9rem; margin-top: 0.5rem;">Tus consultas aparecerán aquí una vez que sean completadas</p>
-                </div>
-            `;
-            return;
-        }
 
-        // Obtener información de doctores únicos
-        const doctorIds = [...new Set(encounters.map(e => e.doctorId || e.DoctorId).filter(Boolean))];
-        const doctorsMap = new Map();
-        
-        for (const doctorId of doctorIds) {
-            try {
-                const doctor = await Api.get(`v1/Doctors/${doctorId}`);
-                if (doctor) {
-                    const fullName = `${doctor.firstName || doctor.FirstName || ''} ${doctor.lastName || doctor.LastName || ''}`.trim();
-                    doctorsMap.set(doctorId, fullName || `Dr. ID ${doctorId}`);
-                }
-            } catch (err) {
-                console.warn(`No se pudo obtener información del doctor ${doctorId}:`, err);
-                doctorsMap.set(doctorId, `Dr. ID ${doctorId}`);
-            }
-        }
-
-        // Ordenar por fecha más reciente
-        encounters.sort((a, b) => {
-            const dateA = new Date(a.date || a.Date || 0);
-            const dateB = new Date(b.date || b.Date || 0);
-            return dateB - dateA;
-        });
-
-        // Renderizar encounters
-        historyListFull.innerHTML = encounters.map(enc => {
-            const encounterId = enc.encounterId || enc.EncounterId;
-            const date = new Date(enc.date || enc.Date);
-            const doctorId = enc.doctorId || enc.DoctorId;
-            const doctorName = doctorsMap.get(doctorId) || 'Dr. Sin nombre';
-            const reasons = enc.reasons || enc.Reasons || enc.reason || enc.Reason || 'Sin motivo especificado';
-            const status = enc.status || enc.Status || 'Pendiente';
-            const statusClass = status.toLowerCase() === 'signed' ? 'signed' : status.toLowerCase() === 'open' ? 'open' : 'pending';
-            
-            // Obtener resumen de la consulta (primeras palabras del Subjective o Assessment)
-            const subjective = enc.subjective || enc.Subjective || enc.subjetive || enc.Subjetive || '';
-            const assessment = enc.assessment || enc.Assessment || '';
-            const summary = assessment || subjective || reasons;
-            const summaryText = summary.length > 100 ? summary.substring(0, 100) + '...' : summary;
-            
-            return `
-                <div class="encounter-card" data-encounter-id="${encounterId}">
-                    <div class="encounter-header">
-                        <div class="encounter-date-info">
-                            <div class="encounter-date-icon">
-                                <i class="fas fa-calendar-check"></i>
-                            </div>
-                            <div class="encounter-date-text">
-                                <div class="encounter-date">${formatDate(date)}</div>
-                                <div class="encounter-time">${formatTime(date)}</div>
-                            </div>
-                        </div>
-                        <div class="encounter-status-badge status-${statusClass}">
-                            <i class="fas ${statusClass === 'signed' ? 'fa-check-circle' : statusClass === 'open' ? 'fa-clock' : 'fa-hourglass-half'}"></i>
-                            <span>${status === 'SIGNED' ? 'Completada' : status === 'OPEN' ? 'En curso' : 'Pendiente'}</span>
-                        </div>
-                    </div>
-                    <div class="encounter-body">
-                        <div class="encounter-doctor">
-                            <i class="fas fa-user-md"></i>
-                            <span>${doctorName}</span>
-                        </div>
-                        <div class="encounter-reason">
-                            <strong>Motivo:</strong> ${reasons}
-                        </div>
-                        ${summary ? `
-                        <div class="encounter-summary">
-                            <p>${summaryText}</p>
-                        </div>
-                        ` : ''}
-                    </div>
-                    <div class="encounter-footer">
-                        <button class="btn btn-primary btn-view-details" onclick="viewEncounterDetails(${encounterId})">
-                            <i class="fas fa-eye"></i> Ver detalles completos
-                        </button>
-                    </div>
-                </div>
-            `;
-        }).join('');
-
-    } catch (error) {
-        console.error('Error al cargar historial médico completo:', error);
-        if (historyListFull) {
-            historyListFull.innerHTML = `
-                <div class="empty-state">
-                    <i class="fas fa-exclamation-triangle" style="font-size: 3rem; color: #ef4444; margin-bottom: 1rem;"></i>
-                    <p style="color: #6b7280; font-size: 1.1rem;">No se pudo cargar el historial médico</p>
-                    <p style="color: #9ca3af; font-size: 0.9rem; margin-top: 0.5rem;">${error.message || 'Error desconocido'}</p>
-                </div>
-            `;
-        }
-    }
-}
 
 // Actualizar handleSectionNavigation para cargar turnos e historial
 const originalHandleSectionNavigation = handleSectionNavigation;
