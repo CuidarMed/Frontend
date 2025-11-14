@@ -359,7 +359,8 @@ function initializeProfileEditing() {
                 }
                 
                 // Obtener el ID del doctor
-                const doctorId = currentUser?.userId;
+                const doctorId = currentDoctorData?.doctorId ?? currentDoctorData?.DoctorId;
+
                 if (!doctorId) {
                     showNotification('No se pudo identificar el usuario. Por favor, recarga la página.', 'error');
                     return;
@@ -375,9 +376,13 @@ function initializeProfileEditing() {
                 
                 // Importar Api
                 const { Api } = await import('./api.js');
-                
+                if (!doctorId) {
+    showNotification('No se pudo identificar el médico en DirectoryMS', 'error');
+    return;
+}
                 // Guardar en el backend
                 await Api.patch(`v1/Doctor/${doctorId}`, payload);
+
                 
                 // Actualizar imagen del usuario en AuthMS si se proporcionó
                 if (imageUrl) {
@@ -639,6 +644,7 @@ async function loadDoctorData() {
         await loadTodayConsultations();
         await loadWeeklySchedule();
         await loadDoctorStats();
+        await loadTodayFullHistory();
         
     } catch (error) {
         console.error('Error al cargar datos del doctor:', error);
@@ -688,7 +694,7 @@ async function loadTodayConsultations() {
                 try {
                     const patientId = apt.patientId || apt.PatientId;
                     const patient = await Api.get(`v1/Patient/${patientId}`);
-                    apt.patientName = `${patient.firstName || patient.FirstName || ''} ${patient.lastName || patient.LastName || ''}`.trim() || 'Paciente sin nombre';
+                    apt.patientName = `${patient.Name || patient.name || ''} ${patient.lastName || patient.LastName || ''}`.trim() || 'Paciente sin nombre';
                 } catch (err) {
                     apt.patientName = 'Paciente desconocido';
                 }
@@ -778,7 +784,66 @@ async function loadWeeklySchedule() {
         weeklySchedule.innerHTML = '<p style="color: #6b7280; padding: 2rem; text-align: center;">No se pudo cargar la agenda</p>';
     }
 }
+// Consultas históricas del día (todas)
+async function loadTodayFullHistory() {
+    const container = document.getElementById('navbar-today-history');
+    if (!container) return;
 
+    if (!currentDoctorData?.doctorId) {
+        container.innerHTML = "<p>No se pudo identificar al médico.</p>";
+        return;
+    }
+
+    try {
+        const { ApiScheduling } = await import('./api.js');
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const tomorrow = new Date(today);
+        tomorrow.setDate(today.getDate() + 1);
+
+        // 🔥 Cargar **todo** del día, no solo programados
+        const appointments = await ApiScheduling.get(
+            `v1/Appointments?doctorId=${currentDoctorData.doctorId}&startTime=${today.toISOString()}&endTime=${tomorrow.toISOString()}`
+        );
+
+        if (!appointments || appointments.length === 0) {
+            container.innerHTML = "<p>No hay historial del día.</p>";
+            return;
+        }
+
+        // Cargar nombre de paciente
+        const { Api } = await import('./api.js');
+
+        for (const ap of appointments) {
+            try {
+                const patient = await Api.get(`v1/Patient/${ap.patientId ?? ap.PatientId}`);
+
+                const name = patient.name || patient.Name || "";
+                const last = patient.lastName || patient.LastName || "";
+                ap.patientName = `${name} ${last}`.trim();
+            } catch {
+                ap.patientName = "Paciente desconocido";
+            }
+        }
+
+        // Render
+        container.innerHTML = "";
+
+        appointments.forEach(ap => {
+            const item = createConsultationItemElement({
+                ...ap,
+                isHistory: true // marcador opcional
+            });
+            container.appendChild(item);
+        });
+
+    } catch (err) {
+        console.error(err);
+        container.innerHTML = "<p>Error cargando historial.</p>";
+    }
+}
 // Cargar estadísticas del doctor desde SchedulingMS
 async function loadDoctorStats() {
     try {
@@ -1007,7 +1072,68 @@ async function loadDoctorHistory() {
         `;
     }
 }
+async function loadTodayConsultationsForNav() {
+    const list = document.getElementById('consultas-hoy-list');
+    if (!list) return;
 
+    try {
+        const { ApiScheduling, Api } = await import('./api.js');
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        // pedir turnos
+        const appointments = await ApiScheduling.get(
+            `v1/Appointments?doctorId=${currentDoctorData.doctorId}&startTime=${today.toISOString()}&endTime=${tomorrow.toISOString()}`
+        );
+
+        list.innerHTML = '';
+
+        if (!appointments || appointments.length === 0) {
+            list.innerHTML = `<p style="padding:1rem; text-align:center;">No hay consultas hoy</p>`;
+            return;
+        }
+
+        for (const apt of appointments) {
+            const patient = await Api.get(`v1/Patient/${apt.patientId}`);
+            apt.patientName = `${patient.name} ${patient.lastName}`;
+
+            const item = createConsultationItemElement(apt);
+            list.appendChild(item);
+        }
+
+    } catch (e) {
+        console.error('Error cargando consultas', e);
+        list.innerHTML = `<p>Error cargando consultas</p>`;
+    }
+}
+async function loadTodayConsultationsView() {
+    const dashboardContent = document.querySelector('.dashboard-content');
+    if (!dashboardContent) return;
+
+    // Eliminar pantallas anteriores
+    
+
+    // Crear contenedor
+    const section = document.createElement('div');
+    section.className = 'dashboard-section consultas-section';
+    section.innerHTML = `
+        <div class="section-header">
+            <h3>Consultas de hoy</h3>
+            <p>Historial de turnos programados para hoy</p>
+        </div>
+        <div id="consultas-hoy-list" class="consultations-list">
+            <p style="padding:1rem;">Cargando...</p>
+        </div>
+    `;
+    dashboardContent.appendChild(section);
+
+    // Llamar tu función original
+    await loadTodayConsultationsForNav();
+}
 // ------------------------------
 // Buscador de historia clínica
 // ------------------------------
@@ -1037,7 +1163,11 @@ async function handleSectionNavigation(section) {
     const existingPatients = dashboardContent.querySelectorAll('.patients-section');
     existingPatients.forEach(patients => {
         patients.remove();
+    
     });
+    const existingConsultas = dashboardContent.querySelectorAll('.consultas-section');
+    existingConsultas.forEach(sec => sec.remove()); 
+    
 
     const mainDashboard = document.getElementById('mainDashboardSection');
     const profileSection = document.getElementById('doctorProfileSection');
@@ -1078,6 +1208,8 @@ async function handleSectionNavigation(section) {
             }
             break;
         case 'consultas':
+            loadTodayConsultationsView();
+            break;
         case 'historia':
         case 'recetas':
             showComingSoonSectionDoctor(section);
@@ -2050,7 +2182,7 @@ async function renderAgendaContent(agendaSection) {
                     const patient = await Api.get(`v1/Patient/${patientId}`);
                     return {
                         ...apt,
-                        patientName: `${patient.firstName || patient.FirstName || ''} ${patient.lastName || patient.LastName || ''}`.trim() || 'Paciente sin nombre',
+                        patientName: `${patient.name || patient.Name || ''} ${patient.lastName || patient.LastName || ''}`.trim() || 'Paciente sin nombre',
                         patientDni: patient.dni || patient.Dni || 'N/A'
                     };
                 } catch (err) {
@@ -2454,7 +2586,7 @@ async function renderPatientsContent(patientsSection) {
                     
                     return {
                         patientId: patientId,
-                        firstName: patient.firstName || patient.FirstName || '',
+                        firstName: patient.Name || patient.name || '',
                         lastName: patient.lastName || patient.LastName || '',
                         dni: patient.dni || patient.Dni || 'N/A',
                         dateOfBirth: patient.dateOfBirth || patient.DateOfBirth || null,

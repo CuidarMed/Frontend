@@ -49,13 +49,13 @@
 
 .breadcrumb-current {
     color: #1f2937;
+    
     font-weight: 600;
 }
 
 /* Page Header (Sticky) */
 .profile-page-header {
     background: #fff;
-    border-bottom: 1px solid #e5e7eb;
     padding: 1.5rem 1rem;
     border-radius: 30px;
     margin-bottom: 2rem;
@@ -65,9 +65,7 @@
     transition: box-shadow 0.2s ease;
 }
 
-.profile-page-header.sticky {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-}
+
 
 .profile-header-content {
     display: flex;
@@ -1517,7 +1515,6 @@ body {
     background: linear-gradient(135deg, #10b981 0%, #059669 100%);
     color: white;
     border: none;
-    padding: 0.875rem 1.75rem;
     border-radius: 12px;
     font-weight: 600;
     font-size: 0.95rem;
@@ -1527,6 +1524,7 @@ body {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
+    margin-right: 10%;
 }
 
 #editDoctorProfile:hover {
