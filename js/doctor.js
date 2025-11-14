@@ -1,129 +1,169 @@
-// Funcionalidades específicas del panel médico
 const DEFAULT_AVATAR_URL = "https://icons.veryicon.com/png/o/internet--web/prejudice/user-128.png";
 let currentUser = null;
 let currentDoctorData = null;
 let autoRefreshInterval = null;
 let currentPrescriptionData = null;
+let allPatientsList = [];
+
+function normalizeObject(obj, fields) {
+    if (!obj) return obj;
+    fields.forEach(field => {
+        const camel = field.charAt(0).toLowerCase() + field.slice(1);
+        const pascal = field.charAt(0).toUpperCase() + field.slice(1);
+        obj[camel] = obj[camel] ?? obj[pascal];
+        obj[pascal] = obj[pascal] ?? obj[camel];
+    });
+    return obj;
+}
+
+function getValue(obj, ...keys) {
+    for (const key of keys) {
+        if (obj?.[key] !== undefined && obj?.[key] !== null) return obj[key];
+    }
+    return null;
+}
+
+function getId(obj, ...keys) {
+    return getValue(obj, ...keys) || getValue(obj, ...keys.map(k => k.charAt(0).toUpperCase() + k.slice(1)));
+}
+
+function formatDate(date, options = {}) {
+    if (!date) return 'Fecha no disponible';
+    try {
+        const d = date instanceof Date ? date : new Date(date);
+        if (isNaN(d.getTime())) return 'Fecha inválida';
+        return d.toLocaleDateString('es-AR', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            ...options
+        });
+    } catch {
+        return 'Fecha no disponible';
+    }
+}
+
+function formatTime(date, options = {}) {
+    if (!date) return '';
+    try {
+        const d = date instanceof Date ? date : new Date(date);
+        if (isNaN(d.getTime())) return '';
+        return d.toLocaleTimeString('es-AR', {
+            hour: '2-digit',
+            minute: '2-digit',
+            ...options
+        });
+    } catch {
+        return '';
+    }
+}
 
 document.addEventListener('DOMContentLoaded', async function() {
-    await loadDoctorContext();
-    
-    // Asegurar que currentUser tenga firstName y lastName antes de continuar
-    if (!currentUser?.firstName || !currentUser?.lastName) {
-        console.log('Faltan firstName o lastName, esperando a que se carguen...');
-        // Dar tiempo para que ensureDoctorProfile termine
-        await new Promise(resolve => setTimeout(resolve, 500));
-        // Re-cargar desde state por si se actualizó
-        const { state } = await import('./state.js');
-        currentUser = state.user;
+    try {
+        await loadDoctorContext();
+        if (!currentUser?.firstName || !currentUser?.lastName) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+            const { state } = await import('./state.js');
+            currentUser = state.user;
+        }
+        
+        // Cargar datos del doctor primero (esto actualiza el header internamente)
+        await loadDoctorData();
+        
+        // Inicializar el panel después de cargar los datos
+        await initializeDoctorPanel();
+    } catch (error) {
+        console.error('Error en la inicialización del panel del doctor:', error);
+        // Aún así intentar mostrar algo básico
+        updateDoctorHeader(null);
     }
-    
-    console.log('currentUser final:', currentUser);
-    console.log('currentUser.firstName:', currentUser?.firstName);
-    console.log('currentUser.lastName:', currentUser?.lastName);
-    
-    initializeDoctorPanel();
-    updateDoctorHeader();
-    loadDoctorData(); // Cargar datos del backend
 });
 
 async function loadDoctorContext() {
     const { state, loadUserFromStorage } = await import('./state.js');
     loadUserFromStorage();
-
     currentUser = state.user;
-    
-    console.log('=== CARGANDO CONTEXTO DEL DOCTOR ===');
-    console.log('currentUser desde localStorage:', currentUser);
-    console.log('currentUser.firstName:', currentUser?.firstName);
-    console.log('currentUser.lastName:', currentUser?.lastName);
-
     if (!currentUser) {
         window.location.href = 'login.html';
         return;
     }
-
     await ensureDoctorProfile(state.token);
-    
-    // Asegurar que currentUser esté actualizado después de ensureDoctorProfile
     const { state: updatedState } = await import('./state.js');
     currentUser = updatedState.user;
-    
-    console.log('currentUser después de ensureDoctorProfile:', currentUser);
-    console.log('currentUser.firstName después:', currentUser?.firstName);
-    console.log('currentUser.lastName después:', currentUser?.lastName);
 }
 
 async function ensureDoctorProfile(token) {
     const userId = currentUser?.userId;
-
-    if (!token || !userId) {
-        console.warn('ensureDoctorProfile: No hay token o userId');
-        return;
-    }
-
-    console.log('=== SINCRONIZANDO PERFIL DEL DOCTOR ===');
-    console.log('currentUser antes:', currentUser);
-    console.log('currentUser.firstName:', currentUser?.firstName);
-    console.log('currentUser.lastName:', currentUser?.lastName);
-
-    // SIEMPRE intentar cargar datos actualizados desde AuthMS para asegurar que tenemos firstName y lastName
-    console.log('Cargando datos completos desde AuthMS...');
+    if (!token || !userId) return;
     try {
         const { getUserById } = await import('./apis/authms.js');
         const profile = await getUserById(userId, token);
-        
-        console.log('Profile obtenido de AuthMS:', profile);
-        console.log('profile completo:', JSON.stringify(profile, null, 2));
-        console.log('profile.firstName:', profile?.firstName ?? profile?.FirstName);
-        console.log('profile.lastName:', profile?.lastName ?? profile?.LastName);
-        console.log('profile.email:', profile?.email ?? profile?.Email);
-
         if (profile) {
-            // Actualizar currentUser con todos los datos disponibles
-            const newFirstName = profile.firstName ?? profile.FirstName ?? currentUser?.firstName ?? '';
-            const newLastName = profile.lastName ?? profile.LastName ?? currentUser?.lastName ?? '';
-            const newImageUrl = profile.imageUrl ?? profile.ImageUrl ?? currentUser?.imageUrl;
-            const newEmail = profile.email ?? profile.Email ?? currentUser?.email;
-            const newRole = profile.role ?? profile.Role ?? currentUser?.role;
-
+            const newFirstName = getValue(profile, 'firstName', 'FirstName') ?? currentUser?.firstName ?? '';
+            const newLastName = getValue(profile, 'lastName', 'LastName') ?? currentUser?.lastName ?? '';
+            const newImageUrl = getValue(profile, 'imageUrl', 'ImageUrl') ?? currentUser?.imageUrl;
+            const newEmail = getValue(profile, 'email', 'Email') ?? currentUser?.email;
+            const newRole = getValue(profile, 'role', 'Role') ?? currentUser?.role;
+            const isDefaultImage = !newImageUrl || newImageUrl === DEFAULT_AVATAR_URL || 
+                                  newImageUrl.includes('icons.veryicon.com/png/o/internet--web/prejudice/user-128.png');
+            const finalImageUrl = (newImageUrl && !isDefaultImage && newImageUrl.trim() !== '') 
+                ? newImageUrl 
+                : (currentUser?.imageUrl && currentUser.imageUrl !== DEFAULT_AVATAR_URL && !currentUser.imageUrl.includes('icons.veryicon.com/png/o/internet--web/prejudice/user-128.png'))
+                    ? currentUser.imageUrl
+                    : DEFAULT_AVATAR_URL;
             currentUser = {
                 ...currentUser,
                 firstName: newFirstName,
                 FirstName: newFirstName,
                 lastName: newLastName,
                 LastName: newLastName,
-                imageUrl: newImageUrl || DEFAULT_AVATAR_URL,
+                imageUrl: finalImageUrl,
                 email: newEmail ?? currentUser?.email,
                 role: newRole ?? currentUser?.role,
-                userId: currentUser?.userId ?? profile.userId ?? profile.UserId ?? userId,
+                userId: currentUser?.userId ?? getValue(profile, 'userId', 'UserId') ?? userId,
             };
-
-            console.log('currentUser actualizado:', currentUser);
-            console.log('currentUser.firstName después:', currentUser.firstName);
-            console.log('currentUser.lastName después:', currentUser.lastName);
-            console.log('currentUser.email después:', currentUser.email);
-
             const { state } = await import('./state.js');
             state.user = currentUser;
             localStorage.setItem('user', JSON.stringify(currentUser));
-
-            updateDoctorHeader();
-        } else {
-            console.warn('No se obtuvo profile de AuthMS');
+            if (finalImageUrl && finalImageUrl !== DEFAULT_AVATAR_URL) {
+                updateAllDoctorAvatars(finalImageUrl);
+            } else {
+                updateDoctorHeader();
+            }
         }
     } catch (error) {
-        console.error('Error al sincronizar el perfil del profesional:', error);
-        console.error('Stack trace:', error.stack);
+        console.error('Error al sincronizar el perfil:', error);
     }
 }
 
 function getDoctorAvatarUrl() {
     const candidate = currentUser?.imageUrl;
-    if (candidate && typeof candidate === 'string' && candidate.trim() && candidate !== 'null' && candidate !== 'undefined') {
+    if (candidate && typeof candidate === 'string' && candidate.trim() && 
+        candidate !== 'null' && candidate !== 'undefined' &&
+        candidate !== DEFAULT_AVATAR_URL &&
+        !candidate.includes('icons.veryicon.com/png/o/internet--web/prejudice/user-128.png')) {
+        // Aceptar tanto URLs normales como data URLs (base64)
         return candidate;
     }
     return DEFAULT_AVATAR_URL;
+}
+
+function updateAllDoctorAvatars(imageUrl) {
+    if (!imageUrl || typeof imageUrl !== 'string' || !imageUrl.trim()) {
+        return;
+    }
+    
+    // Actualizar avatar en el menú de usuario
+    const userMenuAvatar = document.getElementById('userMenuAvatar');
+    if (userMenuAvatar) {
+        userMenuAvatar.src = imageUrl;
+    }
+    
+    // Actualizar avatar en el preview del perfil
+    const doctorAvatarPreview = document.getElementById('doctor-avatar-preview');
+    if (doctorAvatarPreview) {
+        doctorAvatarPreview.src = imageUrl;
+    }
 }
 
 function getDoctorDisplayName(doctorInfo) {
@@ -281,9 +321,9 @@ function updateDoctorProfileSection(doctorInfo) {
     console.log('=== PERFIL ACTUALIZADO ===');
 }
 
-function initializeDoctorPanel() {
+async function initializeDoctorPanel() {
     // Inicializar navegación del sidebar
-    initializeSidebarNavigation();
+    await initializeSidebarNavigation();
     
     // Inicializar botones de atención
     initializeAttendButtons();
@@ -297,10 +337,31 @@ function initializeDoctorPanel() {
     // Inicializar funcionalidad de editar perfil
     initializeProfileEditing();
     
+    // Inicializar filtro de fecha para historial de consultas
+    initializeConsultationDateFilter();
+    
     // Cargar datos periódicamente (cada 30 segundos)
     setInterval(() => {
         loadDoctorData();
     }, 30000);
+}
+
+function initializeConsultationDateFilter() {
+    const dateFilter = document.getElementById('consultation-date-filter');
+    if (!dateFilter) return;
+    
+    // Establecer la fecha de hoy por defecto
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    dateFilter.value = todayStr;
+    
+    // Event listener para cuando cambie la fecha
+    dateFilter.addEventListener('change', async function(e) {
+        const selectedDate = e.target.value;
+        if (selectedDate) {
+            await loadTodayConsultations(selectedDate);
+        }
+    });
 }
 
 function initializeProfileEditing() {
@@ -359,7 +420,7 @@ function initializeProfileEditing() {
                 }
                 
                 // Obtener el ID del doctor
-                const doctorId = currentDoctorData?.doctorId ?? currentDoctorData?.DoctorId;
+                const doctorId = getId(currentDoctorData, 'doctorId');
 
                 if (!doctorId) {
                     showNotification('No se pudo identificar el usuario. Por favor, recarga la página.', 'error');
@@ -387,30 +448,60 @@ function initializeProfileEditing() {
                 // Actualizar imagen del usuario en AuthMS si se proporcionó
                 if (imageUrl) {
                     try {
-                        const AUTHMS_BASE_URL = "http://localhost:8081/api/v1";
-                        const updateUserResponse = await fetch(`${AUTHMS_BASE_URL}/User/${doctorId}`, {
-                            method: "PUT",
-                            headers: {
-                                "Content-Type": "application/json",
-                                "Authorization": `Bearer ${localStorage.getItem('token') || ''}`,
-                            },
-                            body: JSON.stringify({
-                                FirstName: currentUser.firstName,
-                                LastName: currentUser.lastName,
-                                Email: currentUser.email,
-                                Dni: currentUser.dni,
-                                ImageUrl: imageUrl,
-                            }),
-                        });
+                        // Usar el sistema de API centralizado que maneja tokens y múltiples puertos
+                        const { ApiAuth } = await import('./api.js');
                         
-                        if (updateUserResponse.ok) {
-                            console.log('Imagen de usuario actualizada en AuthMS');
-                            currentUser.imageUrl = imageUrl;
-                        } else {
-                            console.warn('No se pudo actualizar la imagen en AuthMS');
+                        console.log('Guardando imagen en AuthMS para doctor:', doctorId);
+                        console.log('Imagen (primeros 100 caracteres):', imageUrl.substring(0, 100));
+                        
+                        try {
+                            // Usar el endpoint de Doctor que no requiere el ID en la URL
+                            // Esto evita problemas de autorización
+                            const updatedUser = await ApiAuth.put(`v1/Doctor/profile`, {
+                                FirstName: currentUser.firstName || '',
+                                LastName: currentUser.lastName || '',
+                                Email: currentUser.email || '',
+                                Dni: currentUser.dni || '',
+                                ImageUrl: imageUrl,
+                            });
+                            
+                            console.log('✓ Imagen de usuario actualizada en AuthMS');
+                            console.log('Usuario actualizado:', updatedUser);
+                            
+                            // Actualizar estado del usuario con la respuesta del servidor
+                            const serverImageUrl = updatedUser?.imageUrl ?? updatedUser?.ImageUrl ?? imageUrl;
+                            
+                            currentUser = {
+                                ...currentUser,
+                                imageUrl: serverImageUrl,
+                            };
+                            
+                            const { state } = await import('./state.js');
+                            state.user = currentUser;
+                            localStorage.setItem('user', JSON.stringify(currentUser));
+                            
+                            // Actualizar avatar en toda la UI
+                            updateAllDoctorAvatars(serverImageUrl);
+                            
+                            console.log('✓ Imagen guardada y actualizada en localStorage');
+                        } catch (apiError) {
+                            console.error('Error al actualizar imagen en AuthMS:', apiError);
+                            console.error('Detalles del error:', {
+                                message: apiError.message,
+                                status: apiError.status,
+                                statusText: apiError.statusText
+                            });
+                            
+                            // Si es un error 401, el token puede haber expirado
+                            if (apiError.status === 401) {
+                                showNotification('Tu sesión ha expirado. Por favor, inicia sesión nuevamente.', 'error');
+                            } else {
+                                showNotification('Error al guardar la imagen. Por favor, intenta nuevamente.', 'error');
+                            }
                         }
                     } catch (error) {
-                        console.error('Error al actualizar imagen en AuthMS:', error);
+                        console.error('Error inesperado al actualizar imagen en AuthMS:', error);
+                        showNotification('Error al guardar la imagen. Por favor, intenta nuevamente.', 'error');
                     }
                 }
                 
@@ -453,24 +544,132 @@ function initializeProfileEditing() {
     setupDoctorAvatarEditor();
 }
 
-// Configurar editor de avatar para el perfil del doctor
+async function compressImageToBase64(file, maxWidth = 800, maxHeight = 800, quality = 0.8) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = new Image();
+            img.onload = function() {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+                
+                // Calcular nuevas dimensiones manteniendo la proporción
+                if (width > height) {
+                    if (width > maxWidth) {
+                        height = (height * maxWidth) / width;
+                        width = maxWidth;
+                    }
+                } else {
+                    if (height > maxHeight) {
+                        width = (width * maxHeight) / height;
+                        height = maxHeight;
+                    }
+                }
+                
+                canvas.width = width;
+                canvas.height = height;
+                
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                
+                // Convertir a base64 con calidad ajustable
+                const base64 = canvas.toDataURL('image/jpeg', quality);
+                resolve(base64);
+            };
+            img.onerror = reject;
+            img.src = e.target.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+
 function setupDoctorAvatarEditor() {
     const imageUrlInput = document.getElementById('doctor-image-url-input');
+    const imageFileInput = document.getElementById('doctor-image-file');
+    const selectImageBtn = document.getElementById('doctor-selectImageBtn');
     const avatarPreview = document.getElementById('doctor-avatar-preview');
     
     if (!imageUrlInput || !avatarPreview) return;
+    
+    // Abrir selector de archivos cuando se hace clic en el botón de seleccionar
+    if (selectImageBtn && imageFileInput) {
+        selectImageBtn.addEventListener('click', function() {
+            imageFileInput.click();
+        });
+    }
+    
+    // Manejar selección de archivo
+    if (imageFileInput) {
+        imageFileInput.addEventListener('change', async function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            // Validar que sea una imagen
+            if (!file.type.startsWith('image/')) {
+                showNotification('Por favor, selecciona un archivo de imagen válido.', 'error');
+                return;
+            }
+            
+            // Validar tamaño máximo (5MB antes de comprimir)
+            const maxSize = 5 * 1024 * 1024; // 5MB
+            if (file.size > maxSize) {
+                showNotification('La imagen es demasiado grande. Por favor, selecciona una imagen menor a 5MB.', 'error');
+                return;
+            }
+            
+            try {
+                showNotification('Comprimiendo imagen...', 'info');
+                
+                // Comprimir y convertir a base64
+                const base64 = await compressImageToBase64(file, 800, 800, 0.8);
+                
+                // Actualizar preview
+                avatarPreview.src = base64;
+                
+                // Actualizar el input de URL con la data URL
+                imageUrlInput.value = base64;
+                imageUrlInput.style.borderColor = '#10b981';
+                
+                showNotification('Imagen cargada correctamente', 'success');
+            } catch (error) {
+                console.error('Error al procesar la imagen:', error);
+                showNotification('Error al procesar la imagen. Por favor, intenta nuevamente.', 'error');
+            }
+        });
+    }
     
     // Actualizar preview cuando cambie la URL
     imageUrlInput.addEventListener('input', function() {
         const url = imageUrlInput.value.trim();
         if (url) {
-            avatarPreview.src = url;
-            avatarPreview.onerror = function() {
-                // Si falla la carga, usar imagen por defecto
-                avatarPreview.src = getDoctorAvatarUrl();
-            };
+            // Validar que sea una URL válida o data URL
+            try {
+                if (url.startsWith('data:')) {
+                    // Es una data URL (base64)
+                    avatarPreview.src = url;
+                    imageUrlInput.style.borderColor = '#10b981';
+                } else {
+                    // Es una URL normal
+                    new URL(url);
+                    avatarPreview.src = url;
+                    avatarPreview.onerror = function() {
+                        // Si falla la carga, usar imagen por defecto
+                        avatarPreview.src = getDoctorAvatarUrl();
+                        imageUrlInput.style.borderColor = '#ef4444';
+                        showNotification('No se pudo cargar la imagen. Verifica la URL.', 'error');
+                    };
+                    avatarPreview.onload = function() {
+                        imageUrlInput.style.borderColor = '#10b981';
+                    };
+                }
+            } catch (error) {
+                imageUrlInput.style.borderColor = '#ef4444';
+            }
         } else {
             avatarPreview.src = getDoctorAvatarUrl();
+            imageUrlInput.style.borderColor = '#e5e7eb';
         }
     });
 }
@@ -514,7 +713,6 @@ function setProfileFormEditable(editable) {
     }
 }
 
-// Cargar datos del doctor desde el backend
 async function loadDoctorData() {
     try {
         // Importar Api dinámicamente si está disponible
@@ -526,57 +724,23 @@ async function loadDoctorData() {
             return;
         }
         
-        console.log('=== CARGANDO DATOS DEL DOCTOR ===');
-        console.log('userId:', userId);
-        console.log('currentUser:', currentUser);
-        
-        // Intentar obtener doctor por UserId usando el endpoint específico
         let doctor = null;
         try {
-            console.log('Intentando obtener doctor por UserId desde DirectoryMS...');
-            console.log('userId:', userId);
             doctor = await Api.get(`v1/Doctor/User/${userId}`);
-            console.log('✓ Doctor obtenido desde DirectoryMS:', doctor);
-            if (doctor) {
-                console.log('Doctor data:', {
-                    doctorId: doctor.doctorId ?? doctor.DoctorId,
-                    firstName: doctor.firstName ?? doctor.FirstName,
-                    lastName: doctor.lastName ?? doctor.LastName,
-                    specialty: doctor.specialty ?? doctor.Specialty,
-                    biography: doctor.biography ?? doctor.Biography,
-                    licenseNumber: doctor.licenseNumber ?? doctor.LicenseNumber,
-                    userId: doctor.userId ?? doctor.UserId
-                });
-            }
         } catch (err) {
             console.error('Error al obtener doctor por UserId:', err);
-            console.error('Mensaje de error:', err.message);
-            // Si el endpoint no existe o falla, intentar obtener todos y buscar
             try {
-                console.log('Intentando obtener todos los doctores como fallback...');
                 const doctors = await Api.get('v1/Doctor');
-                console.log('Lista de doctores recibida:', doctors);
                 if (Array.isArray(doctors)) {
-                    doctor = doctors.find(d => {
-                        const dUserId = d.userId ?? d.UserId;
-                        return dUserId === userId;
-                    });
-                    if (doctor) {
-                        console.log('✓ Doctor encontrado en la lista:', doctor);
-                    }
+                    doctor = doctors.find(d => (d.userId ?? d.UserId) === userId);
                 }
             } catch (fallbackErr) {
                 console.error('Error en fallback al buscar doctor:', fallbackErr);
             }
         }
         
-        // Si aún no se encontró, intentar crearlo en DirectoryMS
         if (!doctor) {
-            console.warn('No se encontró doctor en DirectoryMS, intentando crearlo...');
             try {
-                // Crear el doctor en DirectoryMS con los datos del usuario
-                // Nota: Specialty es obligatoria, pero como no tenemos esa info aquí, usamos "Clinico" como default
-                // El usuario deberá actualizar su perfil después
                 const createDoctorRequest = {
                     UserId: parseInt(userId),
                     FirstName: currentUser?.firstName ?? currentUser?.FirstName ?? '',
@@ -611,26 +775,9 @@ async function loadDoctorData() {
             }
         }
 
-        // Normalizar el objeto doctor para asegurar que tenga tanto camelCase como PascalCase
         if (doctor) {
-            doctor.doctorId = doctor.doctorId ?? doctor.DoctorId;
-            doctor.DoctorId = doctor.DoctorId ?? doctor.doctorId;
-            doctor.firstName = doctor.firstName ?? doctor.FirstName;
-            doctor.FirstName = doctor.FirstName ?? doctor.firstName;
-            doctor.lastName = doctor.lastName ?? doctor.LastName;
-            doctor.LastName = doctor.LastName ?? doctor.lastName;
-            doctor.specialty = doctor.specialty ?? doctor.Specialty;
-            doctor.Specialty = doctor.Specialty ?? doctor.specialty;
-            doctor.biography = doctor.biography ?? doctor.Biography;
-            doctor.Biography = doctor.Biography ?? doctor.biography;
-            doctor.licenseNumber = doctor.licenseNumber ?? doctor.LicenseNumber;
-            doctor.LicenseNumber = doctor.LicenseNumber ?? doctor.licenseNumber;
-            doctor.userId = doctor.userId ?? doctor.UserId;
-            doctor.UserId = doctor.UserId ?? doctor.userId;
+            normalizeObject(doctor, ['doctorId', 'firstName', 'lastName', 'specialty', 'biography', 'licenseNumber', 'userId']);
         }
-        
-        console.log('Doctor final encontrado:', doctor);
-        console.log('doctorId normalizado:', doctor?.doctorId ?? doctor?.DoctorId);
         currentDoctorData = doctor;
         updateDoctorHeader(doctor);
         
@@ -640,18 +787,16 @@ async function loadDoctorData() {
             updateDoctorProfileSection(doctor);
         }
 
-        // Cargar datos adicionales del doctor (consultas, agenda, etc.)
-        await loadTodayConsultations();
+        const dateFilter = document.getElementById('consultation-date-filter');
+        const selectedDate = dateFilter?.value || null;
+        await loadTodayConsultations(selectedDate);
         await loadWeeklySchedule();
         await loadDoctorStats();
         await loadTodayFullHistory();
         
     } catch (error) {
         console.error('Error al cargar datos del doctor:', error);
-        console.error('Stack trace:', error.stack);
-        // Si hay error, actualizar header con datos del usuario actual
         updateDoctorHeader(null);
-        // También actualizar perfil con datos del usuario si está visible
         const profileSection = document.getElementById('doctorProfileSection');
         if (profileSection && !profileSection.classList.contains('hidden')) {
             updateDoctorProfileSection(null);
@@ -659,54 +804,69 @@ async function loadDoctorData() {
     }
 }
 
-// Cargar consultas de hoy desde SchedulingMS
-async function loadTodayConsultations() {
+async function loadTodayConsultations(selectedDate = null) {
     const consultationsList = document.getElementById('consultations-list');
     if (!consultationsList) return;
     
     try {
-        if (!currentDoctorData?.doctorId) {
-            console.warn('No hay doctorId disponible para cargar consultas');
+        const doctorId = getId(currentDoctorData, 'doctorId');
+        if (!doctorId) {
             consultationsList.innerHTML = '<p style="color: #6b7280; padding: 2rem; text-align: center;">No se pudo identificar al médico</p>';
             return;
         }
-
         const { ApiScheduling } = await import('./api.js');
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
+        let filterDate;
+        if (selectedDate) {
+            const [year, month, day] = selectedDate.split('-').map(Number);
+            filterDate = new Date(year, month - 1, day);
+        } else {
+            filterDate = new Date();
+        }
+        filterDate.setHours(0, 0, 0, 0);
+        const nextDay = new Date(filterDate);
+        nextDay.setDate(nextDay.getDate() + 1);
+        console.log('Buscando consultas para doctorId:', doctorId, 'desde', filterDate.toISOString(), 'hasta', nextDay.toISOString());
         
-        // Buscar turnos SCHEDULED, CONFIRMED e IN_PROGRESS para las consultas de hoy
-        const appointments = await ApiScheduling.get(`v1/Appointments?doctorId=${currentDoctorData.doctorId}&startTime=${today.toISOString()}&endTime=${tomorrow.toISOString()}`);
-        // Filtrar solo los que están programados o en curso (SCHEDULED, CONFIRMED o IN_PROGRESS)
-        const scheduledAppointments = appointments?.filter(a => {
-            const status = a.status || a.Status;
-            return status === 'SCHEDULED' || status === 'CONFIRMED' || status === 'IN_PROGRESS';
-        }) || [];
+        const appointments = await ApiScheduling.get(`v1/Appointments?doctorId=${doctorId}&startTime=${filterDate.toISOString()}&endTime=${nextDay.toISOString()}`);
+        
+        // Para el historial, mostrar todos los turnos (no solo los programados)
+        const allAppointments = Array.isArray(appointments) ? appointments : [];
+        
+        console.log('Consultas encontradas:', allAppointments.length);
         
         consultationsList.innerHTML = '';
         
-        if (scheduledAppointments && scheduledAppointments.length > 0) {
+        if (allAppointments && allAppointments.length > 0) {
             // Cargar información de pacientes desde DirectoryMS
             const { Api } = await import('./api.js');
-            for (const apt of scheduledAppointments) {
+            for (const apt of allAppointments) {
                 try {
                     const patientId = apt.patientId || apt.PatientId;
-                    const patient = await Api.get(`v1/Patient/${patientId}`);
-                    apt.patientName = `${patient.Name || patient.name || ''} ${patient.lastName || patient.LastName || ''}`.trim() || 'Paciente sin nombre';
+                    if (patientId) {
+                        const patient = await Api.get(`v1/Patient/${patientId}`);
+                        apt.patientName = `${patient.Name || patient.name || ''} ${patient.lastName || patient.LastName || ''}`.trim() || 'Paciente sin nombre';
+                    } else {
+                        apt.patientName = 'Paciente sin ID';
+                    }
                 } catch (err) {
+                    console.warn('Error al cargar paciente:', err);
                     apt.patientName = 'Paciente desconocido';
                 }
                 const consultationItem = createConsultationItemElement(apt);
                 consultationsList.appendChild(consultationItem);
             }
         } else {
-            consultationsList.innerHTML = '<p style="color: #6b7280; padding: 2rem; text-align: center;">No hay consultas programadas para hoy</p>';
+            const dateStr = filterDate.toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' });
+            consultationsList.innerHTML = `<p style="color: #6b7280; padding: 2rem; text-align: center;">No hay consultas para el ${dateStr}</p>`;
         }
         
     } catch (error) {
         console.error('Error al cargar consultas:', error);
+        console.error('Detalles del error:', {
+            message: error.message,
+            stack: error.stack,
+            currentDoctorData: currentDoctorData
+        });
         consultationsList.innerHTML = '<p style="color: #6b7280; padding: 2rem; text-align: center;">No se pudieron cargar las consultas del día</p>';
     }
     
@@ -715,13 +875,13 @@ async function loadTodayConsultations() {
     }, 100);
 }
 
-// Cargar agenda semanal desde SchedulingMS
 async function loadWeeklySchedule() {
     const weeklySchedule = document.getElementById('weekly-schedule');
     if (!weeklySchedule) return;
     
     try {
-        if (!currentDoctorData?.doctorId) {
+        const doctorId = getId(currentDoctorData, 'doctorId');
+        if (!doctorId) {
             console.warn('No hay doctorId disponible para cargar agenda');
             weeklySchedule.innerHTML = '<p style="color: #6b7280; padding: 2rem; text-align: center;">No se pudo identificar al médico</p>';
             return;
@@ -732,8 +892,7 @@ async function loadWeeklySchedule() {
         today.setHours(0, 0, 0, 0);
         const nextWeek = new Date(today);
         nextWeek.setDate(nextWeek.getDate() + 7);
-        
-        const appointments = await ApiScheduling.get(`v1/Appointments?doctorId=${currentDoctorData.doctorId}&startTime=${today.toISOString()}&endTime=${nextWeek.toISOString()}`);
+        const appointments = await ApiScheduling.get(`v1/Appointments?doctorId=${doctorId}&startTime=${today.toISOString()}&endTime=${nextWeek.toISOString()}`);
         
         weeklySchedule.innerHTML = '';
         
@@ -784,7 +943,6 @@ async function loadWeeklySchedule() {
         weeklySchedule.innerHTML = '<p style="color: #6b7280; padding: 2rem; text-align: center;">No se pudo cargar la agenda</p>';
     }
 }
-// Consultas históricas del día (todas)
 async function loadTodayFullHistory() {
     const container = document.getElementById('navbar-today-history');
     if (!container) return;
@@ -805,7 +963,7 @@ async function loadTodayFullHistory() {
 
         // 🔥 Cargar **todo** del día, no solo programados
         const appointments = await ApiScheduling.get(
-            `v1/Appointments?doctorId=${currentDoctorData.doctorId}&startTime=${today.toISOString()}&endTime=${tomorrow.toISOString()}`
+            `v1/Appointments?doctorId=${getId(currentDoctorData, 'doctorId')}&startTime=${today.toISOString()}&endTime=${tomorrow.toISOString()}`
         );
 
         if (!appointments || appointments.length === 0) {
@@ -844,10 +1002,10 @@ async function loadTodayFullHistory() {
         container.innerHTML = "<p>Error cargando historial.</p>";
     }
 }
-// Cargar estadísticas del doctor desde SchedulingMS
 async function loadDoctorStats() {
     try {
-        if (!currentDoctorData?.doctorId) {
+        const doctorId = getId(currentDoctorData, 'doctorId');
+        if (!doctorId) {
             console.warn('No hay doctorId disponible para cargar estadísticas');
             return;
         }
@@ -859,16 +1017,13 @@ async function loadDoctorStats() {
         tomorrow.setDate(tomorrow.getDate() + 1);
         const nextWeek = new Date(today);
         nextWeek.setDate(nextWeek.getDate() + 7);
-        
-        // Cargar turnos de hoy (SCHEDULED, CONFIRMED e IN_PROGRESS)
-        const todayAppointmentsResponse = await ApiScheduling.get(`v1/Appointments?doctorId=${currentDoctorData.doctorId}&startTime=${today.toISOString()}&endTime=${tomorrow.toISOString()}`);
+        const todayAppointmentsResponse = await ApiScheduling.get(`v1/Appointments?doctorId=${doctorId}&startTime=${today.toISOString()}&endTime=${tomorrow.toISOString()}`);
         const todayAppointments = todayAppointmentsResponse?.filter(a => {
-            const status = a.status || a.Status;
+            const status = getValue(a, 'status', 'Status');
             return status === 'SCHEDULED' || status === 'CONFIRMED' || status === 'IN_PROGRESS';
         }) || [];
         
-        // Cargar turnos de la semana
-        const weekAppointments = await ApiScheduling.get(`v1/Appointments?doctorId=${currentDoctorData.doctorId}&startTime=${today.toISOString()}&endTime=${nextWeek.toISOString()}`);
+        const weekAppointments = await ApiScheduling.get(`v1/Appointments?doctorId=${doctorId}&startTime=${today.toISOString()}&endTime=${nextWeek.toISOString()}`);
         
         // Actualizar tarjetas de resumen
         const patientsToday = document.getElementById('patients-today');
@@ -879,14 +1034,30 @@ async function loadDoctorStats() {
         if (patientsToday) {
             patientsToday.textContent = todayAppointments?.length || 0;
         }
-        if (weeklyAppointments) {
-            weeklyAppointments.textContent = weekAppointments?.length || 0;
+        const weekAppointmentsEl = document.getElementById('weekly-appointments');
+        if (weekAppointmentsEl) {
+            weekAppointmentsEl.textContent = weekAppointments?.length || 0;
         }
+        
+        const activeConsultations = todayAppointments.filter(a => getValue(a, 'status', 'Status') === 'IN_PROGRESS');
         if (activeConsultation) {
-            activeConsultation.textContent = '0'; // Por ahora, se actualiza cuando se atiende una consulta
+            activeConsultation.textContent = activeConsultations.length;
         }
-        if (prescriptionsToday) {
-            prescriptionsToday.textContent = '0'; // Por ahora, se actualiza cuando se emite una receta
+        
+        try {
+            const { ApiClinical } = await import('./api.js');
+            const prescriptionsResponse = await ApiClinical.get(`v1/Prescription/doctor/${doctorId}`).catch(() => []);
+            const todayPrescriptions = Array.isArray(prescriptionsResponse) ? prescriptionsResponse.filter(p => {
+                const prescDate = new Date(p.prescriptionDate || p.PrescriptionDate);
+                return prescDate >= today && prescDate < tomorrow;
+            }) : [];
+            if (prescriptionsToday) {
+                prescriptionsToday.textContent = todayPrescriptions.length;
+            }
+        } catch (err) {
+            if (prescriptionsToday) {
+                prescriptionsToday.textContent = '0';
+            }
         }
         
     } catch (error) {
@@ -895,7 +1066,6 @@ async function loadDoctorStats() {
     }
 }
 
-// Crear elemento de consulta
 function createConsultationItemElement(appointment) {
     const item = document.createElement('div');
     item.className = 'consultation-item';
@@ -906,6 +1076,7 @@ function createConsultationItemElement(appointment) {
     const reason = appointment.reason || appointment.Reason || 'Sin motivo';
     const patientName = appointment.patientName || 'Paciente Desconocido';
     const appointmentId = appointment.appointmentId || appointment.AppointmentId;
+    const patientId = appointment.patientId || appointment.PatientId;
     
     const statusClass = status === 'SCHEDULED' ? 'pending' :
                        status === 'CONFIRMED' ? 'waiting' : 
@@ -921,7 +1092,7 @@ function createConsultationItemElement(appointment) {
                       status === 'RESCHEDULED' ? 'Reprogramado' :
                       status === 'NO_SHOW' ? 'No asistió' : 'Pendiente';
     
-    const timeStr = `${startTime.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })} - ${endTime.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}`;
+    const timeStr = `${formatTime(startTime)} - ${formatTime(endTime)}`;
     
     item.innerHTML = `
         <div class="consultation-icon">
@@ -939,11 +1110,11 @@ function createConsultationItemElement(appointment) {
                     <i class="fas fa-check-circle"></i> Consulta realizada
                 </span>
             ` : (status === 'CONFIRMED' || status === 'SCHEDULED') ? `
-                <button class="btn-attend" data-appointment-id="${appointmentId}" data-patient-id="${appointment.patientId || appointment.PatientId}" data-patient-name="${patientName}">
+                <button class="btn-attend" data-appointment-id="${appointmentId}" data-patient-id="${patientId}" data-patient-name="${patientName}">
                     Atender
                 </button>
             ` : status === 'IN_PROGRESS' ? `
-                <button class="btn btn-success btn-sm complete-consultation-btn" data-appointment-id="${appointmentId}" data-patient-id="${appointment.patientId || appointment.PatientId}" data-patient-name="${patientName}">
+                <button class="btn btn-success btn-sm complete-consultation-btn" data-appointment-id="${appointmentId}" data-patient-id="${patientId}" data-patient-name="${patientName}">
                     <i class="fas fa-check"></i> Completar
                 </button>
                 <button class="btn btn-warning btn-sm no-show-consultation-btn" data-appointment-id="${appointmentId}" style="margin-left: 0.5rem;">
@@ -956,7 +1127,6 @@ function createConsultationItemElement(appointment) {
     return item;
 }
 
-// Crear elemento de agenda semanal
 function createScheduleItemElement(day) {
     const item = document.createElement('div');
     item.className = 'schedule-item';
@@ -973,8 +1143,7 @@ function createScheduleItemElement(day) {
     return item;
 }
 
-// Navegación del sidebar
-function initializeSidebarNavigation() {
+async function initializeSidebarNavigation() {
     const navItems = document.querySelectorAll('.sidebar-nav .nav-item');
     
     // Limpiar event listeners previos para evitar duplicados
@@ -1000,100 +1169,40 @@ function initializeSidebarNavigation() {
     });
 
     setActiveNav('inicio');
-    handleSectionNavigation('inicio');
+    await handleSectionNavigation('inicio');
 }
-// ============================
-// HISTORIA CLÍNICA DEL DOCTOR
-// ============================
-
-async function loadDoctorHistory() {
-    const listEl = document.getElementById("doctor-history-list");
-    if (!listEl) return;
-
-    listEl.innerHTML = `
-        <tr><td colspan="5" style="text-align:center; padding:20px;">
-            <i class="fas fa-spinner fa-spin"></i> Cargando historial...
-        </td></tr>
-    `;
-
-    try {
-        const doctorId = currentDoctor?.doctorId || currentDoctor?.DoctorId;
-
-        const { ApiClinical, Api } = await import("./api.js");
-
-        const now = new Date();
-        const from = new Date(now.getFullYear() - 3, 0, 1);
-
-        const history = await ApiClinical.get(
-            `v1/Encounter?doctorId=${doctorId}&from=${from.toISOString()}&to=${now.toISOString()}`
-        );
-
-        const encounters = Array.isArray(history) ? history : history?.value || [];
-
-        // Obtener info de pacientes
-        const patientIds = [...new Set(encounters.map(x => x.patientId || x.PatientId))];
-        const patientsMap = new Map();
-
-        for (const pid of patientIds) {
-            try {
-                const patient = await Api.get(`v1/Patient/${pid}`);
-                patientsMap.set(pid, `${patient.firstName} ${patient.lastName}`);
-            } catch {
-                patientsMap.set(pid, "Paciente desconocido");
-            }
-        }
-
-        // Renderizar filas
-        listEl.innerHTML = encounters.map(enc => {
-            const date = new Date(enc.date || enc.Date);
-            const patientId = enc.patientId || enc.PatientId;
-
-            return `
-                <tr>
-                    <td>${date.toLocaleDateString("es-AR")}</td>
-                    <td>${patientsMap.get(patientId)}</td>
-                    <td>${enc.diagnosis || enc.Diagnosis || "—"}</td>
-                    <td>${enc.treatment || enc.Treatment || "—"}</td>
-                    <td>
-                        <button class="btn-history-action" onclick="viewEncounterDetails(${enc.encounterId || enc.EncounterId})">
-                            <i class="fas fa-eye"></i> Ver
-                        </button>
-                    </td>
-                </tr>
-            `;
-        }).join("");
-
-    } catch (error) {
-        console.error("Error cargando historia clínica:", error);
-        listEl.innerHTML = `
-            <tr><td colspan="5" style="text-align:center; padding:20px;">
-                No se pudo cargar el historial
-            </td></tr>
-        `;
-    }
-}
-async function loadTodayConsultationsForNav() {
+async function loadTodayConsultationsForNav(selectedDate = null) {
     const list = document.getElementById('consultas-hoy-list');
     if (!list) return;
 
     try {
         const { ApiScheduling, Api } = await import('./api.js');
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        // Usar la fecha seleccionada o la fecha de hoy por defecto
+        // Crear la fecha usando componentes locales para evitar problemas de zona horaria
+        let filterDate;
+        if (selectedDate) {
+            // Parsear la fecha del input (formato YYYY-MM-DD) usando componentes locales
+            const [year, month, day] = selectedDate.split('-').map(Number);
+            filterDate = new Date(year, month - 1, day); // month es 0-indexed en JavaScript
+        } else {
+            filterDate = new Date();
+        }
+        filterDate.setHours(0, 0, 0, 0);
 
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
+        const nextDay = new Date(filterDate);
+        nextDay.setDate(nextDay.getDate() + 1);
 
         // pedir turnos
         const appointments = await ApiScheduling.get(
-            `v1/Appointments?doctorId=${currentDoctorData.doctorId}&startTime=${today.toISOString()}&endTime=${tomorrow.toISOString()}`
+            `v1/Appointments?doctorId=${getId(currentDoctorData, 'doctorId')}&startTime=${filterDate.toISOString()}&endTime=${nextDay.toISOString()}`
         );
 
         list.innerHTML = '';
 
         if (!appointments || appointments.length === 0) {
-            list.innerHTML = `<p style="padding:1rem; text-align:center;">No hay consultas hoy</p>`;
+            const dateStr = filterDate.toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' });
+            list.innerHTML = `<p style="padding:1rem; text-align:center;">No hay consultas para el ${dateStr}</p>`;
             return;
         }
 
@@ -1120,10 +1229,24 @@ async function loadTodayConsultationsView() {
     // Crear contenedor
     const section = document.createElement('div');
     section.className = 'dashboard-section consultas-section';
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
     section.innerHTML = `
         <div class="section-header">
-            <h3>Consultas de hoy</h3>
-            <p>Historial de turnos programados para hoy</p>
+            <div>
+                <h3>Historial de Consultas</h3>
+                <p>Filtra las consultas por fecha</p>
+            </div>
+            <div class="date-filter-container">
+                <label for="consultation-date-filter-view" style="margin-right: 0.5rem; color: #6b7280; font-size: 0.875rem;">
+                    <i class="fas fa-calendar-alt"></i> Fecha:
+                </label>
+                <input type="date" 
+                       id="consultation-date-filter-view" 
+                       class="date-filter-input"
+                       value="${todayStr}"
+                       style="padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.375rem; font-size: 0.875rem;">
+            </div>
         </div>
         <div id="consultas-hoy-list" class="consultations-list">
             <p style="padding:1rem;">Cargando...</p>
@@ -1131,12 +1254,775 @@ async function loadTodayConsultationsView() {
     `;
     dashboardContent.appendChild(section);
 
+    // Inicializar el filtro de fecha para esta vista
+    const dateFilterView = document.getElementById('consultation-date-filter-view');
+    if (dateFilterView) {
+        dateFilterView.addEventListener('change', async function(e) {
+            const selectedDate = e.target.value;
+            if (selectedDate) {
+                await loadTodayConsultationsForNav(selectedDate);
+            }
+        });
+    }
+
     // Llamar tu función original
-    await loadTodayConsultationsForNav();
+    await loadTodayConsultationsForNav(todayStr);
 }
-// ------------------------------
-// Buscador de historia clínica
-// ------------------------------
+
+async function loadClinicalHistoryView() {
+    const dashboardContent = document.querySelector('.dashboard-content');
+    if (!dashboardContent) return;
+
+    // Eliminar secciones anteriores
+    const existingHistory = dashboardContent.querySelectorAll('.clinical-history-section, .patient-profile-section');
+    existingHistory.forEach(section => section.remove());
+
+    // Crear sección de buscador de pacientes
+    const historySection = document.createElement('div');
+    historySection.className = 'dashboard-section clinical-history-section';
+    historySection.innerHTML = `
+        <div class="section-header">
+            <div>
+                <h3>Historia Clínica</h3>
+                <p>Busca y accede al historial médico de tus pacientes</p>
+            </div>
+        </div>
+        <div class="patient-search-container" style="margin-bottom: 2rem;">
+            <div class="search-box" style="position: relative; margin-bottom: 1rem;">
+                <i class="fas fa-search" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: #6b7280;"></i>
+                <input type="text" 
+                       id="patient-search-input" 
+                       class="patient-search-input"
+                       placeholder="Buscar paciente por nombre, apellido o DNI..."
+                       style="width: 100%; padding: 0.75rem 1rem 0.75rem 3rem; border: 1px solid #d1d5db; border-radius: 0.5rem; font-size: 1rem;">
+            </div>
+            <div id="patients-list" class="patients-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; margin-top: 1rem;">
+                <div style="grid-column: 1 / -1; text-align: center; padding: 2rem; color: #6b7280;">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+                    <p>Cargando pacientes...</p>
+                </div>
+            </div>
+        </div>
+    `;
+    dashboardContent.appendChild(historySection);
+
+    // Cargar todos los pacientes
+    await loadAllPatients();
+
+    // Inicializar el buscador
+    const searchInput = document.getElementById('patient-search-input');
+    if (searchInput) {
+        searchInput.addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase().trim();
+            filterPatients(searchTerm);
+        });
+    }
+}
+
+async function loadAllPatients() {
+    const patientsList = document.getElementById('patients-list');
+    if (!patientsList) return;
+
+    try {
+        const { Api } = await import('./api.js');
+        const patients = await Api.get('v1/Patient/all');
+        
+        allPatientsList = Array.isArray(patients) ? patients : [];
+        
+        renderPatientsList(allPatientsList);
+    } catch (error) {
+        console.error('Error al cargar pacientes:', error);
+        patientsList.innerHTML = `
+            <div style="grid-column: 1 / -1; text-align: center; padding: 2rem; color: #ef4444;">
+                <i class="fas fa-exclamation-circle" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+                <p>Error al cargar los pacientes. Por favor, intenta nuevamente.</p>
+            </div>
+        `;
+    }
+}
+
+function renderPatientsList(patients) {
+    const patientsList = document.getElementById('patients-list');
+    if (!patientsList) return;
+
+    if (!patients || patients.length === 0) {
+        patientsList.innerHTML = `
+            <div style="grid-column: 1 / -1; text-align: center; padding: 2rem; color: #6b7280;">
+                <i class="fas fa-user-slash" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+                <p>No hay pacientes registrados</p>
+            </div>
+        `;
+        return;
+    }
+
+    patientsList.innerHTML = patients.map(patient => {
+        const patientId = patient.patientId || patient.PatientId;
+        const name = patient.name || patient.Name || '';
+        const lastName = patient.lastName || patient.LastName || '';
+        const dni = patient.dni || patient.Dni || '';
+        const fullName = `${name} ${lastName}`.trim() || 'Sin nombre';
+        
+        return `
+            <div class="patient-card" 
+                 data-patient-id="${patientId}"
+                 style="background: white; border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 1.5rem; cursor: pointer; transition: all 0.2s;"
+                 onmouseover="this.style.boxShadow='0 4px 6px rgba(0,0,0,0.1)'; this.style.borderColor='#10b981';"
+                 onmouseout="this.style.boxShadow='none'; this.style.borderColor='#e5e7eb';">
+                <div style="display: flex; align-items: center; gap: 1rem;">
+                    <div style="width: 50px; height: 50px; border-radius: 50%; background: #10b981; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.5rem; font-weight: bold;">
+                        ${name.charAt(0).toUpperCase() || 'P'}
+                    </div>
+                    <div style="flex: 1;">
+                        <h4 style="margin: 0; color: #111827; font-size: 1.1rem; font-weight: 600;">${fullName}</h4>
+                        <p style="margin: 0.25rem 0 0 0; color: #6b7280; font-size: 0.875rem;">
+                            <i class="fas fa-id-card"></i> DNI: ${dni || 'N/A'}
+                        </p>
+                    </div>
+                    <i class="fas fa-chevron-right" style="color: #9ca3af;"></i>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    // Agregar event listeners a las tarjetas
+    const patientCards = patientsList.querySelectorAll('.patient-card');
+    patientCards.forEach(card => {
+        card.addEventListener('click', function() {
+            const patientId = this.getAttribute('data-patient-id');
+            if (patientId) {
+                viewPatientProfile(parseInt(patientId));
+            }
+        });
+    });
+}
+
+function filterPatients(searchTerm) {
+    if (!searchTerm) {
+        renderPatientsList(allPatientsList);
+        return;
+    }
+
+    const filtered = allPatientsList.filter(patient => {
+        const name = (patient.name || patient.Name || '').toLowerCase();
+        const lastName = (patient.lastName || patient.LastName || '').toLowerCase();
+        const dni = String(patient.dni || patient.Dni || '').toLowerCase();
+        const fullName = `${name} ${lastName}`.trim();
+        
+        return fullName.includes(searchTerm) || 
+               name.includes(searchTerm) || 
+               lastName.includes(searchTerm) || 
+               dni.includes(searchTerm);
+    });
+
+    renderPatientsList(filtered);
+}
+
+async function viewPatientProfile(patientId) {
+    const dashboardContent = document.querySelector('.dashboard-content');
+    if (!dashboardContent) return;
+
+    // Ocultar el buscador
+    const historySection = dashboardContent.querySelector('.clinical-history-section');
+    if (historySection) {
+        historySection.style.display = 'none';
+    }
+
+    // Eliminar perfil anterior si existe
+    const existingProfile = dashboardContent.querySelector('.patient-profile-section');
+    if (existingProfile) {
+        existingProfile.remove();
+    }
+
+    // Crear sección de perfil del paciente
+    const profileSection = document.createElement('div');
+    profileSection.className = 'dashboard-section patient-profile-section';
+    profileSection.innerHTML = `
+        <div class="section-header" style="margin-bottom: 2rem;">
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <button id="back-to-patients" class="btn btn-secondary" style="padding: 0.5rem 1rem;">
+                    <i class="fas fa-arrow-left"></i> Volver
+                </button>
+                <div>
+                    <h3 id="patient-profile-name">Cargando...</h3>
+                    <p>Perfil e historial médico del paciente</p>
+                </div>
+            </div>
+        </div>
+        <div id="patient-profile-content" style="display: grid; grid-template-columns: 1fr; gap: 2rem;">
+            <style>
+                @media (min-width: 768px) {
+                    #patient-profile-content {
+                        grid-template-columns: 1fr 2fr !important;
+                    }
+                }
+            </style>
+            <div class="patient-info-card" style="background: white; border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 1.5rem;">
+                <h4 style="margin-top: 0; color: #111827; border-bottom: 2px solid #10b981; padding-bottom: 0.5rem;">Información del Paciente</h4>
+                <div id="patient-info-details" style="margin-top: 1rem;">
+                    <p style="color: #6b7280;">Cargando información...</p>
+                </div>
+            </div>
+            <div class="patient-history-card" style="background: white; border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 1.5rem;">
+                <h4 style="margin-top: 0; color: #111827; border-bottom: 2px solid #10b981; padding-bottom: 0.5rem;">Historial Médico</h4>
+                <div id="patient-history-list" style="margin-top: 1rem;">
+                    <p style="color: #6b7280;">Cargando historial...</p>
+                </div>
+            </div>
+        </div>
+    `;
+    dashboardContent.appendChild(profileSection);
+
+    // Event listener para volver
+    const backButton = document.getElementById('back-to-patients');
+    if (backButton) {
+        backButton.addEventListener('click', function() {
+            profileSection.remove();
+            if (historySection) {
+                historySection.style.display = '';
+            }
+        });
+    }
+
+    // Cargar información del paciente
+    await loadPatientProfileData(patientId);
+    await loadPatientHistory(patientId);
+}
+
+async function loadPatientProfileData(patientId) {
+    try {
+        const { Api } = await import('./api.js');
+        const patient = await Api.get(`v1/Patient/${patientId}`);
+        
+        if (!patient) {
+            throw new Error('Paciente no encontrado');
+        }
+
+        const name = patient.name || patient.Name || '';
+        const lastName = patient.lastName || patient.LastName || '';
+        const fullName = `${name} ${lastName}`.trim() || 'Sin nombre';
+        const dni = patient.dni || patient.Dni || 'N/A';
+        const address = patient.adress || patient.Adress || 'No especificada';
+        const phone = patient.phone || patient.Phone || 'No especificado';
+        const dateOfBirth = patient.dateOfBirth || patient.DateOfBirth;
+        const healthPlan = patient.healthPlan || patient.HealthPlan || 'No especificado';
+        const membershipNumber = patient.membershipNumber || patient.MembershipNumber || 'N/A';
+
+        // Actualizar nombre en el header
+        const profileName = document.getElementById('patient-profile-name');
+        if (profileName) {
+            profileName.textContent = fullName;
+        }
+
+        // Calcular edad si hay fecha de nacimiento
+        let age = 'N/A';
+        if (dateOfBirth) {
+            try {
+                const birthDate = new Date(dateOfBirth);
+                const today = new Date();
+                age = today.getFullYear() - birthDate.getFullYear();
+                const monthDiff = today.getMonth() - birthDate.getMonth();
+                if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                    age--;
+                }
+            } catch (e) {
+                console.warn('Error calculando edad:', e);
+            }
+        }
+
+        // Renderizar información
+        const infoDetails = document.getElementById('patient-info-details');
+        if (infoDetails) {
+            infoDetails.innerHTML = `
+                <div style="margin-bottom: 1rem;">
+                    <strong style="color: #6b7280; display: block; margin-bottom: 0.25rem;">DNI:</strong>
+                    <span style="color: #111827;">${dni}</span>
+                </div>
+                <div style="margin-bottom: 1rem;">
+                    <strong style="color: #6b7280; display: block; margin-bottom: 0.25rem;">Edad:</strong>
+                    <span style="color: #111827;">${age} años</span>
+                </div>
+                <div style="margin-bottom: 1rem;">
+                    <strong style="color: #6b7280; display: block; margin-bottom: 0.25rem;">Dirección:</strong>
+                    <span style="color: #111827;">${address}</span>
+                </div>
+                <div style="margin-bottom: 1rem;">
+                    <strong style="color: #6b7280; display: block; margin-bottom: 0.25rem;">Teléfono:</strong>
+                    <span style="color: #111827;">${phone}</span>
+                </div>
+                <div style="margin-bottom: 1rem;">
+                    <strong style="color: #6b7280; display: block; margin-bottom: 0.25rem;">Obra Social:</strong>
+                    <span style="color: #111827;">${healthPlan}</span>
+                </div>
+                <div>
+                    <strong style="color: #6b7280; display: block; margin-bottom: 0.25rem;">Número de Afiliado:</strong>
+                    <span style="color: #111827;">${membershipNumber}</span>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error al cargar perfil del paciente:', error);
+        const infoDetails = document.getElementById('patient-info-details');
+        if (infoDetails) {
+            infoDetails.innerHTML = `
+                <p style="color: #ef4444;">Error al cargar la información del paciente</p>
+            `;
+        }
+    }
+}
+
+async function loadPatientHistory(patientId) {
+    const historyList = document.getElementById('patient-history-list');
+    if (!historyList) return;
+
+    try {
+        const { ApiClinical } = await import('./api.js');
+        
+        // Obtener encounters del paciente
+        const now = new Date();
+        const threeYearsAgo = new Date(now.getFullYear() - 3, 0, 1);
+        const encounters = await ApiClinical.get(
+            `v1/Encounter?patientId=${patientId}&from=${threeYearsAgo.toISOString()}&to=${now.toISOString()}`
+        );
+
+        const encountersList = Array.isArray(encounters) ? encounters : (encounters?.value || []);
+
+        if (!encountersList || encountersList.length === 0) {
+            historyList.innerHTML = `
+                <p style="color: #6b7280; text-align: center; padding: 2rem;">
+                    <i class="fas fa-file-medical" style="font-size: 2rem; margin-bottom: 1rem; display: block; color: #d1d5db;"></i>
+                    No hay historial médico registrado para este paciente
+                </p>
+            `;
+            return;
+        }
+
+        // Obtener información de los doctores
+        const { Api } = await import('./api.js');
+        const doctorsMap = new Map();
+        
+        for (const enc of encountersList) {
+            const doctorId = enc.doctorId || enc.DoctorId;
+            if (doctorId && !doctorsMap.has(doctorId)) {
+                try {
+                    const doctor = await Api.get(`v1/Doctor/${doctorId}`);
+                    if (doctor) {
+                        const doctorName = `${doctor.firstName || doctor.FirstName || ''} ${doctor.lastName || doctor.LastName || ''}`.trim();
+                        doctorsMap.set(doctorId, doctorName || `Dr. ID ${doctorId}`);
+                    }
+                } catch (err) {
+                    console.warn(`No se pudo cargar doctor ${doctorId}:`, err);
+                    doctorsMap.set(doctorId, `Dr. ID ${doctorId}`);
+                }
+            }
+        }
+
+        // Renderizar historial
+        historyList.innerHTML = encountersList.map(enc => {
+            const encounterId = enc.encounterId || enc.EncounterId;
+            const date = new Date(enc.date || enc.Date);
+            const doctorId = enc.doctorId || enc.DoctorId;
+            const doctorName = doctorsMap.get(doctorId) || 'Dr. Sin nombre';
+            const reasons = enc.reasons || enc.Reasons || 'Sin motivo especificado';
+            const assessment = enc.assessment || enc.Assessment || 'Sin diagnóstico';
+            const status = (enc.status || enc.Status || '').toLowerCase();
+
+            return `
+                <div class="history-item" style="border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 1.5rem; margin-bottom: 1rem; background: #f9fafb;">
+                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
+                        <div>
+                            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                                <i class="fas fa-calendar-alt" style="color: #10b981;"></i>
+                                <strong style="color: #111827;">${date.toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}</strong>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 0.5rem; color: #6b7280;">
+                                <i class="fas fa-user-md"></i>
+                                <span>${doctorName}</span>
+                            </div>
+                        </div>
+                        <span class="status-badge" style="padding: 0.25rem 0.75rem; border-radius: 0.25rem; font-size: 0.875rem; font-weight: 500; 
+                            background: ${status === 'completed' ? '#d1fae5' : status === 'signed' ? '#dbeafe' : '#fef3c7'}; 
+                            color: ${status === 'completed' ? '#065f46' : status === 'signed' ? '#1e40af' : '#92400e'};">
+                            ${status === 'completed' ? 'Completada' : status === 'signed' ? 'Firmada' : 'Pendiente'}
+                        </span>
+                    </div>
+                    <div style="margin-bottom: 0.75rem;">
+                        <strong style="color: #6b7280; display: block; margin-bottom: 0.25rem;">Motivo de consulta:</strong>
+                        <p style="color: #111827; margin: 0;">${reasons}</p>
+                    </div>
+                    <div>
+                        <strong style="color: #6b7280; display: block; margin-bottom: 0.25rem;">Diagnóstico:</strong>
+                        <p style="color: #111827; margin: 0;">${assessment}</p>
+                    </div>
+                    <button onclick="viewEncounterDetailsFromDoctor(${encounterId})" 
+                            class="btn btn-primary" 
+                            style="margin-top: 1rem; padding: 0.5rem 1rem; font-size: 0.875rem;">
+                        <i class="fas fa-eye"></i> Ver detalles completos
+                    </button>
+                </div>
+            `;
+        }).join('');
+
+    } catch (error) {
+        console.error('Error al cargar historial del paciente:', error);
+        historyList.innerHTML = `
+            <p style="color: #ef4444; text-align: center; padding: 2rem;">
+                <i class="fas fa-exclamation-circle" style="font-size: 2rem; margin-bottom: 1rem; display: block;"></i>
+                Error al cargar el historial médico
+            </p>
+        `;
+    }
+}
+
+async function loadPrescriptionsView() {
+    const dashboardContent = document.querySelector('.dashboard-content');
+    if (!dashboardContent) return;
+
+    // Ocultar dashboard principal
+    const mainDashboard = document.getElementById('mainDashboardSection');
+    if (mainDashboard) {
+        mainDashboard.style.display = 'none';
+    }
+
+    // Eliminar secciones anteriores
+    const existingPrescriptions = dashboardContent.querySelectorAll('.prescriptions-section');
+    existingPrescriptions.forEach(section => section.remove());
+
+    // Verificar que tenemos el doctorId
+    let doctorId = getId(currentDoctorData, 'doctorId');
+    if (!doctorId) {
+        console.warn('No hay doctorId disponible para cargar recetas');
+        await loadDoctorData();
+        doctorId = getId(currentDoctorData, 'doctorId');
+        if (!doctorId) {
+            const prescriptionsSection = document.createElement('div');
+            prescriptionsSection.className = 'dashboard-section prescriptions-section';
+            prescriptionsSection.innerHTML = `
+                <div class="section-header">
+                    <div>
+                        <h3>Recetas Médicas</h3>
+                        <p>Recetas emitidas por ti</p>
+                    </div>
+                </div>
+                <div style="text-align: center; padding: 2rem; color: #ef4444;">
+                    <i class="fas fa-exclamation-circle" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+                    <p>No se pudo obtener el ID del doctor. Por favor, recarga la página.</p>
+                </div>
+            `;
+            dashboardContent.appendChild(prescriptionsSection);
+            return;
+        }
+    }
+
+    // Crear sección de recetas
+    const prescriptionsSection = document.createElement('div');
+    prescriptionsSection.className = 'dashboard-section prescriptions-section';
+    prescriptionsSection.innerHTML = `
+        <div class="section-header">
+            <div>
+                <h3>Recetas Médicas</h3>
+                <p>Recetas emitidas por ti</p>
+            </div>
+        </div>
+        <div id="prescriptions-list" style="margin-top: 2rem;">
+            <div style="text-align: center; padding: 2rem; color: #6b7280;">
+                <i class="fas fa-spinner fa-spin" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+                <p>Cargando recetas...</p>
+            </div>
+        </div>
+    `;
+    dashboardContent.appendChild(prescriptionsSection);
+
+    // Cargar recetas
+    await loadDoctorPrescriptions(doctorId);
+}
+
+async function loadDoctorPrescriptions(doctorId) {
+    const prescriptionsList = document.getElementById('prescriptions-list');
+    if (!prescriptionsList) return;
+
+    try {
+        const { ApiClinical, Api } = await import('./api.js');
+        
+        // Obtener recetas del doctor
+        const prescriptions = await ApiClinical.get(`v1/Prescription/doctor/${doctorId}`);
+        
+        if (!prescriptions || prescriptions.length === 0) {
+            prescriptionsList.innerHTML = `
+                <div style="text-align: center; padding: 3rem; color: #6b7280;">
+                    <i class="fas fa-file-medical" style="font-size: 3rem; margin-bottom: 1rem; color: #d1d5db;"></i>
+                    <h4 style="margin-bottom: 0.5rem; color: #111827;">No hay recetas registradas</h4>
+                    <p>Cuando emitas recetas médicas, aparecerán aquí.</p>
+                </div>
+            `;
+            return;
+        }
+
+        // Obtener información de pacientes para cada receta
+        const prescriptionsWithPatients = await Promise.all(
+            prescriptions.map(async (prescription) => {
+                let patientName = 'Paciente desconocido';
+                let patientDni = '';
+                
+                try {
+                    const patientId = prescription.patientId || prescription.PatientId;
+                    if (patientId) {
+                        const patient = await Api.get(`v1/Patient/${patientId}`);
+                        const name = patient.name || patient.Name || '';
+                        const lastName = patient.lastName || patient.LastName || '';
+                        patientName = `${name} ${lastName}`.trim() || 'Paciente sin nombre';
+                        patientDni = patient.dni || patient.Dni || '';
+                    }
+                } catch (err) {
+                    console.warn('Error al cargar información del paciente:', err);
+                }
+
+                return {
+                    ...prescription,
+                    patientName,
+                    patientDni
+                };
+            })
+        );
+
+        // Renderizar recetas
+        renderPrescriptionsList(prescriptionsWithPatients);
+    } catch (error) {
+        console.error('Error al cargar recetas:', error);
+        prescriptionsList.innerHTML = `
+            <div style="text-align: center; padding: 2rem; color: #ef4444;">
+                <i class="fas fa-exclamation-circle" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+                <p>Error al cargar las recetas. Por favor, intenta nuevamente.</p>
+            </div>
+        `;
+    }
+}
+
+function renderPrescriptionsList(prescriptions) {
+    const prescriptionsList = document.getElementById('prescriptions-list');
+    if (!prescriptionsList) return;
+
+    prescriptionsList.innerHTML = prescriptions.map(prescription => {
+        const prescriptionId = prescription.prescriptionId || prescription.PrescriptionId;
+        const patientName = prescription.patientName || 'Paciente desconocido';
+        const patientDni = prescription.patientDni || '';
+        const diagnosis = prescription.diagnosis || prescription.Diagnosis || 'Sin diagnóstico';
+        const medication = prescription.medication || prescription.Medication || 'Sin medicamento';
+        const dosage = prescription.dosage || prescription.Dosage || 'Sin especificar';
+        const frequency = prescription.frequency || prescription.Frequency || 'Sin especificar';
+        const duration = prescription.duration || prescription.Duration || 'Sin especificar';
+        const additionalInstructions = prescription.additionalInstructions || prescription.AdditionalInstructions || '';
+        
+        // Formatear fecha
+        let prescriptionDate = 'Fecha no disponible';
+        try {
+            const date = new Date(prescription.prescriptionDate || prescription.PrescriptionDate);
+            if (!isNaN(date.getTime())) {
+                prescriptionDate = date.toLocaleDateString('es-AR', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                });
+            }
+        } catch (err) {
+            console.warn('Error al formatear fecha:', err);
+        }
+
+        return `
+            <div class="prescription-card" 
+                 style="background: white; border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 1.5rem; margin-bottom: 1rem; transition: all 0.2s;"
+                 onmouseover="this.style.boxShadow='0 4px 6px rgba(0,0,0,0.1)'; this.style.borderColor='#10b981';"
+                 onmouseout="this.style.boxShadow='none'; this.style.borderColor='#e5e7eb';">
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 2px solid #f3f4f6;">
+                    <div>
+                        <h4 style="margin: 0; color: #111827; font-size: 1.125rem;">
+                            <i class="fas fa-user" style="color: #10b981; margin-right: 0.5rem;"></i>
+                            ${patientName}
+                        </h4>
+                        ${patientDni ? `<p style="margin: 0.25rem 0 0 0; color: #6b7280; font-size: 0.875rem;">DNI: ${patientDni}</p>` : ''}
+                    </div>
+                    <div style="text-align: right;">
+                        <span style="display: inline-block; background: #10b981; color: white; padding: 0.25rem 0.75rem; border-radius: 0.375rem; font-size: 0.875rem; font-weight: 500;">
+                            <i class="fas fa-calendar" style="margin-right: 0.25rem;"></i>
+                            ${prescriptionDate}
+                        </span>
+                    </div>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                    <div>
+                        <label style="display: block; color: #6b7280; font-size: 0.875rem; font-weight: 500; margin-bottom: 0.25rem;">Diagnóstico</label>
+                        <p style="margin: 0; color: #111827; font-weight: 500;">${diagnosis}</p>
+                    </div>
+                    <div>
+                        <label style="display: block; color: #6b7280; font-size: 0.875rem; font-weight: 500; margin-bottom: 0.25rem;">Medicamento</label>
+                        <p style="margin: 0; color: #111827; font-weight: 500;">${medication}</p>
+                    </div>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1rem;">
+                    <div>
+                        <label style="display: block; color: #6b7280; font-size: 0.875rem; font-weight: 500; margin-bottom: 0.25rem;">Dosis</label>
+                        <p style="margin: 0; color: #111827;">${dosage}</p>
+                    </div>
+                    <div>
+                        <label style="display: block; color: #6b7280; font-size: 0.875rem; font-weight: 500; margin-bottom: 0.25rem;">Frecuencia</label>
+                        <p style="margin: 0; color: #111827;">${frequency}</p>
+                    </div>
+                    <div>
+                        <label style="display: block; color: #6b7280; font-size: 0.875rem; font-weight: 500; margin-bottom: 0.25rem;">Duración</label>
+                        <p style="margin: 0; color: #111827;">${duration}</p>
+                    </div>
+                </div>
+                
+                ${additionalInstructions ? `
+                    <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #f3f4f6;">
+                        <label style="display: block; color: #6b7280; font-size: 0.875rem; font-weight: 500; margin-bottom: 0.25rem;">Instrucciones adicionales</label>
+                        <p style="margin: 0; color: #111827;">${additionalInstructions}</p>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }).join('');
+}
+
+window.viewEncounterDetailsFromDoctor = async function(encounterId) {
+    try {
+        const { ApiClinical, Api } = await import('./api.js');
+        const encounter = await ApiClinical.get(`v1/Encounter/${encounterId}`);
+        
+        if (!encounter) {
+            showNotification('No se encontraron los detalles del encuentro', 'error');
+            return;
+        }
+
+        // Obtener información del paciente y doctor
+        const patientId = encounter.patientId || encounter.PatientId;
+        const doctorId = encounter.doctorId || encounter.DoctorId;
+        
+        let patientName = 'Paciente desconocido';
+        let doctorName = 'Dr. Sin nombre';
+        
+        try {
+            const { Api: ApiDir } = await import('./api.js');
+            if (patientId) {
+                const patient = await ApiDir.get(`v1/Patient/${patientId}`);
+                patientName = `${patient.name || patient.Name || ''} ${patient.lastName || patient.LastName || ''}`.trim() || 'Paciente sin nombre';
+            }
+            if (doctorId) {
+                const doctor = await ApiDir.get(`v1/Doctor/${doctorId}`);
+                doctorName = `${doctor.firstName || doctor.FirstName || ''} ${doctor.lastName || doctor.LastName || ''}`.trim() || `Dr. ID ${doctorId}`;
+            }
+        } catch (err) {
+            console.warn('Error al cargar información de paciente/doctor:', err);
+        }
+
+        const encounterDate = new Date(encounter.date || encounter.Date);
+        const status = encounter.status || encounter.Status || 'Pendiente';
+        const reasons = encounter.reasons || encounter.Reasons || 'Sin motivo especificado';
+        const subjective = encounter.subjective || encounter.Subjective || 'No especificado';
+        const objective = encounter.objetive || encounter.Objetive || encounter.objective || encounter.Objective || 'No especificado';
+        const assessment = encounter.assessment || encounter.Assessment || 'No especificado';
+        const plan = encounter.plan || encounter.Plan || 'No especificado';
+        const notes = encounter.notes || encounter.Notes || '';
+
+        // Crear modal
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+        modal.style.display = 'flex';
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
+                <div class="modal-header">
+                    <div>
+                        <h3>Detalles de la Consulta</h3>
+                        <p class="encounter-modal-subtitle">Consulta médica completa</p>
+                    </div>
+                    <button class="close-modal">&times;</button>
+                </div>
+                <div class="modal-body encounter-modal-body">
+                    <div class="encounter-info-section">
+                        <div class="encounter-info-header">
+                            <i class="fas fa-info-circle"></i>
+                            <h4>Información General</h4>
+                        </div>
+                        <div class="encounter-info-grid">
+                            <div class="encounter-info-item">
+                                <span class="info-label"><i class="fas fa-calendar"></i> Fecha:</span>
+                                <span class="info-value">${encounterDate.toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                            </div>
+                            <div class="encounter-info-item">
+                                <span class="info-label"><i class="fas fa-clock"></i> Hora:</span>
+                                <span class="info-value">${encounterDate.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</span>
+                            </div>
+                            <div class="encounter-info-item">
+                                <span class="info-label"><i class="fas fa-user"></i> Paciente:</span>
+                                <span class="info-value">${patientName}</span>
+                            </div>
+                            <div class="encounter-info-item">
+                                <span class="info-label"><i class="fas fa-user-md"></i> Médico:</span>
+                                <span class="info-value">${doctorName}</span>
+                            </div>
+                            <div class="encounter-info-item">
+                                <span class="info-label"><i class="fas fa-flag"></i> Estado:</span>
+                                <span class="info-value">${status}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="encounter-info-section" style="margin-top: 2rem;">
+                        <div class="encounter-info-header">
+                            <i class="fas fa-stethoscope"></i>
+                            <h4>Motivo de Consulta</h4>
+                        </div>
+                        <p style="color: #111827; margin-top: 1rem;">${reasons}</p>
+                    </div>
+                    <div class="encounter-info-section" style="margin-top: 2rem;">
+                        <div class="encounter-info-header">
+                            <i class="fas fa-file-medical"></i>
+                            <h4>Notas SOAP</h4>
+                        </div>
+                        <div style="margin-top: 1rem;">
+                            <div style="margin-bottom: 1rem;">
+                                <strong style="color: #6b7280; display: block; margin-bottom: 0.5rem;">Subjetivo (S):</strong>
+                                <p style="color: #111827; margin: 0; white-space: pre-wrap;">${subjective}</p>
+                            </div>
+                            <div style="margin-bottom: 1rem;">
+                                <strong style="color: #6b7280; display: block; margin-bottom: 0.5rem;">Objetivo (O):</strong>
+                                <p style="color: #111827; margin: 0; white-space: pre-wrap;">${objective}</p>
+                            </div>
+                            <div style="margin-bottom: 1rem;">
+                                <strong style="color: #6b7280; display: block; margin-bottom: 0.5rem;">Evaluación (A):</strong>
+                                <p style="color: #111827; margin: 0; white-space: pre-wrap;">${assessment}</p>
+                            </div>
+                            <div>
+                                <strong style="color: #6b7280; display: block; margin-bottom: 0.5rem;">Plan (P):</strong>
+                                <p style="color: #111827; margin: 0; white-space: pre-wrap;">${plan}</p>
+                            </div>
+                        </div>
+                    </div>
+                    ${notes ? `
+                    <div class="encounter-info-section" style="margin-top: 2rem;">
+                        <div class="encounter-info-header">
+                            <i class="fas fa-sticky-note"></i>
+                            <h4>Notas Adicionales</h4>
+                        </div>
+                        <p style="color: #111827; margin-top: 1rem; white-space: pre-wrap;">${notes}</p>
+                    </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+
+        // Cerrar modal
+        modal.querySelector('.close-modal')?.addEventListener('click', () => modal.remove());
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) modal.remove();
+        });
+    } catch (error) {
+        console.error('Error al cargar detalles del encounter:', error);
+        showNotification('Error al cargar los detalles de la consulta', 'error');
+    }
+}
+
 document.getElementById("historySearchInput")?.addEventListener("input", function () {
     const term = this.value.toLowerCase();
     const rows = document.querySelectorAll("#doctor-history-list tr");
@@ -1150,7 +2036,6 @@ async function handleSectionNavigation(section) {
     const dashboardContent = document.querySelector('.dashboard-content');
     if (!dashboardContent) return;
     
-    // Eliminar TODAS las secciones dinámicas anteriores primero (importante hacerlo primero)
     const existingAgendas = dashboardContent.querySelectorAll('.agenda-section');
     existingAgendas.forEach(agenda => {
         agenda.remove();
@@ -1166,8 +2051,13 @@ async function handleSectionNavigation(section) {
     
     });
     const existingConsultas = dashboardContent.querySelectorAll('.consultas-section');
-    existingConsultas.forEach(sec => sec.remove()); 
+    existingConsultas.forEach(sec => sec.remove());
     
+    const existingPrescriptions = dashboardContent.querySelectorAll('.prescriptions-section');
+    existingPrescriptions.forEach(sec => sec.remove());
+    
+    const existingHistory = dashboardContent.querySelectorAll('.clinical-history-section, .patient-profile-section');
+    existingHistory.forEach(sec => sec.remove());
 
     const mainDashboard = document.getElementById('mainDashboardSection');
     const profileSection = document.getElementById('doctorProfileSection');
@@ -1187,32 +2077,33 @@ async function handleSectionNavigation(section) {
             if (mainDashboard) {
                 mainDashboard.style.display = '';
             }
+            if (profileSection) {
+                profileSection.style.display = 'none';
+                profileSection.classList.add('hidden');
+            }
             break;
         case 'perfil':
+            if (mainDashboard) {
+                mainDashboard.style.display = 'none';
+            }
             if (profileSection) {
-                console.log('Navegando a perfil...');
-                // Cargar datos del doctor si no están disponibles
                 if (!currentDoctorData) {
-                    console.log('No hay datos del doctor, cargando...');
                     await loadDoctorData();
                 }
-                // Actualizar datos del perfil
                 updateDoctorProfileSection(currentDoctorData);
-                // Mostrar sección de perfil
                 profileSection.classList.remove('hidden');
                 profileSection.style.display = '';
                 setProfileFormEditable(false);
-                console.log('Perfil mostrado');
-            } else {
-                console.error('No se encontró la sección de perfil');
             }
             break;
         case 'consultas':
             loadTodayConsultationsView();
             break;
         case 'historia':
+            await loadClinicalHistoryView();
+            break;
         case 'recetas':
-            showComingSoonSectionDoctor(section);
+            await loadPrescriptionsView();
             break;
         case 'agenda':
             await loadAgendaView();
@@ -1235,7 +2126,6 @@ function setActiveNav(section) {
     });
 }
 
-// Botones de atención
 function initializeAttendButtons() {
     // Buscar botones tanto en la vista de inicio como en la vista de agenda
     const attendButtons = document.querySelectorAll('.btn-attend, .attend-appointment-btn');
@@ -1303,8 +2193,10 @@ function initializeAttendButtons() {
                 if (agendaSection) {
                     await renderAgendaContent(agendaSection);
                 }
-                // Recargar consultas de hoy
-                await loadTodayConsultations();
+                // Recargar consultas de hoy (usar fecha del filtro si está disponible)
+                const dateFilter = document.getElementById('consultation-date-filter') || document.getElementById('consultation-date-filter-view');
+                const selectedDate = dateFilter?.value || null;
+                await loadTodayConsultations(selectedDate);
             }
         });
     });
@@ -1328,7 +2220,6 @@ function initializeAttendButtons() {
     });
 }
 
-// Inicializar desplegables de estado
 function initializeStatusSelects() {
     const statusSelects = document.querySelectorAll('.appointment-status-select');
     
@@ -1362,7 +2253,6 @@ function initializeStatusSelects() {
     });
 }
 
-// Actualizar estado del appointment
 async function updateAppointmentStatus(appointmentId, newStatus, reason = null, silent = false) {
     try {
         const { ApiScheduling } = await import('./api.js');
@@ -1413,10 +2303,10 @@ async function updateAppointmentStatus(appointmentId, newStatus, reason = null, 
     }
 }
 
-// Atender consulta y crear encuentro en ClinicalMS
 async function attendConsultation(appointmentId, patientId, patientName) {
     try {
-        if (!currentDoctorData?.doctorId) {
+        const doctorId = getId(currentDoctorData, 'doctorId');
+        if (!doctorId) {
             showNotification('No se pudo identificar al médico', 'error');
             return;
         }
@@ -1432,7 +2322,7 @@ async function attendConsultation(appointmentId, patientId, patientName) {
         }
         
         // Actualizar contador de consultas activas
-        updateActiveConsultations(1);
+        updateCounter('active-consultation', 1);
         
         // Abrir modal para crear encuentro clínico
         openEncounterModal(appointmentId, patientId, patientName);
@@ -1443,7 +2333,6 @@ async function attendConsultation(appointmentId, patientId, patientName) {
     }
 }
 
-// Abrir modal para crear/editar encuentro clínico
 async function openEncounterModal(appointmentId, patientId, patientName) {
     const modal = document.createElement('div');
     modal.className = 'modal';
@@ -1492,6 +2381,9 @@ async function openEncounterModal(appointmentId, patientId, patientName) {
                     
                     <div class="form-actions">
                         <button type="button" class="btn btn-secondary" id="cancel-encounter">Cancelar</button>
+                        <button type="button" class="btn btn-info" id="prescribe-btn" data-patient-id="${patientId}" data-patient-name="${patientName}" style="background-color: #17a2b8; border-color: #17a2b8; color: white;">
+                            <i class="fas fa-prescription"></i> Recetar
+                        </button>
                         <button type="submit" class="btn btn-primary">Guardar Consulta</button>
                     </div>
                 </form>
@@ -1514,7 +2406,7 @@ async function openEncounterModal(appointmentId, patientId, patientName) {
                     button.disabled = false;
                 }
             }
-            updateActiveConsultations(-1);
+            updateCounter('active-consultation', -1);
         });
     });
     
@@ -1535,8 +2427,10 @@ async function openEncounterModal(appointmentId, patientId, patientName) {
                 console.warn('No se pudo actualizar el estado:', err);
             }
             
-            // Recargar vistas
-            await loadTodayConsultations();
+            // Recargar vistas (usar fecha del filtro si está disponible)
+            const dateFilter = document.getElementById('consultation-date-filter') || document.getElementById('consultation-date-filter-view');
+            const selectedDate = dateFilter?.value || null;
+            await loadTodayConsultations(selectedDate);
             const agendaSection = document.querySelector('.agenda-section');
             if (agendaSection && agendaSection.style.display !== 'none') {
                 await renderAgendaContent(agendaSection);
@@ -1547,6 +2441,30 @@ async function openEncounterModal(appointmentId, patientId, patientName) {
         console.warn('No se pudo verificar encounters existentes:', err);
         // Continuar con el proceso si hay error al verificar
     }
+    
+    // Agregar event listener al botón "Recetar" - usar setTimeout para asegurar que el DOM esté listo
+    setTimeout(() => {
+        const prescribeBtn = modal.querySelector('#prescribe-btn');
+        if (prescribeBtn) {
+            console.log('Botón Recetar encontrado, agregando event listener', { patientName, patientId });
+            
+            // Remover listeners previos si existen
+            const newBtn = prescribeBtn.cloneNode(true);
+            prescribeBtn.parentNode.replaceChild(newBtn, prescribeBtn);
+            
+            newBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                console.log('Botón Recetar presionado', { patientName, patientId });
+                
+                // Abrir el modal de receta con el nombre del paciente prellenado
+                openPrescriptionModal(patientName, patientId);
+            });
+        } else {
+            console.error('Botón Recetar no encontrado en el modal');
+        }
+    }, 100);
     
     let isSaving = false;
     modal.querySelector('#encounter-form').addEventListener('submit', async (e) => {
@@ -1575,20 +2493,18 @@ async function openEncounterModal(appointmentId, patientId, patientName) {
     });
 }
 
-// Guardar encuentro en ClinicalMS
 async function saveEncounter(modal, appointmentId, patientId) {
     try {
-        if (!currentDoctorData?.doctorId) {
+        const doctorId = getId(currentDoctorData, 'doctorId');
+        if (!doctorId) {
             showNotification('No se pudo identificar al médico', 'error');
             return;
         }
 
         const { ApiClinical } = await import('./api.js');
-        
-        // Preparar datos en el formato que espera el backend (PascalCase)
         const encounterData = {
             PatientId: parseInt(patientId),
-            DoctorId: currentDoctorData.doctorId,
+            DoctorId: doctorId,
             AppointmentId: parseInt(appointmentId),
             Reasons: document.getElementById('encounter-reasons').value.trim(),
             Subjective: document.getElementById('encounter-subjective').value.trim(),
@@ -1608,6 +2524,7 @@ async function saveEncounter(modal, appointmentId, patientId) {
         }
         
         console.log('Enviando encounter a ClinicalMS:', encounterData);
+        console.log('DoctorId que se está enviando:', encounterData.DoctorId);
         
         let encounter;
         try {
@@ -1649,7 +2566,7 @@ async function saveEncounter(modal, appointmentId, patientId) {
         }
         
         updateActiveConsultations(-1);
-        updatePrescriptionsToday(1);
+        updateCounter('prescriptions-today', 1);
         
     } catch (error) {
         console.error('Error al guardar encuentro:', error);
@@ -1657,34 +2574,21 @@ async function saveEncounter(modal, appointmentId, patientId) {
     }
 }
 
-function finishConsultation(patientName) {
-    // Esta función ya no se usa directamente, se maneja desde saveEncounter
-    console.log('finishConsultation obsoleto, usar saveEncounter');
-}
 
-// Acciones rápidas
 function initializeQuickActions() {
-    const issuePrescriptionBtn = document.getElementById('issue-prescription-btn');
-    const viewPatientsBtn = document.getElementById('view-patients-btn');
-    const manageScheduleBtn = document.getElementById('manage-schedule-btn');
+    const emitPrescriptionBtn = document.getElementById('emitPrescription');
+    const viewPatientsBtn = document.getElementById('viewPatients');
+    const manageScheduleBtn = document.getElementById('manageSchedule');
     
-    if (issuePrescriptionBtn) {
-        issuePrescriptionBtn.addEventListener('click', function() {
+    if (emitPrescriptionBtn) {
+        emitPrescriptionBtn.addEventListener('click', function() {
             openPrescriptionModal();
         });
     }
     
     if (viewPatientsBtn) {
         viewPatientsBtn.addEventListener('click', function() {
-            loadPatientsView();
-        });
-    }
-    
-    // También el botón del HTML
-    const viewPatientsBtn2 = document.getElementById('viewPatients');
-    if (viewPatientsBtn2) {
-        viewPatientsBtn2.addEventListener('click', function() {
-            loadPatientsView();
+            handleSectionNavigation('pacientes');
         });
     }
     
@@ -1693,17 +2597,8 @@ function initializeQuickActions() {
             openScheduleManager();
         });
     }
-    
-    // También el botón del HTML
-    const manageScheduleBtn2 = document.getElementById('manageSchedule');
-    if (manageScheduleBtn2) {
-        manageScheduleBtn2.addEventListener('click', function() {
-            openScheduleManager();
-        });
-    }
 }
 
-// Modal de receta
 function initializePrescriptionModal() {
     const modal = document.getElementById('prescription-modal');
     const closeModal = document.querySelector('.close-modal');
@@ -1730,79 +2625,334 @@ function initializePrescriptionModal() {
             }
         });
     }
+    
+    // Inicializar autocompletado de pacientes
+    initializePatientAutocomplete();
 }
 
-function openPrescriptionModal() {
-    const modal = document.getElementById('prescription-modal');
-    if (modal) {
-        modal.classList.remove('hidden');
-        // Limpiar formulario
-        document.getElementById('prescription-form').reset();
+// Inicializar autocompletado de pacientes
+function initializePatientAutocomplete() {
+    const patientInput = document.getElementById('prescription-patient-name');
+    const suggestionsContainer = document.getElementById('patient-suggestions');
+    
+    if (!patientInput || !suggestionsContainer) return;
+    
+    let searchTimeout = null;
+    let selectedPatientId = null;
+    
+    // Event listener para cuando el usuario escribe
+    patientInput.addEventListener('input', async function(e) {
+        const searchTerm = this.value.trim();
+        
+        // Limpiar timeout anterior
+        if (searchTimeout) {
+            clearTimeout(searchTimeout);
+        }
+        
+        // Si el campo está vacío, ocultar sugerencias
+        if (searchTerm.length < 2) {
+            suggestionsContainer.style.display = 'none';
+            selectedPatientId = null;
+            updatePatientIdField(null);
+            return;
+        }
+        
+        // Esperar 300ms antes de buscar (debounce)
+        searchTimeout = setTimeout(async () => {
+            try {
+                const patients = await searchPatients(searchTerm);
+                displayPatientSuggestions(patients, suggestionsContainer, patientInput);
+            } catch (error) {
+                console.error('Error al buscar pacientes:', error);
+                suggestionsContainer.style.display = 'none';
+            }
+        }, 300);
+    });
+    
+    // Ocultar sugerencias al hacer clic fuera
+    document.addEventListener('click', function(e) {
+        if (!patientInput.contains(e.target) && !suggestionsContainer.contains(e.target)) {
+            suggestionsContainer.style.display = 'none';
+        }
+    });
+    
+    // Manejar navegación con teclado
+    patientInput.addEventListener('keydown', function(e) {
+        const suggestions = suggestionsContainer.querySelectorAll('.patient-suggestion-item');
+        const activeSuggestion = suggestionsContainer.querySelector('.patient-suggestion-item.active');
+        
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (activeSuggestion) {
+                activeSuggestion.classList.remove('active');
+                const next = activeSuggestion.nextElementSibling;
+                if (next) {
+                    next.classList.add('active');
+                    next.scrollIntoView({ block: 'nearest' });
+                } else if (suggestions.length > 0) {
+                    suggestions[0].classList.add('active');
+                }
+            } else if (suggestions.length > 0) {
+                suggestions[0].classList.add('active');
+            }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (activeSuggestion) {
+                activeSuggestion.classList.remove('active');
+                const prev = activeSuggestion.previousElementSibling;
+                if (prev) {
+                    prev.classList.add('active');
+                    prev.scrollIntoView({ block: 'nearest' });
+                } else if (suggestions.length > 0) {
+                    suggestions[suggestions.length - 1].classList.add('active');
+                }
+            }
+        } else if (e.key === 'Enter' && activeSuggestion) {
+            e.preventDefault();
+            activeSuggestion.click();
+        } else if (e.key === 'Escape') {
+            suggestionsContainer.style.display = 'none';
+        }
+    });
+}
+
+// Buscar pacientes en la API
+async function searchPatients(searchTerm) {
+    try {
+        const { Api } = await import('./api.js');
+        
+        // Obtener todos los pacientes usando el endpoint correcto
+        const patients = await Api.get('v1/Patient/all');
+        
+        if (!Array.isArray(patients)) {
+            return [];
+        }
+        
+        // Filtrar pacientes que coincidan con el término de búsqueda
+        const searchLower = searchTerm.toLowerCase();
+        const filtered = patients.filter(patient => {
+            const firstName = (patient.name || patient.Name || '').toLowerCase();
+            const lastName = (patient.lastName || patient.LastName || '').toLowerCase();
+            const dni = (patient.dni || patient.Dni || '').toString();
+            const fullName = `${firstName} ${lastName}`.trim();
+            
+            return fullName.includes(searchLower) || 
+                   firstName.includes(searchLower) || 
+                   lastName.includes(searchLower) ||
+                   dni.includes(searchTerm);
+        });
+        
+        // Limitar a 10 resultados
+        return filtered.slice(0, 10);
+    } catch (error) {
+        console.error('Error al buscar pacientes:', error);
+        showNotification('Error al buscar pacientes. Intenta nuevamente.', 'error');
+        return [];
     }
+}
+
+// Mostrar sugerencias de pacientes
+function displayPatientSuggestions(patients, container, input) {
+    container.innerHTML = '';
+    
+    if (patients.length === 0) {
+        container.innerHTML = '<div style="padding: 1rem; text-align: center; color: #6b7280;">No se encontraron pacientes</div>';
+        container.style.display = 'block';
+        return;
+    }
+    
+    patients.forEach(patient => {
+        const patientId = patient.patientId || patient.PatientId;
+        const firstName = patient.name || patient.Name || '';
+        const lastName = patient.lastName || patient.LastName || '';
+        const dni = patient.dni || patient.Dni || 'N/A';
+        const fullName = `${firstName} ${lastName}`.trim() || 'Paciente sin nombre';
+        
+        const suggestionItem = document.createElement('div');
+        suggestionItem.className = 'patient-suggestion-item';
+        suggestionItem.style.cssText = 'padding: 0.75rem 1rem; cursor: pointer; border-bottom: 1px solid #f3f4f6; transition: background-color 0.2s;';
+        suggestionItem.innerHTML = `
+            <div style="font-weight: 600; color: #1f2937; margin-bottom: 0.25rem;">${fullName}</div>
+            <div style="font-size: 0.875rem; color: #6b7280;">DNI: ${dni}</div>
+        `;
+        
+        // Estilos hover
+        suggestionItem.addEventListener('mouseenter', function() {
+            this.style.backgroundColor = '#f3f4f6';
+            container.querySelectorAll('.patient-suggestion-item').forEach(item => {
+                if (item !== this) item.classList.remove('active');
+            });
+            this.classList.add('active');
+        });
+        
+        suggestionItem.addEventListener('mouseleave', function() {
+            this.style.backgroundColor = '';
+        });
+        
+        // Seleccionar paciente al hacer clic
+        suggestionItem.addEventListener('click', function() {
+            input.value = fullName;
+            updatePatientIdField(patientId);
+            container.style.display = 'none';
+        });
+        
+        container.appendChild(suggestionItem);
+    });
+    
+    container.style.display = 'block';
+}
+
+// Actualizar el campo oculto con el ID del paciente
+function updatePatientIdField(patientId) {
+    const form = document.getElementById('prescription-form');
+    if (!form) return;
+    
+    let hiddenInput = document.getElementById('prescription-patient-id');
+    if (!hiddenInput) {
+        hiddenInput = document.createElement('input');
+        hiddenInput.type = 'hidden';
+        hiddenInput.id = 'prescription-patient-id';
+        hiddenInput.name = 'patient-id';
+        form.appendChild(hiddenInput);
+    }
+    
+    hiddenInput.value = patientId || '';
+}
+
+function openPrescriptionModal(patientName = null, patientId = null) {
+    console.log('openPrescriptionModal llamado', { patientName, patientId });
+    
+    const modal = document.getElementById('prescription-modal');
+    if (!modal) {
+        console.error('Modal de receta no encontrado en el DOM');
+        showNotification('Error: No se pudo abrir el modal de receta', 'error');
+        return;
+    }
+    
+    // Mostrar el modal (usar tanto classList como style para asegurar que se muestre)
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+    modal.style.zIndex = '10000'; // Asegurar que esté por encima del modal de consulta
+    
+    const form = document.getElementById('prescription-form');
+    if (!form) {
+        console.error('Formulario de receta no encontrado');
+        return;
+    }
+    
+    // Limpiar formulario
+    form.reset();
+    
+    // Ocultar sugerencias
+    const suggestionsContainer = document.getElementById('patient-suggestions');
+    if (suggestionsContainer) {
+        suggestionsContainer.style.display = 'none';
+    }
+    
+    // Prellenar el nombre del paciente si se proporciona
+    if (patientName) {
+        const patientNameInput = document.getElementById('prescription-patient-name');
+        if (patientNameInput) {
+            patientNameInput.value = patientName;
+            console.log('Nombre del paciente prellenado:', patientName);
+        } else {
+            console.warn('Campo prescription-patient-name no encontrado');
+        }
+    }
+    
+    // Guardar patientId en un campo oculto si es necesario
+    if (patientId) {
+        updatePatientIdField(patientId);
+        console.log('PatientId guardado:', patientId);
+    } else {
+        updatePatientIdField(null);
+    }
+    
+    console.log('Modal de receta abierto correctamente');
 }
 
 function closePrescriptionModal() {
     const modal = document.getElementById('prescription-modal');
     if (modal) {
         modal.classList.add('hidden');
+        modal.style.display = 'none';
     }
 }
 
-function handlePrescriptionSubmit(e) {
+async function handlePrescriptionSubmit(e) {
     e.preventDefault();
     
     const formData = new FormData(e.target);
+    const patientId = formData.get('patient-id');
     const prescription = {
         patient: formData.get('patient-name'),
+        patientId: patientId ? parseInt(patientId) : null,
+        diagnosis: formData.get('diagnosis'),
         medication: formData.get('medication'),
         dosage: formData.get('dosage'),
-        instructions: formData.get('instructions')
+        frequency: formData.get('frequency'),
+        duration: formData.get('duration'),
+        additionalInstructions: formData.get('additional-instructions')
     };
     
-    // Simular emisión de receta
-    showNotification(`Receta emitida para ${prescription.patient}`);
+    // Validar campos requeridos
+    if (!prescription.patient || !prescription.diagnosis || !prescription.medication || 
+        !prescription.dosage || !prescription.frequency || !prescription.duration) {
+        showNotification('Por favor, complete todos los campos requeridos', 'error');
+        return;
+    }
     
-    // Actualizar contador
-    updatePrescriptionsToday(1);
+    if (!currentDoctorData?.doctorId) {
+        showNotification('No se pudo identificar al médico', 'error');
+        return;
+    }
     
-    // Cerrar modal
-    closePrescriptionModal();
+    if (!prescription.patientId) {
+        showNotification('No se pudo identificar al paciente', 'error');
+        return;
+    }
     
-    // Aquí se enviaría la receta al backend
-    console.log('Prescripción emitida:', prescription);
-}
-
-// Esta función ya no se usa, los datos se cargan desde el backend
-// Se mantiene por compatibilidad pero está deprecated
-function startDataSimulation() {
-    // Ya no se simula, se carga desde el backend
-    loadDoctorData();
-}
-
-function updateDashboardData() {
-    // Ya no se actualiza manualmente, se carga desde el backend
-    loadDoctorData();
-}
-
-function updateActiveConsultations(change) {
-    const activeConsultation = document.getElementById('active-consultation');
-    if (activeConsultation) {
-        const currentValue = parseInt(activeConsultation.textContent);
-        const newValue = Math.max(0, currentValue + change);
-        activeConsultation.textContent = newValue;
+    try {
+        const { ApiClinical } = await import('./api.js');
+        
+        const prescriptionData = {
+            PatientId: prescription.patientId,
+            DoctorId: currentDoctorData.doctorId,
+            EncounterId: null, // Se puede asociar después si es necesario
+            Diagnosis: prescription.diagnosis,
+            Medication: prescription.medication,
+            Dosage: prescription.dosage,
+            Frequency: prescription.frequency,
+            Duration: prescription.duration,
+            AdditionalInstructions: prescription.additionalInstructions || null
+        };
+        
+        const response = await ApiClinical.post('v1/Prescription', prescriptionData);
+        
+        showNotification(`Receta generada exitosamente para ${prescription.patient}`, 'success');
+        
+        // Actualizar contador
+        updateCounter('prescriptions-today', 1);
+        
+        // Cerrar modal
+        closePrescriptionModal();
+        
+        console.log('Prescripción guardada:', response);
+    } catch (error) {
+        console.error('Error al guardar la receta:', error);
+        showNotification(`Error al guardar la receta: ${error.message || 'Error desconocido'}`, 'error');
     }
 }
 
-function updatePrescriptionsToday(change) {
-    const prescriptionsToday = document.getElementById('prescriptions-today');
-    if (prescriptionsToday) {
-        const currentValue = parseInt(prescriptionsToday.textContent);
-        const newValue = Math.max(0, currentValue + change);
-        prescriptionsToday.textContent = newValue;
+
+function updateCounter(elementId, change) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        const currentValue = parseInt(element.textContent) || 0;
+        element.textContent = Math.max(0, currentValue + change);
     }
 }
 
-// Sistema de notificaciones
 function showNotification(message, type = 'info') {
     // Determinar el icono según el tipo
     let iconClass = 'fa-info-circle';
@@ -2128,10 +3278,12 @@ async function renderAgendaContent(agendaSection) {
     if (!agendaContent) return;
     
     try {
-        if (!currentDoctorData?.doctorId) {
+        let doctorId = getId(currentDoctorData, 'doctorId');
+        if (!doctorId) {
             // Intentar cargar datos del doctor si no están disponibles
             await loadDoctorData();
-            if (!currentDoctorData?.doctorId) {
+            doctorId = getId(currentDoctorData, 'doctorId');
+            if (!doctorId) {
                 agendaContent.innerHTML = `
                     <div style="padding: 2rem; text-align: center; color: #dc2626;">
                         <i class="fas fa-exclamation-triangle" style="font-size: 2rem; margin-bottom: 1rem;"></i>
@@ -2518,10 +3670,12 @@ async function renderPatientsContent(patientsSection) {
     if (!patientsContent) return;
     
     try {
-        if (!currentDoctorData?.doctorId) {
+        let doctorId = getId(currentDoctorData, 'doctorId');
+        if (!doctorId) {
             // Intentar cargar datos del doctor si no están disponibles
             await loadDoctorData();
-            if (!currentDoctorData?.doctorId) {
+            doctorId = getId(currentDoctorData, 'doctorId');
+            if (!doctorId) {
                 patientsContent.innerHTML = `
                     <div style="padding: 2rem; text-align: center; color: #dc2626;">
                         <i class="fas fa-exclamation-triangle" style="font-size: 2rem; margin-bottom: 1rem;"></i>
@@ -2754,119 +3908,6 @@ function calculateAge(dateOfBirth) {
     return age;
 }
 
-// Mostrar sección "En construcción" para otras secciones
-function showComingSoonSectionDoctor(section) {
-    const dashboardContent = document.querySelector('.dashboard-content');
-    if (!dashboardContent) return;
-    
-    // Eliminar sección coming soon anterior si existe
-    const existingComingSoon = dashboardContent.querySelector('.coming-soon-section');
-    if (existingComingSoon) {
-        existingComingSoon.remove();
-    }
-    
-    // Crear sección coming soon
-    const comingSoonSection = document.createElement('div');
-    comingSoonSection.className = 'coming-soon-section';
-    
-    const sectionConfig = {
-        'agenda': {
-            name: 'Agenda',
-            icon: 'fas fa-calendar-alt',
-            message: 'Esta funcionalidad se implementará a futuro',
-            description: 'Estamos trabajando para brindarte la mejor experiencia. Pronto podrás gestionar tu agenda médica completa desde esta sección.'
-        },
-        'consultas': {
-            name: 'Consultas de Hoy',
-            icon: 'fas fa-list',
-            message: 'Esta funcionalidad se implementará a futuro',
-            description: 'Estamos trabajando para brindarte la mejor experiencia. Pronto podrás gestionar tus consultas del día desde esta sección.'
-        },
-        'historia': {
-            name: 'Historia Clínica',
-            icon: 'fas fa-file-medical',
-            message: 'Esta funcionalidad se implementará a futuro',
-            description: 'Estamos trabajando para brindarte la mejor experiencia. Pronto podrás acceder al historial clínico completo de tus pacientes desde esta sección.'
-        },
-        'recetas': {
-            name: 'Recetas',
-            icon: 'fas fa-prescription',
-            message: 'Esta funcionalidad se implementará a futuro',
-            description: 'Estamos trabajando para brindarte la mejor experiencia. Pronto podrás gestionar y emitir recetas médicas desde esta sección.'
-        },
-        'configuracion': {
-            name: 'Configuración',
-            icon: 'fas fa-cog',
-            message: 'Esta funcionalidad se implementará a futuro',
-            description: 'Estamos trabajando para brindarte la mejor experiencia. Pronto podrás configurar tu perfil y preferencias desde esta sección.'
-        }
-    };
-    
-    const config = sectionConfig[section] || {
-        name: section,
-        icon: 'fas fa-clock',
-        message: 'Esta funcionalidad se implementará a futuro',
-        description: 'Estamos trabajando para brindarte la mejor experiencia. Esta funcionalidad estará disponible pronto.'
-    };
-    
-    comingSoonSection.innerHTML = `
-        <div class="dashboard-section">
-            <div class="coming-soon-content">
-                <div class="coming-soon-icon">
-                    <i class="${config.icon}"></i>
-                </div>
-                <h2>${config.name}</h2>
-                <p class="coming-soon-message">${config.message}</p>
-                <p class="coming-soon-description">${config.description}</p>
-                <button class="btn btn-primary" id="comingSoonBackBtn">
-                    <i class="fas fa-home"></i>
-                    Volver al Inicio
-                </button>
-            </div>
-        </div>
-    `;
-    
-    dashboardContent.appendChild(comingSoonSection);
-    
-    // Agregar event listener al botón
-    setTimeout(() => {
-        const backBtn = document.getElementById('comingSoonBackBtn');
-        if (backBtn) {
-            backBtn.addEventListener('click', function() {
-                const consultasBtn = document.querySelector('[data-section="consultas"]');
-                if (consultasBtn) {
-                    consultasBtn.click();
-                }
-            });
-        }
-    }, 100);
-}
-
-// Estas funciones ahora están implementadas arriba
-// Se mantienen por compatibilidad pero están deprecated
-function loadDoctorSchedule() {
-    // Ya implementada como loadWeeklySchedule()
-    loadWeeklySchedule();
-}
-
-function loadPatientHistory(patientId) {
-    // Placeholder para cargar historial del paciente
-    console.log('Cargando historial del paciente:', patientId);
-}
-
-function savePrescription(prescriptionData) {
-    // Placeholder para guardar receta en el backend
-    console.log('Guardando receta:', prescriptionData);
-}
-
-function updateConsultationStatus(consultationId, status) {
-    // Placeholder para actualizar estado de consulta
-    console.log('Actualizando estado de consulta:', consultationId, status);
-}
-
-// ========== GESTIÓN DE DISPONIBILIDAD ==========
-
-// Abrir modal de gestión de agenda
 async function openScheduleManager() {
     if (!currentDoctorData?.doctorId) {
         showNotification('No se pudo identificar al médico', 'error');
@@ -3332,9 +4373,7 @@ async function deleteAvailability(modal, availabilityId) {
 // Exportar funciones para uso global
 window.DoctorPanel = {
     attendConsultation,
-    finishConsultation,
     openPrescriptionModal,
     closePrescriptionModal,
-    showNotification,
-    updateDashboardData
+    showNotification
 };

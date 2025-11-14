@@ -100,23 +100,40 @@ async function ensureUserProfile() {
         const { getUserById } = await import('./apis/authms.js');
         const profile = await getUserById(userId, token);
 
+        console.log("=== ensureUserProfile - Cargando perfil ===");
+        console.log("profile completo:", profile);
+        console.log("profile.imageUrl:", profile?.imageUrl ?? profile?.ImageUrl);
+        console.log("currentUser.imageUrl antes:", currentUser?.imageUrl);
+
         if (profile) {
             const newImageUrl = profile.imageUrl ?? profile.ImageUrl ?? currentUser.imageUrl;
             
+            console.log("newImageUrl obtenido:", newImageUrl);
+            console.log("¿Es data URL?:", newImageUrl?.startsWith('data:'));
+            console.log("Longitud de newImageUrl:", newImageUrl?.length);
+            
             // Verificar si la nueva imagen es diferente de la por defecto
-            const isDefaultImage = newImageUrl === DEFAULT_AVATAR_URL || 
+            const isDefaultImage = !newImageUrl || 
+                                  newImageUrl === DEFAULT_AVATAR_URL || 
                                   (newImageUrl && newImageUrl.includes('icons.veryicon.com/png/o/internet--web/prejudice/user-128.png'));
             
-            // Si tenemos una imagen nueva que no es la por defecto, o si no teníamos imagen, actualizar
-            const shouldUpdateImage = (newImageUrl && !isDefaultImage && newImageUrl.trim() !== '') || 
-                                     !currentUser?.imageUrl ||
-                                     (currentUser?.imageUrl === DEFAULT_AVATAR_URL || 
-                                      (currentUser?.imageUrl && currentUser.imageUrl.includes('icons.veryicon.com/png/o/internet--web/prejudice/user-128.png')));
+            console.log("isDefaultImage:", isDefaultImage);
+            
+            // Siempre usar la imagen del backend si existe y no es la por defecto
+            // Esto asegura que las imágenes base64 se carguen correctamente
+            const finalImageUrl = (newImageUrl && !isDefaultImage && newImageUrl.trim() !== '') 
+                ? newImageUrl 
+                : (currentUser?.imageUrl && currentUser.imageUrl !== DEFAULT_AVATAR_URL && !currentUser.imageUrl.includes('icons.veryicon.com/png/o/internet--web/prejudice/user-128.png'))
+                    ? currentUser.imageUrl
+                    : DEFAULT_AVATAR_URL;
+
+            console.log("finalImageUrl seleccionado:", finalImageUrl ? (finalImageUrl.substring(0, 50) + '...') : 'null');
+            console.log("¿finalImageUrl es data URL?:", finalImageUrl?.startsWith('data:'));
 
             const normalizedProfile = {
                 firstName: profile.firstName ?? profile.FirstName ?? currentUser.firstName,
                 lastName: profile.lastName ?? profile.LastName ?? currentUser.lastName,
-                imageUrl: shouldUpdateImage && !isDefaultImage ? newImageUrl : (currentUser.imageUrl || DEFAULT_AVATAR_URL),
+                imageUrl: finalImageUrl,
                 email: profile.email ?? profile.Email ?? currentUser.email,
                 role: profile.role ?? profile.Role ?? currentUser.role,
             };
@@ -126,11 +143,21 @@ async function ensureUserProfile() {
                 ...normalizedProfile,
             };
 
+            console.log("currentUser después de normalizar:", currentUser);
+            console.log("currentUser.imageUrl después:", currentUser.imageUrl ? (currentUser.imageUrl.substring(0, 50) + '...') : 'null');
+
             state.user = currentUser;
             localStorage.setItem('user', JSON.stringify(currentUser));
 
-            // Actualizar el banner después de actualizar el perfil del usuario
-            updateWelcomeBanner();
+            // Actualizar todos los avatares en la UI con la nueva imagen
+            if (finalImageUrl && finalImageUrl !== DEFAULT_AVATAR_URL) {
+                console.log("Actualizando avatares con imagen personalizada");
+                updateAllAvatars(finalImageUrl);
+            } else {
+                console.log("Usando imagen por defecto");
+                // Actualizar el banner después de actualizar el perfil del usuario
+                updateWelcomeBanner();
+            }
         }
     } catch (error) {
         console.warn('No se pudo sincronizar el perfil del usuario', error);
@@ -155,11 +182,40 @@ function getUserAvatarUrl() {
         candidate !== 'null' && candidate !== 'undefined' &&
         candidate !== DEFAULT_AVATAR_URL &&
         !candidate.includes('icons.veryicon.com/png/o/internet--web/prejudice/user-128.png')) {
+        // Aceptar tanto URLs normales como data URLs (base64)
         return candidate;
     }
     
     // Si no hay imagen personalizada, usar la por defecto
     return DEFAULT_AVATAR_URL;
+}
+
+// Función para actualizar todos los avatares en la UI
+function updateAllAvatars(imageUrl) {
+    if (!imageUrl || typeof imageUrl !== 'string' || !imageUrl.trim()) {
+        return;
+    }
+    
+    // Actualizar avatar en el menú de usuario
+    const userMenuAvatar = document.getElementById('userMenuAvatar');
+    if (userMenuAvatar) {
+        userMenuAvatar.src = imageUrl;
+    }
+    
+    // Actualizar avatar en el preview del perfil
+    const profileAvatarPreview = document.getElementById('profile-avatar-preview');
+    if (profileAvatarPreview) {
+        profileAvatarPreview.src = imageUrl;
+    }
+    
+    // Actualizar avatar en la vista del perfil
+    const profileAvatarLarge = document.querySelector('.profile-avatar-large');
+    if (profileAvatarLarge) {
+        profileAvatarLarge.src = imageUrl;
+    }
+    
+    // Actualizar el banner de bienvenida
+    updateWelcomeBanner();
 }
 
 function getUserDisplayName() {
@@ -303,26 +359,106 @@ async function loadPatientData() {
 // Cargar estadísticas del paciente
 async function loadPatientStats() {
     try {
-        const { Api } = await import('./api.js');
-        const patientId = currentPatient?.patientId || currentUser?.userId || 1;
-        const stats = await Api.get(`v1/Patient/${patientId}/Stats`);
+        const patientId = currentPatient?.patientId;
+        if (!patientId) {
+            console.warn('No hay patientId disponible para cargar estadísticas');
+            return;
+        }
+
+        const { ApiScheduling, ApiClinical } = await import('./api.js');
+        const now = new Date();
         
-        if (stats) {
-            // Actualizar tarjetas de resumen
-            const confirmedAppointments = document.getElementById('confirmed-appointments');
-            const consultationsYear = document.getElementById('consultations-year');
-            const activePrescriptions = document.getElementById('active-prescriptions');
+        // 1. Cargar turnos confirmados (SCHEDULED o CONFIRMED que sean futuros)
+        let confirmedAppointmentsCount = 0;
+        try {
+            const appointmentsResponse = await ApiScheduling.get(`v1/Appointments?patientId=${patientId}`);
+            const appointments = Array.isArray(appointmentsResponse)
+                ? appointmentsResponse
+                : (appointmentsResponse?.value || appointmentsResponse || []);
             
-            if (confirmedAppointments && stats.confirmedAppointments !== undefined) {
-                confirmedAppointments.textContent = stats.confirmedAppointments;
-            }
-            if (consultationsYear && stats.consultationsYear !== undefined) {
-                consultationsYear.textContent = stats.consultationsYear;
-            }
-            if (activePrescriptions && stats.activePrescriptions !== undefined) {
-                activePrescriptions.textContent = stats.activePrescriptions;
+            // Filtrar turnos confirmados y programados que sean futuros
+            confirmedAppointmentsCount = appointments.filter(apt => {
+                const status = (apt.status || apt.Status || '').toUpperCase();
+                const startTime = new Date(apt.startTime || apt.StartTime);
+                return (status === 'SCHEDULED' || status === 'CONFIRMED' || status === 'IN_PROGRESS') 
+                    && startTime >= now;
+            }).length;
+        } catch (error) {
+            console.warn('Error al cargar appointments para estadísticas:', error);
+        }
+        
+        // 2. Cargar consultas del año actual (encounters)
+        let consultationsThisYear = 0;
+        try {
+            const startOfYear = new Date(now.getFullYear(), 0, 1);
+            const endOfYear = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
+            
+            // Usar el endpoint correcto de Encounter
+            const encountersResponse = await ApiClinical.get(`v1/Encounter?patientId=${patientId}&from=${startOfYear.toISOString()}&to=${endOfYear.toISOString()}`);
+            const encounters = Array.isArray(encountersResponse)
+                ? encountersResponse
+                : (encountersResponse?.value || encountersResponse || []);
+            
+            consultationsThisYear = encounters.length;
+        } catch (error) {
+            console.warn('Error al cargar encounters para estadísticas:', error);
+        }
+        
+        // 3. Cargar recetas/adjuntos disponibles (attachments o encounters con recetas)
+        let availablePrescriptions = 0;
+        try {
+            // Intentar obtener attachments del paciente usando el endpoint correcto
+            const attachmentsResponse = await ApiClinical.get(`v1/patients/${patientId}/attachments`);
+            const attachments = Array.isArray(attachmentsResponse)
+                ? attachmentsResponse
+                : (attachmentsResponse?.value || attachmentsResponse || []);
+            
+            // Contar todos los attachments (recetas, estudios, etc.)
+            availablePrescriptions = attachments.length;
+        } catch (error) {
+            console.warn('Error al cargar attachments para estadísticas:', error);
+            // Si no hay endpoint de attachments, usar encounters completados como alternativa
+            try {
+                // Obtener todos los encounters del paciente del último año
+                const oneYearAgo = new Date(now.getFullYear() - 1, 0, 1);
+                const encountersResponse = await ApiClinical.get(`v1/Encounter?patientId=${patientId}&from=${oneYearAgo.toISOString()}&to=${now.toISOString()}`);
+                const encounters = Array.isArray(encountersResponse)
+                    ? encountersResponse
+                    : (encountersResponse?.value || encountersResponse || []);
+                
+                // Contar encounters que tienen recetas o están completados
+                // Un encounter completado generalmente tiene información médica disponible
+                availablePrescriptions = encounters.filter(enc => {
+                    const status = (enc.status || enc.Status || '').toLowerCase();
+                    return status === 'completed' || status === 'completado' || 
+                           (enc.prescription || enc.Prescription) ||
+                           (enc.plan || enc.Plan); // Si tiene plan de tratamiento, cuenta como disponible
+                }).length;
+            } catch (err) {
+                console.warn('Error al cargar encounters alternativos:', err);
             }
         }
+        
+        // Actualizar tarjetas de resumen
+        const confirmedAppointmentsEl = document.getElementById('confirmed-appointments');
+        const consultationsYearEl = document.getElementById('consultations-year');
+        const activePrescriptionsEl = document.getElementById('active-prescriptions');
+        
+        if (confirmedAppointmentsEl) {
+            confirmedAppointmentsEl.textContent = confirmedAppointmentsCount;
+        }
+        if (consultationsYearEl) {
+            consultationsYearEl.textContent = consultationsThisYear;
+        }
+        if (activePrescriptionsEl) {
+            activePrescriptionsEl.textContent = availablePrescriptions;
+        }
+        
+        console.log('Estadísticas cargadas:', {
+            confirmedAppointments: confirmedAppointmentsCount,
+            consultationsThisYear: consultationsThisYear,
+            availablePrescriptions: availablePrescriptions
+        });
         
     } catch (error) {
         console.error('Error al cargar estadísticas:', error);
@@ -796,8 +932,14 @@ function createProfileEditHTML(patient) {
                         <div class="avatar-upload-info">
                             <h3 style="margin: 0 0 0.5rem 0; font-size: 1.1rem; color: #1f2937;">Foto de Perfil</h3>
                             <p style="margin: 0 0 1rem 0; color: #6b7280; font-size: 0.9rem;">Actualiza tu foto de perfil</p>
+                            <input type="file" id="profile-image-file" 
+                                   accept="image/*" 
+                                   style="display: none;">
+                            <button type="button" id="selectImageBtn" class="btn btn-secondary" style="width: 100%; margin-bottom: 0.5rem;">
+                                <i class="fas fa-image"></i> Seleccionar de galería
+                            </button>
                             <input type="url" id="profile-image-url" 
-                                   placeholder="https://ejemplo.com/tu-foto.jpg" 
+                                   placeholder="O ingresa una URL (https://ejemplo.com/tu-foto.jpg)" 
                                    class="url-input">
                         </div>
                     </div>
@@ -967,18 +1109,114 @@ function toggleProfileEdit(patientData) {
     }
 }
 
+// Función para comprimir imagen y convertir a base64
+async function compressImageToBase64(file, maxWidth = 800, maxHeight = 800, quality = 0.8) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = new Image();
+            img.onload = function() {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+                
+                // Calcular nuevas dimensiones manteniendo la proporción
+                if (width > height) {
+                    if (width > maxWidth) {
+                        height = (height * maxWidth) / width;
+                        width = maxWidth;
+                    }
+                } else {
+                    if (height > maxHeight) {
+                        width = (width * maxHeight) / height;
+                        height = maxHeight;
+                    }
+                }
+                
+                canvas.width = width;
+                canvas.height = height;
+                
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                
+                // Convertir a base64 con calidad ajustable
+                const base64 = canvas.toDataURL('image/jpeg', quality);
+                resolve(base64);
+            };
+            img.onerror = reject;
+            img.src = e.target.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+
 // Configurar editor de avatar para el perfil del paciente
 function setupProfileAvatarEditor(patientData) {
     const imageUrlInput = document.getElementById('profile-image-url');
+    const imageFileInput = document.getElementById('profile-image-file');
+    const selectImageBtn = document.getElementById('selectImageBtn');
     const avatarPreview = document.getElementById('profile-avatar-preview');
     const changeAvatarBtn = document.getElementById('changeAvatarBtn');
     
     if (!imageUrlInput || !avatarPreview) return;
     
+    // Abrir selector de archivos cuando se hace clic en el botón de seleccionar
+    if (selectImageBtn && imageFileInput) {
+        selectImageBtn.addEventListener('click', function() {
+            imageFileInput.click();
+        });
+    }
+    
+    // Manejar selección de archivo
+    if (imageFileInput) {
+        imageFileInput.addEventListener('change', async function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            // Validar que sea una imagen
+            if (!file.type.startsWith('image/')) {
+                showNotification('Por favor, selecciona un archivo de imagen válido.', 'error');
+                return;
+            }
+            
+            // Validar tamaño máximo (5MB antes de comprimir)
+            const maxSize = 5 * 1024 * 1024; // 5MB
+            if (file.size > maxSize) {
+                showNotification('La imagen es demasiado grande. Por favor, selecciona una imagen menor a 5MB.', 'error');
+                return;
+            }
+            
+            try {
+                showNotification('Comprimiendo imagen...', 'info');
+                
+                // Comprimir y convertir a base64
+                const base64 = await compressImageToBase64(file, 800, 800, 0.8);
+                
+                // Actualizar preview
+                avatarPreview.src = base64;
+                pendingPatientAvatar = base64;
+                
+                // Limpiar el input de URL si había algo
+                imageUrlInput.value = '';
+                imageUrlInput.style.borderColor = '#10b981';
+                
+                showNotification('Imagen cargada correctamente', 'success');
+            } catch (error) {
+                console.error('Error al procesar la imagen:', error);
+                showNotification('Error al procesar la imagen. Por favor, intenta nuevamente.', 'error');
+            }
+        });
+    }
+    
     // Focus en el input cuando se hace clic en el botón de cámara
     if (changeAvatarBtn) {
         changeAvatarBtn.addEventListener('click', function() {
-            imageUrlInput.focus();
+            if (imageFileInput) {
+                imageFileInput.click();
+            } else {
+                imageUrlInput.focus();
+            }
         });
     }
     
@@ -986,24 +1224,32 @@ function setupProfileAvatarEditor(patientData) {
     imageUrlInput.addEventListener('input', function() {
         const url = imageUrlInput.value.trim();
         if (url) {
-            // Validar que sea una URL válida
+            // Validar que sea una URL válida o data URL
             try {
-                new URL(url);
-                avatarPreview.src = url;
-                pendingPatientAvatar = url;
-                
-                avatarPreview.onerror = function() {
-                    // Si falla la carga, mostrar error visual
-                    avatarPreview.src = getUserAvatarUrl();
-                    imageUrlInput.style.borderColor = '#ef4444';
-                    showNotification('No se pudo cargar la imagen. Verifica la URL.', 'error');
-                    pendingPatientAvatar = null;
-                };
-                
-                avatarPreview.onload = function() {
-                    // Imagen cargada exitosamente
+                if (url.startsWith('data:')) {
+                    // Es una data URL (base64)
+                    avatarPreview.src = url;
+                    pendingPatientAvatar = url;
                     imageUrlInput.style.borderColor = '#10b981';
-                };
+                } else {
+                    // Es una URL normal
+                    new URL(url);
+                    avatarPreview.src = url;
+                    pendingPatientAvatar = url;
+                    
+                    avatarPreview.onerror = function() {
+                        // Si falla la carga, mostrar error visual
+                        avatarPreview.src = getUserAvatarUrl();
+                        imageUrlInput.style.borderColor = '#ef4444';
+                        showNotification('No se pudo cargar la imagen. Verifica la URL.', 'error');
+                        pendingPatientAvatar = null;
+                    };
+                    
+                    avatarPreview.onload = function() {
+                        // Imagen cargada exitosamente
+                        imageUrlInput.style.borderColor = '#10b981';
+                    };
+                }
             } catch (error) {
                 imageUrlInput.style.borderColor = '#ef4444';
             }
@@ -1019,8 +1265,9 @@ function setupProfileAvatarEditor(patientData) {
         const url = imageUrlInput.value.trim();
         if (url) {
             try {
-                new URL(url);
-                pendingPatientAvatar = url;
+                if (url.startsWith('data:') || new URL(url)) {
+                    pendingPatientAvatar = url;
+                }
             } catch (error) {
                 pendingPatientAvatar = null;
             }
@@ -1085,32 +1332,35 @@ async function saveProfileChanges(form, originalData) {
         // Si hay una nueva imagen de avatar, actualizar en AuthMS
         if (pendingPatientAvatar) {
             try {
-                const AUTHMS_BASE_URL = "http://localhost:8081/api/v1";
                 const userId = currentUser?.userId;
                 
                 if (userId) {
-                    const updateUserResponse = await fetch(`${AUTHMS_BASE_URL}/User/${userId}`, {
-                        method: "PUT",
-                        headers: {
-                            "Content-Type": "application/json",
-                            "Authorization": `Bearer ${localStorage.getItem('token') || ''}`,
-                        },
-                        body: JSON.stringify({
-                            FirstName: currentUser.firstName,
-                            LastName: currentUser.lastName,
-                            Email: currentUser.email,
-                            Dni: currentUser.dni,
-                            ImageUrl: pendingPatientAvatar,
-                        }),
-                    });
+                    // Usar el sistema de API centralizado que maneja tokens y múltiples puertos
+                    const { ApiAuth } = await import('./api.js');
                     
-                    if (updateUserResponse.ok) {
-                        console.log('✓ Imagen de usuario actualizada en AuthMS');
+                    console.log('Guardando imagen en AuthMS para usuario:', userId);
+                    console.log('Imagen (primeros 100 caracteres):', pendingPatientAvatar.substring(0, 100));
+                    
+                    try {
+                        // Usar el endpoint de Patient que no requiere el ID en la URL
+                        // Esto evita problemas de autorización
+                        const updatedUser = await ApiAuth.put(`v1/Patient/profile`, {
+                            FirstName: currentUser.firstName || '',
+                            LastName: currentUser.lastName || '',
+                            Email: currentUser.email || '',
+                            Dni: currentUser.dni || '',
+                            ImageUrl: pendingPatientAvatar,
+                        });
                         
-                        // Actualizar estado del usuario
+                        console.log('✓ Imagen de usuario actualizada en AuthMS');
+                        console.log('Usuario actualizado:', updatedUser);
+                        
+                        // Actualizar estado del usuario con la respuesta del servidor
+                        const serverImageUrl = updatedUser?.imageUrl ?? updatedUser?.ImageUrl ?? pendingPatientAvatar;
+                        
                         currentUser = {
                             ...currentUser,
-                            imageUrl: pendingPatientAvatar,
+                            imageUrl: serverImageUrl,
                         };
                         
                         const { state } = await import('./state.js');
@@ -1118,13 +1368,32 @@ async function saveProfileChanges(form, originalData) {
                         localStorage.setItem('user', JSON.stringify(currentUser));
                         
                         // Actualizar avatar en toda la UI
-                        updateAllAvatars(pendingPatientAvatar);
-                    } else {
-                        console.warn('⚠ No se pudo actualizar la imagen en AuthMS');
+                        updateAllAvatars(serverImageUrl);
+                        
+                        console.log('✓ Imagen guardada y actualizada en localStorage');
+                        showNotification('✓ Foto de perfil actualizada correctamente', 'success');
+                    } catch (apiError) {
+                        console.error('Error al actualizar imagen en AuthMS:', apiError);
+                        console.error('Detalles del error:', {
+                            message: apiError.message,
+                            status: apiError.status,
+                            statusText: apiError.statusText
+                        });
+                        
+                        // Si es un error 401, el token puede haber expirado
+                        if (apiError.status === 401) {
+                            showNotification('Tu sesión ha expirado. Por favor, inicia sesión nuevamente.', 'error');
+                        } else {
+                            showNotification('Error al guardar la imagen. Por favor, intenta nuevamente.', 'error');
+                        }
                     }
+                } else {
+                    console.error('No se pudo obtener el userId del usuario');
+                    showNotification('Error: No se pudo identificar al usuario.', 'error');
                 }
             } catch (error) {
-                console.error('Error al actualizar imagen en AuthMS:', error);
+                console.error('Error inesperado al actualizar imagen en AuthMS:', error);
+                showNotification('Error al guardar la imagen. Por favor, intenta nuevamente.', 'error');
             }
         }
         
@@ -1985,14 +2254,21 @@ window.viewEncounterDetails = async function(encounterId) {
         try {
             const doctorId = encounter.doctorId || encounter.DoctorId;
             if (doctorId) {
-                const doctor = await Api.get(`v1/Doctors/${doctorId}`);
+                const doctor = await Api.get(`v1/Doctor/${doctorId}`);
                 if (doctor) {
-                    doctorName = `${doctor.firstName || doctor.FirstName || ''} ${doctor.lastName || doctor.LastName || ''}`.trim() || `Dr. ID ${doctorId}`;
+                    const firstName = doctor.firstName || doctor.FirstName || '';
+                    const lastName = doctor.lastName || doctor.LastName || '';
+                    doctorName = firstName && lastName 
+                        ? `Dr. ${firstName} ${lastName}` 
+                        : (firstName || lastName 
+                            ? `Dr. ${firstName || lastName}` 
+                            : `Dr. ID ${doctorId}`);
                     doctorSpecialty = doctor.specialty || doctor.Specialty || '';
                 }
             }
         } catch (err) {
             console.warn('No se pudo obtener información del doctor:', err);
+            console.error('Error detallado al obtener doctor:', err);
         }
 
         const encounterDate = new Date(encounter.date || encounter.Date);
@@ -2484,7 +2760,13 @@ async function loadAvailableTimes(doctorId, selectedDate) {
             
             // Si el slot es un objeto con información local, usarlo
             if (typeof slot === 'object' && slot.isoString) {
-                option.value = slot.isoString;
+                // Guardar el objeto completo como JSON string para poder reconstruir la hora local
+                option.value = JSON.stringify({
+                    isoString: slot.isoString,
+                    localHours: slot.localHours,
+                    localMinutes: slot.localMinutes,
+                    date: slot.date ? slot.date.toISOString() : slot.isoString
+                });
                 const hours = String(slot.localHours).padStart(2, '0');
                 const minutes = String(slot.localMinutes).padStart(2, '0');
                 option.textContent = `${hours}:${minutes}`;
@@ -2995,15 +3277,56 @@ async function handleAppointmentSubmit(e) {
             return;
         }
 
-        // El timeValue ahora es un ISO string completo (viene de calculateAvailableTimeSlots)
-        // Este ISO string ya tiene la hora local correcta convertida a UTC
-        let startDateTime = new Date(timeValue);
+        // El timeValue puede ser un JSON string con información del slot o un ISO string
+        // Necesitamos construir la fecha/hora en hora local para que el backend la guarde correctamente
         
-        // Asegurar que estamos usando la hora local correcta
-        // El ISO string viene en UTC, pero representa la hora local que el usuario seleccionó
-        // Por ejemplo, si el usuario selecciona 10:00 local y está en UTC-3,
-        // el ISO string será 13:00 UTC, pero cuando se crea el Date y se muestra,
-        // JavaScript lo convierte de vuelta a 10:00 local
+        let slotData;
+        let startDateTime;
+        let localHours, localMinutes;
+        
+        // Intentar parsear como JSON (nuevo formato con información local)
+        try {
+            slotData = JSON.parse(timeValue);
+            if (slotData.localHours !== undefined && slotData.localMinutes !== undefined) {
+                // Usar la información local del slot
+                localHours = slotData.localHours;
+                localMinutes = slotData.localMinutes;
+                // Reconstruir la fecha desde la fecha seleccionada y la hora local
+                const [year, month, day] = date.split('-').map(Number);
+                startDateTime = new Date(year, month - 1, day, localHours, localMinutes, 0, 0);
+            } else {
+                // Fallback al ISO string
+                startDateTime = new Date(slotData.isoString || slotData.date || timeValue);
+                localHours = startDateTime.getHours();
+                localMinutes = startDateTime.getMinutes();
+            }
+        } catch (e) {
+            // Si no es JSON, es un ISO string directo (formato antiguo)
+            startDateTime = new Date(timeValue);
+            localHours = startDateTime.getHours();
+            localMinutes = startDateTime.getMinutes();
+        }
+        
+        // Obtener los componentes de fecha/hora en hora local
+        const year = startDateTime.getFullYear();
+        const month = String(startDateTime.getMonth() + 1).padStart(2, '0');
+        const day = String(startDateTime.getDate()).padStart(2, '0');
+        const hours = String(localHours).padStart(2, '0');
+        const minutes = String(localMinutes).padStart(2, '0');
+        const seconds = '00';
+        
+        // Obtener el offset de zona horaria local (en minutos)
+        // getTimezoneOffset devuelve el offset en minutos desde UTC (positivo para zonas al oeste de UTC)
+        // Para UTC-3, devuelve 180. Necesitamos invertirlo para el formato ISO
+        const timezoneOffsetMinutes = startDateTime.getTimezoneOffset();
+        const timezoneOffset = -timezoneOffsetMinutes; // Invertir para formato ISO
+        const offsetHours = Math.floor(Math.abs(timezoneOffset) / 60);
+        const offsetMinutes = Math.abs(timezoneOffset) % 60;
+        const offsetSign = timezoneOffset >= 0 ? '+' : '-';
+        const offsetString = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMinutes).padStart(2, '0')}`;
+        
+        // Construir string ISO con offset local: "2024-01-15T14:00:00-03:00"
+        const startTimeLocal = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${offsetString}`;
         
         // Obtener la duración del slot desde las disponibilidades
         const { ApiScheduling } = await import('./api.js');
@@ -3014,12 +3337,20 @@ async function handleAppointmentSubmit(e) {
             ? (availabilities[0].durationMinutes || availabilities[0].DurationMinutes || 30)
             : 30;
         
+        // Calcular fecha de fin en hora local
         const endDateTime = new Date(startDateTime.getTime() + durationMinutes * 60000);
+        const endYear = endDateTime.getFullYear();
+        const endMonth = String(endDateTime.getMonth() + 1).padStart(2, '0');
+        const endDay = String(endDateTime.getDate()).padStart(2, '0');
+        const endHours = String(endDateTime.getHours()).padStart(2, '0');
+        const endMinutes = String(endDateTime.getMinutes()).padStart(2, '0');
+        const endTimeLocal = `${endYear}-${endMonth}-${endDay}T${endHours}:${endMinutes}:${seconds}${offsetString}`;
+        
         const appointment = await ApiScheduling.post('v1/Appointments', {
             doctorId: doctorId,
             patientId: currentPatient.patientId,
-            startTime: startDateTime.toISOString(),
-            endTime: endDateTime.toISOString(),
+            startTime: startTimeLocal,
+            endTime: endTimeLocal,
             reason: reason
             // El status se establece automáticamente como SCHEDULED en el backend
         });

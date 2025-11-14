@@ -47,7 +47,7 @@
                 </a>
                 <a href="#" class="nav-item" data-section="consultas">
                     <i class="fas fa-list"></i>
-                    Consultas de hoy
+                    Historial de Consultas
                     
                 </a>
                 <a href="#" class="nav-item" data-section="historia">
@@ -119,12 +119,21 @@
 
             <!-- Dashboard Grid -->
             <div class="dashboard-grid">
-                <!-- Consultas de Hoy Section -->
+                <!-- Historial de Consultas Section -->
                 <div class="dashboard-section">
                     <div class="section-header">
                         <div>
-                            <h3>Consultas de Hoy</h3>
-                            <p>Agenda del día</p>
+                            <h3>Historial de Consultas</h3>
+                            <p>Filtra las consultas por fecha</p>
+                        </div>
+                        <div class="date-filter-container">
+                            <label for="consultation-date-filter" style="margin-right: 0.5rem; color: #6b7280; font-size: 0.875rem;">
+                                <i class="fas fa-calendar-alt"></i> Fecha:
+                            </label>
+                            <input type="date" 
+                                   id="consultation-date-filter" 
+                                   class="date-filter-input"
+                                   style="padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.375rem; font-size: 0.875rem;">
                         </div>
                     </div>
                     <div class="consultations-list" id="consultations-list">
@@ -208,15 +217,22 @@
                                          class="profile-avatar-main">
                                 </div>
                                 <div class="profile-avatar-controls">
-                                    <label class="profile-label" for="doctor-image-url-input">URL de imagen</label>
+                                    <label class="profile-label" for="doctor-image-file">Foto de perfil</label>
+                                    <input type="file" 
+                                           id="doctor-image-file" 
+                                           accept="image/*"
+                                           style="display: none;">
+                                    <button type="button" id="doctor-selectImageBtn" class="btn btn-secondary" style="width: 100%; margin-bottom: 0.5rem;">
+                                        <i class="fas fa-image"></i> Seleccionar de galería
+                                    </button>
                                     <input type="text" 
                                            id="doctor-image-url-input" 
                                            class="profile-input profile-input--url" 
-                                           placeholder="https://ejemplo.com/imagen.jpg"
+                                           placeholder="O ingresa una URL (https://ejemplo.com/imagen.jpg)"
                                            aria-describedby="avatar-url-help">
                                     <p class="profile-help-text" id="avatar-url-help">
                                         <i class="fas fa-info-circle"></i>
-                                        Ingresa la URL de tu imagen de perfil
+                                        Selecciona una imagen de tu galería o ingresa una URL
                                     </p>
                                 </div>
                             </div>
@@ -375,30 +391,45 @@
     <div id="prescription-modal" class="modal hidden">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>Emitir Receta Médica</h3>
+                <h3>Crear Receta Médica</h3>
                 <button class="close-modal">&times;</button>
             </div>
             <div class="modal-body">
                 <form id="prescription-form">
                     <div class="form-group">
-                        <label for="patient-name">Paciente:</label>
-                        <input type="text" id="patient-name" name="patient-name" required>
+                        <label for="prescription-patient-name">Paciente</label>
+                        <div style="position: relative;">
+                            <input type="text" id="prescription-patient-name" name="patient-name" placeholder="Buscar paciente por nombre..." required autocomplete="off">
+                            <div id="patient-suggestions" style="display: none; position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #d1d5db; border-radius: 0.375rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-height: 300px; overflow-y: auto; z-index: 1000; margin-top: 0.25rem;"></div>
+                        </div>
                     </div>
                     <div class="form-group">
-                        <label for="medication">Medicamento:</label>
-                        <input type="text" id="medication" name="medication" required>
+                        <label for="prescription-diagnosis">Diagnóstico</label>
+                        <input type="text" id="prescription-diagnosis" name="diagnosis" placeholder="Ingrese el diagnóstico" required>
                     </div>
                     <div class="form-group">
-                        <label for="dosage">Dosis:</label>
-                        <input type="text" id="dosage" name="dosage" required>
+                        <label for="prescription-medication">Medicamento</label>
+                        <input type="text" id="prescription-medication" name="medication" placeholder="Nombre del medicamento" required>
                     </div>
                     <div class="form-group">
-                        <label for="instructions">Instrucciones:</label>
-                        <textarea id="instructions" name="instructions" rows="4" required></textarea>
+                        <label for="prescription-dosage">Dosis</label>
+                        <input type="text" id="prescription-dosage" name="dosage" placeholder="Ej: 1 comprimido" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="prescription-frequency">Frecuencia</label>
+                        <input type="text" id="prescription-frequency" name="frequency" placeholder="Ej: cada 8 horas" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="prescription-duration">Duración del tratamiento</label>
+                        <input type="text" id="prescription-duration" name="duration" placeholder="Ej: 7 días" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="prescription-additional-instructions">Instrucciones adicionales</label>
+                        <input type="text" id="prescription-additional-instructions" name="additional-instructions" placeholder="Indicaciones especiales para el paciente">
                     </div>
                     <div class="form-actions">
                         <button type="button" class="btn btn-secondary" id="cancel-prescription">Cancelar</button>
-                        <button type="submit" class="btn btn-primary">Emitir Receta</button>
+                        <button type="submit" class="btn btn-primary">Generar Receta</button>
                     </div>
                 </form>
             </div>

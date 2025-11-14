@@ -127,13 +127,43 @@ form?.addEventListener("submit", async (event) => {
       "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier",
     ]);
 
-    const userInfo = {
+    // Cargar información completa del usuario desde el backend (incluyendo imagen)
+    let fullUserInfo = {
       email: resolvedEmail,
-      userId,
+      userId: parseInt(userId),
       role,
     };
 
-    setUser(userInfo, response.accessToken);
+    // Intentar cargar datos completos del usuario desde AuthMS
+    try {
+      const { getUserById } = await import("../apis/authms.js");
+      const userProfile = await getUserById(parseInt(userId), response.accessToken);
+      
+      console.log("=== PERFIL CARGADO DURANTE LOGIN ===");
+      console.log("userProfile completo:", userProfile);
+      console.log("userProfile.imageUrl:", userProfile?.imageUrl ?? userProfile?.ImageUrl);
+      
+      if (userProfile) {
+        const imageUrl = userProfile.imageUrl ?? userProfile.ImageUrl ?? null;
+        
+        fullUserInfo = {
+          ...fullUserInfo,
+          firstName: userProfile.firstName ?? userProfile.FirstName ?? "",
+          lastName: userProfile.lastName ?? userProfile.LastName ?? "",
+          imageUrl: imageUrl,
+          dni: userProfile.dni ?? userProfile.Dni ?? null,
+        };
+        
+        console.log("fullUserInfo después de cargar perfil:", fullUserInfo);
+        console.log("imageUrl guardado:", fullUserInfo.imageUrl);
+      }
+    } catch (error) {
+      console.warn("No se pudo cargar el perfil completo del usuario durante el login:", error);
+      console.error("Error detallado:", error);
+      // Continuar con la información básica si falla
+    }
+
+    setUser(fullUserInfo, response.accessToken);
 
     if (response.refreshToken) {
       localStorage.setItem("refreshToken", response.refreshToken);

@@ -95,6 +95,11 @@ document.addEventListener("DOMContentLoaded", () => {
                     payload.Adress = patientExtras.address.trim();
                 }
                 
+                // Teléfono
+                if (patientExtras?.phone && patientExtras.phone.trim()) {
+                    payload.Phone = patientExtras.phone.trim();
+                }
+                
                 // Fecha de nacimiento - siempre enviarla si está disponible
                 if (patientExtras?.birthDate) {
                     let birthDate = patientExtras.birthDate.trim();
@@ -185,6 +190,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     LicenseNumber: (doctorExtras?.licenseNumber && doctorExtras.licenseNumber.trim()) ? doctorExtras.licenseNumber.trim() : "PENDING",
                     Specialty: (doctorExtras?.specialty && doctorExtras.specialty.trim()) ? doctorExtras.specialty.trim() : null,
                     Biography: (doctorExtras?.biography && doctorExtras.biography.trim()) ? doctorExtras.biography.trim() : null,
+                    Phone: (doctorExtras?.phone && doctorExtras.phone.trim()) ? doctorExtras.phone.trim() : null,
                 };
 
                 console.log("=== ACTUALIZANDO DOCTOR ===");
@@ -243,6 +249,7 @@ document.addEventListener("DOMContentLoaded", () => {
             address: document.getElementById("patientDomicile")?.value.trim() || "",
             healthPlan: document.getElementById("patientHealthPlan")?.value.trim() || "",
             membershipNumber: document.getElementById("patientMembershipNumber")?.value.trim() || "",
+            phone: document.getElementById("phone")?.value.trim() || "",
         };
         
         // Log para debugging
@@ -256,6 +263,7 @@ document.addEventListener("DOMContentLoaded", () => {
             licenseNumber: document.getElementById("doctorLicense")?.value.trim() || "",
             specialty: document.getElementById("doctorSpecialty")?.value.trim() || "",
             biography: document.getElementById("doctorBiography")?.value.trim() || "",
+            phone: document.getElementById("phone")?.value.trim() || "",
         };
         
         // Log para debugging de especialidad
