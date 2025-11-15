@@ -20,6 +20,11 @@ const CLINICAL_API_BASE_URLS = [
   ...defaultHostnames.flatMap(host => [`http://${host}:8084/api`, `http://${host}:27124/api`, `http://${host}:5073/api`])
 ].filter((value, index, self) => self.indexOf(value) === index);
 
+// Hl7Gateway: puerto 5000 (API REST)
+const HL7GATEWAY_API_BASE_URLS = [
+  ...defaultHostnames.flatMap(host => [`http://${host}:5000/api`, `http://${host}:5000/api`])
+].filter((value, index, self) => self.indexOf(value) === index);
+
 let activeDirectoryBaseUrl = null;
 let activeAuthBaseUrl = null;
 let activeSchedulingBaseUrl = null;
@@ -55,15 +60,18 @@ async function apiRequestFirstOk(baseUrls, endpoint, method = "GET", body = null
       const response = await fetchWithTimeout(`${baseUrl}/${endpoint}`, options, 7000);
       if (!response.ok) {
         let message = "Error en la solicitud";
+        let errorDetails = null;
         try { 
           const errorData = await response.json(); 
-          message = errorData.message || errorData.title || message; 
+          message = errorData.message || errorData.title || message;
+          errorDetails = errorData.errors || errorData.details || null;
         } catch (_) {}
         
         // Crear error con código de estado para manejo específico
         const error = new Error(message);
         error.status = response.status;
         error.statusText = response.statusText;
+        error.details = errorDetails;
         throw error;
       }
       try { 
@@ -117,10 +125,50 @@ export const ApiClinical = {
   delete: (endpoint) => apiRequestFirstOk(CLINICAL_API_BASE_URLS, endpoint, "DELETE", null, "ClinicalMS"),
 };
 
+export const ApiHl7Gateway = {
+  // Hl7Gateway: API REST para descargar resúmenes
+  get: (endpoint) => apiRequestFirstOk(HL7GATEWAY_API_BASE_URLS, endpoint, "GET", null, "Hl7Gateway"),
+  post: (endpoint, data) => apiRequestFirstOk(HL7GATEWAY_API_BASE_URLS, endpoint, "POST", data, "Hl7Gateway"),
+  download: async (endpoint, filename) => {
+    const headers = buildHeaders();
+    // Para descargas, no usar JSON
+    delete headers["Content-Type"];
+    
+    for (const baseUrl of HL7GATEWAY_API_BASE_URLS) {
+      try {
+        const response = await fetchWithTimeout(`${baseUrl}/${endpoint}`, { 
+          method: "GET", 
+          headers 
+        }, 7000);
+        
+        if (!response.ok) {
+          throw new Error(`Error ${response.status}: ${response.statusText}`);
+        }
+        
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename || `resumen-hl7-${Date.now()}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        return;
+      } catch (err) {
+        // Intentar siguiente URL
+        continue;
+      }
+    }
+    throw new Error("No se pudo contactar al Hl7Gateway");
+  }
+};
+
 // Exponer global para scripts no módulo
 if (typeof window !== "undefined") {
   window.Api = Api;
   window.ApiAuth = ApiAuth;
   window.ApiScheduling = ApiScheduling;
   window.ApiClinical = ApiClinical;
+  window.ApiHl7Gateway = ApiHl7Gateway;
 }

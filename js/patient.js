@@ -1831,6 +1831,8 @@ async function loadRecentPatientHistory() {
         historyList.innerHTML = lastThree
             .map(enc => {
                 const encounterId = enc.encounterId || enc.EncounterId;
+                const appointmentId = enc.appointmentId || enc.AppointmentId || enc.appoinmentId || enc.AppoinmentId;
+                const patientId = enc.patientId || enc.PatientId;
                 const date = new Date(enc.date || enc.Date);
                 const doctorName = doctorsMap.get(enc.doctorId || enc.DoctorId) || 'Dr. Desconocido';
                 const reason = enc.reasons || enc.Reasons || enc.reason || "Control rutinario";
@@ -1857,7 +1859,7 @@ async function loadRecentPatientHistory() {
                                 <div class="history-compact-reason"><strong>Diagnóstico: </strong>${assessment}</div>
                             </div>
                         </div>
-                        <button class="btn-history-view" onclick="viewEncounterDetails(${encounterId})">
+                        <button class="btn-history-view" onclick="viewPrescription(${encounterId || 'null'}, ${appointmentId || 'null'}, ${patientId || 'null'})">
                             <i class="fas fa-file-prescription"></i>
                             Ver Receta
                         </button>
@@ -2432,10 +2434,662 @@ window.viewEncounterDetails = async function(encounterId) {
     }
 }
 
-// Función para descargar PDF (placeholder)
-window.downloadEncounterPDF = function(encounterId) {
-    showNotification('La funcionalidad de descarga de PDF estará disponible pronto', 'info');
+// Función para ver solo la receta (sin SOAP)
+window.viewPrescription = async function(encounterId, appointmentId, patientId) {
+    try {
+        const { ApiClinical, ApiHl7Gateway, Api } = await import('./api.js');
+        
+        // Normalizar los parámetros (convertir strings 'null' a null)
+        let finalEncounterId = encounterId && encounterId !== 'null' && encounterId !== null ? parseInt(encounterId) : null;
+        let finalAppointmentId = appointmentId && appointmentId !== 'null' && appointmentId !== null ? parseInt(appointmentId) : null;
+        let finalPatientId = patientId && patientId !== 'null' && patientId !== null ? parseInt(patientId) : null;
+        
+        // Si no tenemos appointmentId o patientId, intentar obtenerlos del encounter
+        if ((!finalAppointmentId || !finalPatientId) && finalEncounterId) {
+            try {
+                const encounter = await ApiClinical.get(`v1/Encounter/${finalEncounterId}`);
+                if (encounter) {
+                    if (!finalAppointmentId) {
+                        finalAppointmentId = encounter.appointmentId || encounter.AppointmentId || encounter.appoinmentId || encounter.AppoinmentId;
+                        if (finalAppointmentId) finalAppointmentId = parseInt(finalAppointmentId);
+                    }
+                    if (!finalPatientId) {
+                        finalPatientId = encounter.patientId || encounter.PatientId;
+                        if (finalPatientId) finalPatientId = parseInt(finalPatientId);
+                    }
+                }
+            } catch (err) {
+                console.warn('No se pudo obtener el encounter para obtener appointmentId/patientId:', err);
+            }
+        }
+        
+        // Si no tenemos encounterId pero tenemos appointmentId, intentar obtenerlo
+        if (!finalEncounterId && finalAppointmentId) {
+            try {
+                const encounters = await ApiClinical.get(`v1/Encounter?appointmentId=${finalAppointmentId}`);
+                if (encounters && Array.isArray(encounters) && encounters.length > 0) {
+                    finalEncounterId = encounters[0].encounterId || encounters[0].EncounterId;
+                    if (finalEncounterId) finalEncounterId = parseInt(finalEncounterId);
+                    console.log('EncounterId obtenido desde appointmentId:', finalEncounterId);
+                }
+            } catch (err) {
+                console.warn('No se pudo obtener el encounter desde appointmentId:', err);
+            }
+        }
+        
+        // Obtener la receta asociada al encounter
+        let prescriptions = [];
+        
+        // Primero intentar buscar por encounterId si está disponible
+        if (finalEncounterId) {
+            try {
+                console.log('Buscando receta para encounterId:', finalEncounterId);
+                const prescriptionsResponse = await ApiClinical.get(`v1/Prescription/encounter/${finalEncounterId}`);
+                prescriptions = Array.isArray(prescriptionsResponse) ? prescriptionsResponse : [prescriptionsResponse].filter(p => p);
+                console.log('Recetas encontradas por encounterId:', prescriptions.length, prescriptions);
+            } catch (error) {
+                console.warn('No se encontró receta para este encounter:', error);
+            }
+        }
+        
+        // Si no se encontró por encounterId, intentar buscar por appointmentId
+        if (prescriptions.length === 0 && finalAppointmentId) {
+            try {
+                console.log('Buscando receta por appointmentId:', finalAppointmentId);
+                // Primero obtener el encounter por appointmentId (si no lo tenemos ya)
+                if (!finalEncounterId) {
+                    const encounters = await ApiClinical.get(`v1/Encounter?appointmentId=${finalAppointmentId}`);
+                    if (encounters && Array.isArray(encounters) && encounters.length > 0) {
+                        const encounter = encounters[0];
+                        finalEncounterId = encounter.encounterId || encounter.EncounterId;
+                        if (finalEncounterId) finalEncounterId = parseInt(finalEncounterId);
+                        console.log('Encounter encontrado desde appointmentId:', finalEncounterId);
+                    }
+                }
+                
+                // Si ahora tenemos encounterId, buscar recetas
+                if (finalEncounterId) {
+                    console.log('Buscando receta para encounterId obtenido desde appointmentId:', finalEncounterId);
+                    const prescriptionsResponse = await ApiClinical.get(`v1/Prescription/encounter/${finalEncounterId}`);
+                    prescriptions = Array.isArray(prescriptionsResponse) ? prescriptionsResponse : [prescriptionsResponse].filter(p => p);
+                    console.log('Recetas encontradas por appointmentId->encounterId:', prescriptions.length);
+                }
+            } catch (error) {
+                console.warn('No se encontró receta por appointmentId:', error);
+            }
+        }
+        
+        // Si aún no se encontró, intentar buscar todas las recetas del paciente y filtrar por fecha/doctor
+        if (prescriptions.length === 0 && finalPatientId) {
+            try {
+                console.log('Buscando receta por patientId (último recurso):', finalPatientId);
+                const allPrescriptions = await ApiClinical.get(`v1/Prescription/patient/${finalPatientId}`);
+                if (allPrescriptions && Array.isArray(allPrescriptions)) {
+                    // Obtener el doctorId del encounter si está disponible
+                    let encounterDoctorId = null;
+                    if (finalEncounterId) {
+                        try {
+                            const encounter = await ApiClinical.get(`v1/Encounter/${finalEncounterId}`);
+                            encounterDoctorId = encounter?.doctorId || encounter?.DoctorId;
+                            if (encounterDoctorId) encounterDoctorId = parseInt(encounterDoctorId);
+                        } catch (err) {
+                            console.warn('No se pudo obtener el doctor del encounter:', err);
+                        }
+                    }
+                    
+                    // Filtrar por fecha reciente (últimas 7 días) y ordenar por fecha
+                    const recentPrescriptions = allPrescriptions
+                        .filter(p => {
+                            const prescDate = new Date(p.prescriptionDate || p.PrescriptionDate);
+                            const daysDiff = (Date.now() - prescDate.getTime()) / (1000 * 60 * 60 * 24);
+                            return daysDiff <= 7; // Solo últimas 7 días para ser más preciso
+                        })
+                        .sort((a, b) => {
+                            const dateA = new Date(a.prescriptionDate || a.PrescriptionDate);
+                            const dateB = new Date(b.prescriptionDate || b.PrescriptionDate);
+                            return dateB - dateA; // Más reciente primero
+                        });
+                    
+                    // Si hay un encounterDoctorId, priorizar recetas del mismo doctor
+                    if (encounterDoctorId && recentPrescriptions.length > 0) {
+                        const sameDoctorPrescriptions = recentPrescriptions.filter(p => 
+                            (p.doctorId || p.DoctorId) == encounterDoctorId
+                        );
+                        if (sameDoctorPrescriptions.length > 0) {
+                            prescriptions = [sameDoctorPrescriptions[0]];
+                            console.log('Receta encontrada por patientId + doctorId (más reciente):', prescriptions.length);
+                        } else if (recentPrescriptions.length > 0) {
+                            prescriptions = [recentPrescriptions[0]];
+                            console.log('Receta encontrada por patientId (más reciente, diferente doctor):', prescriptions.length);
+                        }
+                    } else if (recentPrescriptions.length > 0) {
+                        prescriptions = [recentPrescriptions[0]];
+                        console.log('Receta encontrada por patientId (más reciente):', prescriptions.length);
+                    }
+                }
+            } catch (error) {
+                console.warn('No se encontró receta por patientId:', error);
+            }
+        }
+        
+        // Depuración adicional
+        if (prescriptions.length === 0) {
+            console.warn('No se encontraron recetas con los siguientes parámetros:', {
+                originalEncounterId: encounterId,
+                finalEncounterId,
+                originalAppointmentId: appointmentId,
+                finalAppointmentId,
+                originalPatientId: patientId,
+                finalPatientId
+            });
+        } else {
+            console.log('✅ Recetas encontradas:', prescriptions.length);
+        }
+
+        // Obtener información del doctor si tenemos la receta
+        let doctorName = 'Dr. Sin nombre';
+        let doctorSpecialty = '';
+        if (prescriptions.length > 0) {
+            try {
+                const doctorId = prescriptions[0].doctorId || prescriptions[0].DoctorId;
+                if (doctorId) {
+                    const doctor = await Api.get(`v1/Doctor/${doctorId}`);
+                    if (doctor) {
+                        const firstName = doctor.firstName || doctor.FirstName || '';
+                        const lastName = doctor.lastName || doctor.LastName || '';
+                        doctorName = firstName && lastName 
+                            ? `Dr. ${firstName} ${lastName}` 
+                            : (firstName || lastName 
+                                ? `Dr. ${firstName || lastName}` 
+                                : `Dr. ID ${doctorId}`);
+                        doctorSpecialty = doctor.specialty || doctor.Specialty || '';
+                    }
+                }
+            } catch (err) {
+                console.warn('No se pudo obtener información del doctor:', err);
+            }
+        }
+
+        // Obtener información del paciente
+        let patientName = 'Paciente';
+        try {
+            if (finalPatientId) {
+                const patient = await Api.get(`v1/Patient/${finalPatientId}`);
+                if (patient) {
+                    const firstName = patient.firstName || patient.FirstName || patient.name || patient.Name || '';
+                    const lastName = patient.lastName || patient.LastName || '';
+                    patientName = firstName && lastName 
+                        ? `${firstName} ${lastName}` 
+                        : (firstName || lastName || 'Paciente');
+                }
+            }
+        } catch (err) {
+            console.warn('No se pudo obtener información del paciente:', err);
+        }
+
+        // Abrir modal de receta
+        const modal = document.getElementById('prescription-modal');
+        const content = document.getElementById('prescription-content');
+        
+        if (!modal || !content) {
+            showNotification('Error: No se encontró el modal de receta', 'error');
+            return;
+        }
+
+        if (prescriptions.length === 0) {
+            content.innerHTML = `
+                <div class="prescription-empty" style="text-align: center; padding: 2rem;">
+                    <i class="fas fa-file-medical" style="font-size: 3rem; color: #9ca3af; margin-bottom: 1rem;"></i>
+                    <p style="color: #6b7280; font-size: 1.1rem;">No hay receta médica disponible para esta consulta</p>
+                </div>
+            `;
+        } else {
+            // Mostrar todas las recetas (puede haber más de una)
+            const prescriptionsHTML = prescriptions.map((prescription, index) => {
+                const prescriptionDate = new Date(prescription.prescriptionDate || prescription.PrescriptionDate);
+                const diagnosis = prescription.diagnosis || prescription.Diagnosis || 'No especificado';
+                const medication = prescription.medication || prescription.Medication || 'No especificado';
+                const dosage = prescription.dosage || prescription.Dosage || 'No especificado';
+                const frequency = prescription.frequency || prescription.Frequency || 'No especificado';
+                const duration = prescription.duration || prescription.Duration || 'No especificado';
+                const instructions = prescription.additionalInstructions || prescription.AdditionalInstructions || '';
+
+                return `
+                    <div class="prescription-item" ${index > 0 ? 'style="margin-top: 2rem; padding-top: 2rem; border-top: 2px solid #e5e7eb;"' : ''}>
+                        <div class="prescription-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 2px solid #e5e7eb;">
+                            <h4 style="margin: 0; color: #111827;">Receta Médica ${prescriptions.length > 1 ? `#${index + 1}` : ''}</h4>
+                            <span class="prescription-date" style="color: #6b7280; font-size: 0.9rem;">
+                                <i class="fas fa-calendar"></i>
+                                ${formatDate(prescriptionDate)}
+                            </span>
+                        </div>
+                        
+                        <div class="prescription-info" style="margin-bottom: 1.5rem;">
+                            <div class="prescription-field" style="margin-bottom: 0.75rem;">
+                                <label style="font-weight: 600; color: #374151; display: inline-block; min-width: 120px;"><i class="fas fa-user-md"></i> Médico:</label>
+                                <span style="color: #111827;">${doctorName}${doctorSpecialty ? ` - ${doctorSpecialty}` : ''}</span>
+                            </div>
+                            <div class="prescription-field" style="margin-bottom: 0.75rem;">
+                                <label style="font-weight: 600; color: #374151; display: inline-block; min-width: 120px;"><i class="fas fa-user"></i> Paciente:</label>
+                                <span style="color: #111827;">${patientName}</span>
+                            </div>
+                        </div>
+
+                        <div class="prescription-details" style="background: #f9fafb; padding: 1.5rem; border-radius: 8px;">
+                            <div class="prescription-field" style="margin-bottom: 1rem;">
+                                <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 0.5rem;"><i class="fas fa-diagnoses"></i> Diagnóstico:</label>
+                                <span style="color: #111827; display: block;">${diagnosis}</span>
+                            </div>
+                            <div class="prescription-field" style="margin-bottom: 1rem;">
+                                <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 0.5rem;"><i class="fas fa-pills"></i> Medicamento:</label>
+                                <span style="color: #111827; font-size: 1.1rem; font-weight: 600; display: block;">${medication}</span>
+                            </div>
+                            <div class="prescription-field" style="margin-bottom: 1rem;">
+                                <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 0.5rem;"><i class="fas fa-syringe"></i> Dosis:</label>
+                                <span style="color: #111827; display: block;">${dosage}</span>
+                            </div>
+                            <div class="prescription-field" style="margin-bottom: 1rem;">
+                                <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 0.5rem;"><i class="fas fa-clock"></i> Frecuencia:</label>
+                                <span style="color: #111827; display: block;">${frequency}</span>
+                            </div>
+                            <div class="prescription-field" style="margin-bottom: 1rem;">
+                                <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 0.5rem;"><i class="fas fa-calendar-check"></i> Duración:</label>
+                                <span style="color: #111827; display: block;">${duration}</span>
+                            </div>
+                            ${instructions ? `
+                            <div class="prescription-field" style="margin-bottom: 1rem;">
+                                <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 0.5rem;"><i class="fas fa-info-circle"></i> Instrucciones adicionales:</label>
+                                <span style="color: #111827; display: block; white-space: pre-wrap;">${instructions}</span>
+                            </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            content.innerHTML = prescriptionsHTML;
+        }
+
+        // Configurar botones del modal
+        const formActions = document.querySelector('#prescription-modal .form-actions');
+        if (!formActions) {
+            console.error('No se encontró el contenedor de botones del modal');
+            return;
+        }
+
+        // Obtener o crear botones
+        let downloadPrescriptionBtn = document.getElementById('download-prescription');
+        let downloadHl7Btn = document.getElementById('download-hl7-summary');
+        const closePrescriptionBtn = document.getElementById('close-prescription');
+
+        // Configurar botón de descarga PDF
+        if (downloadPrescriptionBtn) {
+            const newDownloadPrescriptionBtn = downloadPrescriptionBtn.cloneNode(true);
+            downloadPrescriptionBtn.parentNode.replaceChild(newDownloadPrescriptionBtn, downloadPrescriptionBtn);
+            downloadPrescriptionBtn = newDownloadPrescriptionBtn; // Actualizar referencia
+            downloadPrescriptionBtn.onclick = () => {
+                downloadPrescriptionPDF(prescriptions, doctorName, doctorSpecialty, patientName);
+            };
+        }
+
+        // Agregar o actualizar botón de descarga HL7
+        if (!downloadHl7Btn) {
+            // Crear botón si no existe
+            downloadHl7Btn = document.createElement('button');
+            downloadHl7Btn.className = 'btn btn-success';
+            downloadHl7Btn.id = 'download-hl7-summary';
+            downloadHl7Btn.style.cssText = 'background-color: #28a745; border-color: #28a745; color: white; margin-right: 0.5rem;';
+            downloadHl7Btn.innerHTML = '<i class="fas fa-file-download"></i> Descargar Resumen HL7';
+            
+            // Insertar antes del botón de PDF si existe, sino al principio
+            if (downloadPrescriptionBtn && downloadPrescriptionBtn.parentNode === formActions) {
+                formActions.insertBefore(downloadHl7Btn, downloadPrescriptionBtn);
+            } else {
+                formActions.insertBefore(downloadHl7Btn, formActions.firstChild);
+            }
+        } else {
+            // Reemplazar si ya existe para limpiar listeners
+            const newDownloadHl7Btn = downloadHl7Btn.cloneNode(true);
+            downloadHl7Btn.parentNode.replaceChild(newDownloadHl7Btn, downloadHl7Btn);
+            downloadHl7Btn = newDownloadHl7Btn;
+        }
+
+        // Configurar evento del botón HL7
+        downloadHl7Btn.onclick = async () => {
+            try {
+                // Primero intentar descargar el resumen existente
+                let downloaded = false;
+                if (finalAppointmentId) {
+                    try {
+                        await ApiHl7Gateway.download(`v1/Hl7Summary/by-appointment/${finalAppointmentId}`, `resumen-hl7-${finalAppointmentId}.txt`);
+                        showNotification('Resumen HL7 descargado exitosamente', 'success');
+                        downloaded = true;
+                    } catch (error) {
+                        console.warn('Resumen no encontrado, intentando generar...', error);
+                    }
+                } else if (finalPatientId) {
+                    try {
+                        await ApiHl7Gateway.download(`v1/Hl7Summary/by-patient/${finalPatientId}`, `resumen-hl7-${finalPatientId}.txt`);
+                        showNotification('Resumen HL7 descargado exitosamente', 'success');
+                        downloaded = true;
+                    } catch (error) {
+                        console.warn('Resumen no encontrado, intentando generar...', error);
+                    }
+                }
+                
+                // Si no se pudo descargar, intentar generar el resumen
+                if (!downloaded && finalEncounterId) {
+                    showNotification('Generando resumen HL7...', 'info');
+                    
+                    // Obtener datos del encounter desde ClinicalMS
+                    const { ApiClinical } = await import('./api.js');
+                    const encounter = await ApiClinical.get(`v1/Encounter/${finalEncounterId}`);
+                    
+                    if (encounter) {
+                        // Obtener datos del paciente y doctor desde DirectoryMS
+                        const { Api } = await import('./api.js');
+                        const patient = await Api.get(`v1/Patient/${encounter.patientId || encounter.PatientId}`);
+                        const doctor = await Api.get(`v1/Doctor/${encounter.doctorId || encounter.DoctorId}`);
+                        
+                        // Obtener datos del appointment desde SchedulingMS
+                        const { ApiScheduling } = await import('./api.js');
+                        const appointmentId = encounter.appointmentId || encounter.AppointmentId || encounter.appoinmentId || encounter.AppoinmentId;
+                        const appointment = await ApiScheduling.get(`v1/Appointments/${appointmentId}`);
+                        
+                        // Construir request para generar el resumen
+                        // Helper para convertir fechas
+                        const parseDate = (dateValue) => {
+                            if (!dateValue) return null;
+                            if (dateValue instanceof Date) return dateValue.toISOString();
+                            if (typeof dateValue === 'string') {
+                                const parsed = new Date(dateValue);
+                                return isNaN(parsed.getTime()) ? null : parsed.toISOString();
+                            }
+                            return null;
+                        };
+                        
+                        // Asegurar que EncounterDate siempre tenga un valor válido
+                        let encounterDate;
+                        const encounterDateValue = encounter.date || encounter.Date;
+                        if (encounterDateValue) {
+                            try {
+                                if (encounterDateValue instanceof Date) {
+                                    encounterDate = encounterDateValue.toISOString();
+                                } else if (typeof encounterDateValue === 'string') {
+                                    const parsed = new Date(encounterDateValue);
+                                    if (!isNaN(parsed.getTime())) {
+                                        encounterDate = parsed.toISOString();
+                                    } else {
+                                        encounterDate = new Date().toISOString();
+                                    }
+                                } else {
+                                    encounterDate = new Date(encounterDateValue).toISOString();
+                                }
+                            } catch (e) {
+                                console.warn('Error parseando EncounterDate, usando fecha actual:', e);
+                                encounterDate = new Date().toISOString();
+                            }
+                        } else {
+                            encounterDate = new Date().toISOString();
+                        }
+                        
+                        const generateRequest = {
+                            EncounterId: parseInt(encounter.encounterId || encounter.EncounterId || 0),
+                            PatientId: parseInt(encounter.patientId || encounter.PatientId || 0),
+                            DoctorId: parseInt(encounter.doctorId || encounter.DoctorId || 0),
+                            AppointmentId: parseInt(appointmentId || 0),
+                            PatientDni: patient?.dni || patient?.Dni ? String(patient.dni || patient.Dni) : null,
+                            PatientFirstName: patient?.firstName || patient?.FirstName || null,
+                            PatientLastName: patient?.lastName || patient?.LastName || null,
+                            PatientDateOfBirth: parseDate(patient?.dateOfBirth || patient?.DateOfBirth),
+                            PatientPhone: patient?.phone || patient?.Phone || null,
+                            PatientAddress: patient?.adress || patient?.Adress || null,
+                            DoctorFirstName: doctor?.firstName || doctor?.FirstName || null,
+                            DoctorLastName: doctor?.lastName || doctor?.LastName || null,
+                            DoctorSpecialty: doctor?.specialty || doctor?.Specialty || null,
+                            AppointmentStartTime: parseDate(appointment?.startTime || appointment?.StartTime),
+                            AppointmentEndTime: parseDate(appointment?.endTime || appointment?.EndTime),
+                            AppointmentReason: appointment?.reason || appointment?.Reason || null,
+                            EncounterReasons: encounter.reasons || encounter.Reasons || null,
+                            EncounterAssessment: encounter.assessment || encounter.Assessment || null,
+                            EncounterDate: encounterDate // DateTime requerido (no nullable)
+                        };
+                        
+                        console.log('Generando resumen HL7 con datos:', generateRequest);
+                        
+                        // Validar que tenemos los datos mínimos requeridos
+                        if (!generateRequest.EncounterId || generateRequest.EncounterId <= 0) {
+                            throw new Error('No se pudo obtener el EncounterId de la consulta');
+                        }
+                        if (!generateRequest.PatientId || generateRequest.PatientId <= 0) {
+                            throw new Error('No se pudo obtener el PatientId');
+                        }
+                        if (!generateRequest.DoctorId || generateRequest.DoctorId <= 0) {
+                            throw new Error('No se pudo obtener el DoctorId');
+                        }
+                        if (!generateRequest.AppointmentId || generateRequest.AppointmentId <= 0) {
+                            throw new Error('No se pudo obtener el AppointmentId');
+                        }
+                        
+                        // Generar el resumen
+                        const generateResponse = await ApiHl7Gateway.post('v1/Hl7Summary/generate', generateRequest);
+                        console.log('Resumen generado:', generateResponse);
+                        
+                        // Esperar un momento para que se guarde el archivo
+                        await new Promise(resolve => setTimeout(resolve, 1500));
+                        
+                        // Intentar descargar nuevamente
+                        if (finalAppointmentId) {
+                            await ApiHl7Gateway.download(`v1/Hl7Summary/by-appointment/${finalAppointmentId}`, `resumen-hl7-${finalAppointmentId}.txt`);
+                        } else if (finalPatientId) {
+                            await ApiHl7Gateway.download(`v1/Hl7Summary/by-patient/${finalPatientId}`, `resumen-hl7-${finalPatientId}.txt`);
+                        }
+                        
+                        showNotification('Resumen HL7 generado y descargado exitosamente', 'success');
+                    } else {
+                        showNotification('No se pudo obtener la información de la consulta para generar el resumen', 'error');
+                    }
+                } else if (!downloaded) {
+                    showNotification('No se pudo identificar la consulta para descargar el resumen HL7', 'warning');
+                }
+            } catch (error) {
+                console.error('Error descargando/generando resumen HL7:', error);
+                console.error('Detalles del error:', error.details);
+                const errorMessage = error.message || 'Error desconocido';
+                if (error.status === 400) {
+                    let detailedMessage = errorMessage;
+                    if (error.details && Array.isArray(error.details) && error.details.length > 0) {
+                        const fieldErrors = error.details.map(e => {
+                            const field = e.field || 'campo desconocido';
+                            const errors = Array.isArray(e.errors) ? e.errors.join(', ') : 'error desconocido';
+                            return `${field}: ${errors}`;
+                        }).join('; ');
+                        detailedMessage = `${errorMessage}. Errores: ${fieldErrors}`;
+                    }
+                    console.error('Errores de validación detallados:', error.details);
+                    showNotification(`Error de validación: ${detailedMessage}`, 'error');
+                } else if (error.status === 404) {
+                    showNotification('No se encontró el resumen HL7. Intenta generar uno nuevo.', 'warning');
+                } else {
+                    showNotification(`Error: ${errorMessage}. Asegúrate de que el Gateway esté corriendo.`, 'error');
+                }
+            }
+        };
+
+        // Configurar botón cerrar
+        if (closePrescriptionBtn) {
+            const newCloseBtn = closePrescriptionBtn.cloneNode(true);
+            closePrescriptionBtn.parentNode.replaceChild(newCloseBtn, closePrescriptionBtn);
+            newCloseBtn.onclick = () => {
+                modal.classList.add('hidden');
+            };
+        }
+
+        // Cerrar modal con el botón X
+        const closeModalBtn = modal.querySelector('.close-modal');
+        if (closeModalBtn) {
+            closeModalBtn.onclick = () => {
+                modal.classList.add('hidden');
+            };
+        }
+
+        // Cerrar al hacer clic fuera del modal
+        modal.onclick = (e) => {
+            if (e.target === modal) {
+                modal.classList.add('hidden');
+            }
+        };
+
+        // Mostrar modal
+        modal.classList.remove('hidden');
+
+    } catch (error) {
+        console.error('Error al cargar la receta:', error);
+        showNotification('No se pudo cargar la receta médica', 'error');
+    }
 }
+
+// Función para descargar PDF de la receta
+function downloadPrescriptionPDF(prescriptions, doctorName, doctorSpecialty, patientName) {
+    try {
+        if (!prescriptions || prescriptions.length === 0) {
+            showNotification('No hay receta médica para descargar', 'warning');
+            return;
+        }
+
+        // Verificar que jsPDF esté disponible
+        if (typeof window.jspdf === 'undefined') {
+            showNotification('Error: La librería de PDF no está disponible. Por favor, recarga la página.', 'error');
+            return;
+        }
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        
+        // Configuración
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 20;
+        const maxWidth = pageWidth - (margin * 2);
+        let yPos = margin;
+
+        // Función helper para agregar texto con wrap
+        const addText = (text, x, y, options = {}) => {
+            const fontSize = options.fontSize || 10;
+            const fontStyle = options.fontStyle || 'normal';
+            const color = options.color || [0, 0, 0];
+            const align = options.align || 'left';
+            
+            doc.setFontSize(fontSize);
+            doc.setFont(undefined, fontStyle);
+            doc.setTextColor(color[0], color[1], color[2]);
+            
+            const lines = doc.splitTextToSize(text, maxWidth - (x - margin));
+            doc.text(lines, x, y, { align });
+            return lines.length * (fontSize * 0.4) + 5;
+        };
+
+        // Encabezado
+        doc.setFillColor(59, 130, 246); // Azul
+        doc.rect(0, 0, pageWidth, 40, 'F');
+        
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(24);
+        doc.setFont(undefined, 'bold');
+        doc.text('CuidarMed+', margin, 25);
+        
+        doc.setFontSize(16);
+        doc.text('Receta Médica', pageWidth - margin, 25, { align: 'right' });
+
+        yPos = 50;
+
+        // Información del médico y paciente
+        doc.setTextColor(0, 0, 0);
+        yPos += addText(`Médico: ${doctorName}${doctorSpecialty ? ` - ${doctorSpecialty}` : ''}`, margin, yPos, { fontSize: 11, fontStyle: 'bold' });
+        yPos += addText(`Paciente: ${patientName}`, margin, yPos, { fontSize: 11, fontStyle: 'bold' });
+        
+        const currentDate = new Date();
+        yPos += addText(`Fecha: ${currentDate.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })}`, margin, yPos, { fontSize: 10, color: [107, 114, 128] });
+        
+        yPos += 10;
+
+        // Generar PDF para cada receta
+        prescriptions.forEach((prescription, index) => {
+            // Nueva página si no es la primera receta
+            if (index > 0) {
+                doc.addPage();
+                yPos = margin;
+            }
+
+            const prescriptionDate = new Date(prescription.prescriptionDate || prescription.PrescriptionDate);
+            const diagnosis = prescription.diagnosis || prescription.Diagnosis || 'No especificado';
+            const medication = prescription.medication || prescription.Medication || 'No especificado';
+            const dosage = prescription.dosage || prescription.Dosage || 'No especificado';
+            const frequency = prescription.frequency || prescription.Frequency || 'No especificado';
+            const duration = prescription.duration || prescription.Duration || 'No especificado';
+            const instructions = prescription.additionalInstructions || prescription.AdditionalInstructions || '';
+
+            // Línea separadora
+            doc.setDrawColor(229, 231, 235);
+            doc.line(margin, yPos, pageWidth - margin, yPos);
+            yPos += 10;
+
+            // Diagnóstico
+            yPos += addText('Diagnóstico:', margin, yPos, { fontSize: 12, fontStyle: 'bold' });
+            yPos += addText(diagnosis, margin + 5, yPos, { fontSize: 11 });
+            yPos += 8;
+
+            // Medicamento (destacado)
+            doc.setFillColor(249, 250, 251);
+            doc.rect(margin, yPos - 5, maxWidth, 15, 'F');
+            yPos += addText('Medicamento:', margin, yPos, { fontSize: 12, fontStyle: 'bold' });
+            yPos += addText(medication, margin + 5, yPos, { fontSize: 12, fontStyle: 'bold', color: [17, 24, 39] });
+            yPos += 10;
+
+            // Dosis, Frecuencia y Duración en una tabla
+            const tableData = [
+                ['Dosis', dosage],
+                ['Frecuencia', frequency],
+                ['Duración', duration]
+            ];
+
+            tableData.forEach(([label, value]) => {
+                yPos += addText(`${label}:`, margin, yPos, { fontSize: 11, fontStyle: 'bold' });
+                yPos += addText(value, margin + 40, yPos - 4, { fontSize: 11 });
+                yPos += 5;
+            });
+
+            // Instrucciones adicionales
+            if (instructions) {
+                yPos += 5;
+                yPos += addText('Instrucciones adicionales:', margin, yPos, { fontSize: 11, fontStyle: 'bold' });
+                yPos += addText(instructions, margin + 5, yPos, { fontSize: 10 });
+                yPos += 8;
+            }
+
+            // Firma del médico (espacio)
+            yPos = doc.internal.pageSize.getHeight() - 50;
+            doc.setDrawColor(0, 0, 0);
+            doc.line(margin, yPos, pageWidth - margin, yPos);
+            yPos += 15;
+            yPos += addText('Firma del Médico', margin, yPos, { fontSize: 10, color: [107, 114, 128] });
+        });
+
+        // Generar nombre del archivo
+        const fileName = `Receta_${patientName.replace(/\s+/g, '_')}_${currentDate.toISOString().split('T')[0]}.pdf`;
+        
+        // Descargar PDF
+        doc.save(fileName);
+        showNotification('Receta médica descargada exitosamente', 'success');
+    } catch (error) {
+        console.error('Error generando PDF de receta:', error);
+        showNotification('Error al generar el PDF de la receta', 'error');
+    }
+}
+
+// Función para descargar PDF del encounter (placeholder - mantener compatibilidad)
+window.downloadEncounterPDF = function(encounterId) {
+    showNotification('La funcionalidad de descarga de PDF del encuentro estará disponible pronto', 'info');
+};
 
 // Inicializar modales
 function initializeModals() {

@@ -2381,7 +2381,10 @@ async function openEncounterModal(appointmentId, patientId, patientName) {
                     
                     <div class="form-actions">
                         <button type="button" class="btn btn-secondary" id="cancel-encounter">Cancelar</button>
-                        <button type="button" class="btn btn-info" id="prescribe-btn" data-patient-id="${patientId}" data-patient-name="${patientName}" style="background-color: #17a2b8; border-color: #17a2b8; color: white;">
+                        <button type="button" class="btn btn-success" id="download-hl7-summary-btn" data-appointment-id="${appointmentId}" data-patient-id="${patientId}" style="background-color: #28a745; border-color: #28a745; color: white;">
+                            <i class="fas fa-file-download"></i> Descargar Resumen HL7
+                        </button>
+                        <button type="button" class="btn btn-info" id="prescribe-btn" data-patient-id="${patientId}" data-patient-name="${patientName}" data-appointment-id="${appointmentId}" style="background-color: #17a2b8; border-color: #17a2b8; color: white;">
                             <i class="fas fa-prescription"></i> Recetar
                         </button>
                         <button type="submit" class="btn btn-primary">Guardar Consulta</button>
@@ -2442,6 +2445,27 @@ async function openEncounterModal(appointmentId, patientId, patientName) {
         // Continuar con el proceso si hay error al verificar
     }
     
+    // Agregar event listener al botón "Descargar Resumen HL7"
+    setTimeout(() => {
+        const downloadHl7Btn = modal.querySelector('#download-hl7-summary-btn');
+        if (downloadHl7Btn) {
+            downloadHl7Btn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                const appointmentId = downloadHl7Btn.getAttribute('data-appointment-id');
+                const patientId = downloadHl7Btn.getAttribute('data-patient-id');
+                
+                try {
+                    await downloadHl7Summary(appointmentId, patientId);
+                } catch (error) {
+                    console.error('Error descargando resumen HL7:', error);
+                    showNotification('Error al descargar el resumen HL7', 'error');
+                }
+            });
+        }
+    }, 100);
+    
     // Agregar event listener al botón "Recetar" - usar setTimeout para asegurar que el DOM esté listo
     setTimeout(() => {
         const prescribeBtn = modal.querySelector('#prescribe-btn');
@@ -2452,14 +2476,30 @@ async function openEncounterModal(appointmentId, patientId, patientName) {
             const newBtn = prescribeBtn.cloneNode(true);
             prescribeBtn.parentNode.replaceChild(newBtn, prescribeBtn);
             
-            newBtn.addEventListener('click', (e) => {
+            newBtn.addEventListener('click', async (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 
-                console.log('Botón Recetar presionado', { patientName, patientId });
+                const appointmentId = newBtn.getAttribute('data-appointment-id');
+                console.log('Botón Recetar presionado', { patientName, patientId, appointmentId });
                 
-                // Abrir el modal de receta con el nombre del paciente prellenado
-                openPrescriptionModal(patientName, patientId);
+                // Intentar obtener el encounterId si ya existe la consulta
+                let encounterId = null;
+                if (appointmentId) {
+                    try {
+                        const { ApiClinical } = await import('./api.js');
+                        const encounters = await ApiClinical.get(`v1/Encounter?appointmentId=${appointmentId}`);
+                        if (encounters && Array.isArray(encounters) && encounters.length > 0) {
+                            encounterId = encounters[0].encounterId || encounters[0].EncounterId;
+                            console.log('Encounter encontrado:', encounterId);
+                        }
+                    } catch (err) {
+                        console.warn('No se pudo obtener el encounter, se creará sin asociación:', err);
+                    }
+                }
+                
+                // Abrir el modal de receta con el nombre del paciente prellenado y el encounterId
+                openPrescriptionModal(patientName, patientId, encounterId, appointmentId);
             });
         } else {
             console.error('Botón Recetar no encontrado en el modal');
@@ -2491,6 +2531,33 @@ async function openEncounterModal(appointmentId, patientId, patientName) {
             isSaving = false;
         }
     });
+}
+
+// Función para descargar resumen HL7
+async function downloadHl7Summary(appointmentId, patientId) {
+    try {
+        const { ApiHl7Gateway } = await import('./api.js');
+        
+        // Intentar descargar por appointmentId primero
+        let endpoint = `v1/Hl7Summary/by-appointment/${appointmentId}`;
+        let filename = `resumen-hl7-appointment-${appointmentId}.txt`;
+        
+        try {
+            await ApiHl7Gateway.download(endpoint, filename);
+            showNotification('Resumen HL7 descargado exitosamente', 'success');
+        } catch (error) {
+            // Si falla por appointmentId, intentar por patientId
+            console.warn('Error descargando por appointmentId, intentando por patientId:', error);
+            endpoint = `v1/Hl7Summary/by-patient/${patientId}`;
+            filename = `resumen-hl7-patient-${patientId}.txt`;
+            
+            await ApiHl7Gateway.download(endpoint, filename);
+            showNotification('Resumen HL7 descargado exitosamente', 'success');
+        }
+    } catch (error) {
+        console.error('Error descargando resumen HL7:', error);
+        showNotification('No se encontró resumen HL7 para esta consulta', 'warning');
+    }
 }
 
 async function saveEncounter(modal, appointmentId, patientId) {
@@ -2565,7 +2632,7 @@ async function saveEncounter(modal, appointmentId, patientId) {
             showNotification('Consulta guardada, pero no se pudo actualizar el estado del turno', 'warning');
         }
         
-        updateActiveConsultations(-1);
+        updateCounter('active-consultation', -1);
         updateCounter('prescriptions-today', 1);
         
     } catch (error) {
@@ -2819,8 +2886,8 @@ function updatePatientIdField(patientId) {
     hiddenInput.value = patientId || '';
 }
 
-function openPrescriptionModal(patientName = null, patientId = null) {
-    console.log('openPrescriptionModal llamado', { patientName, patientId });
+function openPrescriptionModal(patientName = null, patientId = null, encounterId = null, appointmentId = null) {
+    console.log('openPrescriptionModal llamado', { patientName, patientId, encounterId, appointmentId });
     
     const modal = document.getElementById('prescription-modal');
     if (!modal) {
@@ -2868,7 +2935,28 @@ function openPrescriptionModal(patientName = null, patientId = null) {
         updatePatientIdField(null);
     }
     
-    console.log('Modal de receta abierto correctamente');
+    // Guardar encounterId y appointmentId en campos ocultos
+    let encounterIdField = document.getElementById('prescription-encounter-id');
+    if (!encounterIdField) {
+        encounterIdField = document.createElement('input');
+        encounterIdField.type = 'hidden';
+        encounterIdField.id = 'prescription-encounter-id';
+        encounterIdField.name = 'encounter-id';
+        form.appendChild(encounterIdField);
+    }
+    encounterIdField.value = encounterId || '';
+    
+    let appointmentIdField = document.getElementById('prescription-appointment-id');
+    if (!appointmentIdField) {
+        appointmentIdField = document.createElement('input');
+        appointmentIdField.type = 'hidden';
+        appointmentIdField.id = 'prescription-appointment-id';
+        appointmentIdField.name = 'appointment-id';
+        form.appendChild(appointmentIdField);
+    }
+    appointmentIdField.value = appointmentId || '';
+    
+    console.log('Modal de receta abierto correctamente', { encounterId, appointmentId });
 }
 
 function closePrescriptionModal() {
@@ -2884,9 +2972,13 @@ async function handlePrescriptionSubmit(e) {
     
     const formData = new FormData(e.target);
     const patientId = formData.get('patient-id');
+    const encounterId = formData.get('encounter-id');
+    const appointmentId = formData.get('appointment-id');
     const prescription = {
         patient: formData.get('patient-name'),
         patientId: patientId ? parseInt(patientId) : null,
+        encounterId: encounterId ? parseInt(encounterId) : null,
+        appointmentId: appointmentId ? parseInt(appointmentId) : null,
         diagnosis: formData.get('diagnosis'),
         medication: formData.get('medication'),
         dosage: formData.get('dosage'),
@@ -2915,10 +3007,24 @@ async function handlePrescriptionSubmit(e) {
     try {
         const { ApiClinical } = await import('./api.js');
         
+        // Si no hay encounterId pero hay appointmentId, intentar obtenerlo
+        let finalEncounterId = prescription.encounterId;
+        if (!finalEncounterId && prescription.appointmentId) {
+            try {
+                const encounters = await ApiClinical.get(`v1/Encounter?appointmentId=${prescription.appointmentId}`);
+                if (encounters && Array.isArray(encounters) && encounters.length > 0) {
+                    finalEncounterId = encounters[0].encounterId || encounters[0].EncounterId;
+                    console.log('Encounter encontrado para asociar con la receta:', finalEncounterId);
+                }
+            } catch (err) {
+                console.warn('No se pudo obtener el encounter para asociar con la receta:', err);
+            }
+        }
+        
         const prescriptionData = {
             PatientId: prescription.patientId,
             DoctorId: currentDoctorData.doctorId,
-            EncounterId: null, // Se puede asociar después si es necesario
+            EncounterId: finalEncounterId, // Asociar con el encounter si está disponible
             Diagnosis: prescription.diagnosis,
             Medication: prescription.medication,
             Dosage: prescription.dosage,
@@ -2927,6 +3033,7 @@ async function handlePrescriptionSubmit(e) {
             AdditionalInstructions: prescription.additionalInstructions || null
         };
         
+        console.log('Creando receta con datos:', prescriptionData);
         const response = await ApiClinical.post('v1/Prescription', prescriptionData);
         
         showNotification(`Receta generada exitosamente para ${prescription.patient}`, 'success');
