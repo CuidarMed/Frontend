@@ -9,120 +9,66 @@
 </head>
 <body>
     <div class="login-container">
-        <a href="cuidarMed.html" class="back-to-home">
+        <a href="index.html" class="back-to-home">
             <i class="fas fa-arrow-left"></i>
             Volver al inicio
         </a>
         
         <div class="login-card">
-            <div class="login-header">
-                <div class="login-logo">
-                    <i class="fas fa-heart"></i>
-                    <span>CuidarMed+</span>
+            <div class="login-illustration">
+                <img src="assets/login-illustration.svg" alt="Bienvenido a CuidarMed+">
+                <div>
+                    <h2>Bienvenido de nuevo</h2>
+                    <p>Gestiona tus turnos, consultas y pacientes desde un solo lugar.</p>
                 </div>
-                <h1 class="login-title">Iniciar Sesión</h1>
-                <p class="login-subtitle">Accede a tu cuenta para continuar</p>
             </div>
 
-            <form class="login-form" id="loginForm">
-                <div class="form-group">
-                    <label for="username">Usuario</label>
-                    <div class="input-icon">
-                        <i class="fas fa-user"></i>
-                        <input type="text" id="username" name="username" placeholder="Ingresa tu usuario" required>
+            <div class="login-content">
+                <div class="login-header">
+                    <div class="login-logo">
+                        <i class="fas fa-heart"></i>
+                        <span>CuidarMed+</span>
                     </div>
+                    <h1 class="login-title">Iniciar Sesión</h1>
+                    <p class="login-subtitle">Accede a tu cuenta para continuar</p>
                 </div>
 
-                <div class="form-group">
-                    <label for="password">Contraseña</label>
-                    <div class="input-icon">
-                        <i class="fas fa-lock"></i>
-                        <input type="password" id="password" name="password" placeholder="Ingresa tu contraseña" required>
+                <div class="login-feedback" id="loginFeedback" role="alert" aria-live="polite"></div>
+
+                <form class="login-form" id="loginForm">
+                    <div class="form-group">
+                        <label for="email">Correo electrónico</label>
+                        <div class="input-icon">
+                            <i class="fas fa-envelope"></i>
+                            <input type="email" id="email" name="email" placeholder="tucorreo@ejemplo.com" autocomplete="email" required>
+                        </div>
                     </div>
-                </div>
 
-                <div class="forgot-links">
-                    <a href="blanqueo.html" class="forgot-link" id="forgotPassword">Olvidé mi clave</a>
-                    <a href="reseteo.html" class="forgot-link" id="resetPassword">Blanqueo de clave</a>
-                </div>
+                    <div class="form-group">
+                        <label for="password">Contraseña</label>
+                        <div class="input-icon">
+                            <i class="fas fa-lock"></i>
+                            <input type="password" id="password" name="password" placeholder="Ingresa tu contraseña" autocomplete="current-password" required>
+                        </div>
+                    </div>
 
-                <button type="submit" class="login-button">
-                    <i class="fas fa-sign-in-alt"></i>
-                    Iniciar Sesión
-                </button>
-            </form>
+                    <div class="forgot-links">
+                        <a href="blanqueo.html" class="forgot-link" id="forgotPassword">Olvidé mi clave</a>
+                    </div>
 
-            <div class="login-footer">
-                <p class="register-link">
-                    ¿No tienes cuenta? <a href="#" id="registerLink">Regístrate aquí</a>
-                </p>
+                    <button type="submit" class="login-button" id="loginButton">
+                        <i class="fas fa-sign-in-alt"></i>
+                        Iniciar Sesión
+                    </button>
+
+                    <button type="button" class="register-button" id="goRegisterBtn">
+                        <i class="fas fa-user-plus"></i>
+                        Crear Cuenta
+                    </button>
+                </form>
             </div>
         </div>
     </div>
-
-    <!-- Navigation buttons for demo -->
-    <div class="demo-nav">
-        <a href="index.html" class="demo-btn">Landing Page</a>
-        <a href="patient.html" class="demo-btn">Vista Paciente</a>
-        <a href="doctor.html" class="demo-btn">Vista Médico</a>
-        <a href="login.html" class="demo-btn active">Login</a>
-        <a href="registro.html" class="demo-btn">Registro</a>
-    </div>
-
-    <script>
-        // Funcionalidad del formulario de login
-        document.getElementById('loginForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
-            
-            // Simulación de validación
-            if (username && password) {
-                // Mostrar mensaje de éxito
-                const button = document.querySelector('.login-button');
-                const originalText = button.innerHTML;
-                
-                button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Iniciando sesión...';
-                button.disabled = true;
-                
-                setTimeout(() => {
-                    // Simular redirección según el tipo de usuario
-                    if (username.toLowerCase().includes('doctor') || username.toLowerCase().includes('medico')) {
-                        window.location.href = 'doctor.html';
-                    } else {
-                        window.location.href = 'patient.html';
-                    }
-                }, 2000);
-            } else {
-                alert('Por favor, completa todos los campos');
-            }
-        });
-
-        // Funcionalidad para "Olvidé mi clave" - Redirige a blanqueo.html
-        // La navegación se maneja directamente con el href
-
-        // Funcionalidad para "Blanqueo de clave" - Redirige a reseteo.html
-        // La navegación se maneja directamente con el href
-
-        // Funcionalidad para "Regístrate aquí"
-        document.getElementById('registerLink').addEventListener('click', function(e) {
-            e.preventDefault();
-            window.location.href = 'registro.html';
-        });
-
-        // Efecto de focus en los inputs
-        document.querySelectorAll('.form-group input').forEach(input => {
-            input.addEventListener('focus', function() {
-                this.parentElement.querySelector('i').style.color = '#2563eb';
-            });
-            
-            input.addEventListener('blur', function() {
-                if (!this.value) {
-                    this.parentElement.querySelector('i').style.color = '#6b7280';
-                }
-            });
-        });
-    </script>
+    <script type="module" src="js/auth/login.js"></script>
 </body>
 </html>

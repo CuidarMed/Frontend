@@ -1,4 +1,4 @@
-// Funcionalidades específicas del panel del paciente
+en la pagiuna// Funcionalidades específicas del panel del paciente
 document.addEventListener('DOMContentLoaded', function() {
     initializePatientPanel();
 });
