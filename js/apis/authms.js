@@ -27,6 +27,8 @@ async function tryFetch(url, options) {
 }
 
 export async function login(email, password) {
+    console.log('🔐 Intentando login para:', email);
+    
     const response = await tryFetch("/Auth/Login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -35,13 +37,19 @@ export async function login(email, password) {
 
     if (!response.ok) {
         const error = await response.json().catch(() => ({ message: "Error desconocido" }));
+        console.error('❌ Error en login:', error);
         throw new Error(error.message || "Error al iniciar sesión");
     }
-    return await response.json();
+    
+    const result = await response.json();
+    console.log('✅ Login exitoso');
+    return result;
 }
 
 export async function registerUser(userData) {
     try {
+        console.log('📝 Registrando usuario:', userData.email);
+        
         const response = await tryFetch("/User", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
@@ -66,7 +74,7 @@ export async function registerUser(userData) {
                 errorMessage = response.statusText || `Error ${response.status}`;
             }
             
-            console.error("Error del servidor:", {
+            console.error("❌ Error del servidor:", {
                 status: response.status,
                 statusText: response.statusText,
                 message: errorMessage
@@ -74,9 +82,12 @@ export async function registerUser(userData) {
             
             throw new Error(errorMessage);
         }
-        return await response.json();
+        
+        const result = await response.json();
+        console.log('✅ Usuario registrado exitosamente');
+        return result;
     } catch (error) {
-        console.error("Error en registerUser:", error);
+        console.error("❌ Error en registerUser:", error);
         throw error;
     }
 }
@@ -86,23 +97,43 @@ export async function getUserById(userId, token) {
         throw new Error("Se requiere un identificador de usuario válido");
     }
 
+    console.log('👤 Obteniendo usuario por ID:', userId);
+    console.log('🔑 Token:', token ? `${token.substring(0, 20)}...` : 'NO HAY TOKEN');
+
+    const headers = {
+        "Content-Type": "application/json",
+    };
+    
+    if (token) {
+        headers.Authorization = `Bearer ${token}`;
+    }
+
     const response = await tryFetch(`/User/${userId}`, {
         method: "GET",
-        headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: headers,
     });
 
+    console.log('📡 Respuesta de getUserById - Status:', response.status);
+
     if (response.status === 204) {
+        console.log('ℹ️ Usuario no encontrado (204)');
         return null;
     }
 
     if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         const message = errorData.message || errorData.Message || response.statusText || "No se pudo obtener el perfil";
+        
+        if (response.status === 401) {
+            console.warn('⚠️ Error 401 Unauthorized - Token inválido o expirado');
+        } else {
+            console.error(`❌ Error ${response.status}:`, message);
+        }
+        
         throw new Error(message);
     }
 
-    return response.json();
+    const result = await response.json();
+    console.log('✅ Usuario obtenido correctamente');
+    return result;
 }

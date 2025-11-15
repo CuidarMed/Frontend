@@ -436,7 +436,20 @@
         </div>
     </div>
 
-    <script src="js/doctor.js"></script>
+    <script type="module">
+    // Importar e inicializar el panel
+    import { initializeDoctorPanel } from './js/doctor-js/doctor-main.js';
+    
+    // Esperar a que el DOM esté listo
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', async () => {
+            await initializeDoctorPanel();
+        });
+    } else {
+        // DOM ya está listo
+        initializeDoctorPanel();
+    }
+</script>
     <script>
         (function(){
             const btn = document.getElementById('userBtn');
