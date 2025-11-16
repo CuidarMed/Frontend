@@ -1,5 +1,4 @@
-// doctor-clinical.js
-// Módulo para gestión de historia clínica y pacientes
+// doctor-clinical.js - Gestión de historia clínica y pacientes
 
 import { showNotification } from './doctor-ui.js';
 
@@ -11,24 +10,25 @@ const STATUS_CONFIG = {
     default: { label: 'Pendiente', bg: '#fef3c7', color: '#92400e' }
 };
 
-/**
- * Carga la vista de historia clínica
- */
+const createHTML = {
+    loading: (text) => `<div style="grid-column: 1 / -1; text-align: center; padding: 2rem; color: #6b7280;"><i class="fas fa-spinner fa-spin" style="font-size: 2rem; margin-bottom: 1rem;"></i><p>${text}</p></div>`,
+    error: (text) => `<div style="grid-column: 1 / -1; text-align: center; padding: 2rem; color: #ef4444;"><i class="fas fa-exclamation-circle" style="font-size: 2rem; margin-bottom: 1rem;"></i><p>${text}</p></div>`,
+    empty: (icon, text) => `<div style="grid-column: 1 / -1; text-align: center; padding: 2rem; color: #6b7280;"><i class="fas ${icon}" style="font-size: 2rem; margin-bottom: 1rem; opacity: 0.5;"></i><p>${text}</p></div>`,
+    card: (title, content, id) => `<div style="background: white; border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 1.5rem;"><h4 style="margin-top: 0; color: #111827; border-bottom: 2px solid #10b981; padding-bottom: 0.5rem;">${title}</h4><div id="${id}" style="margin-top: 1rem;">${content}</div></div>`,
+    infoBlock: (label, text) => `<div style="margin-bottom: 0.75rem;"><strong style="color: #6b7280; display: block; margin-bottom: 0.25rem;">${label}:</strong><p style="color: #111827; margin: 0;">${text}</p></div>`
+};
+
 export async function loadClinicalHistoryView() {
     const dashboardContent = document.querySelector('.dashboard-content');
     if (!dashboardContent) return;
 
-    // Limpiar secciones anteriores
     dashboardContent.querySelectorAll('.clinical-history-section, .patient-profile-section').forEach(el => el.remove());
 
     const historySection = document.createElement('div');
     historySection.className = 'dashboard-section clinical-history-section';
     historySection.innerHTML = `
         <div class="section-header">
-            <div>
-                <h3>Historia Clínica</h3>
-                <p>Busca y accede al historial médico de tus pacientes</p>
-            </div>
+            <div><h3>Historia Clínica</h3><p>Busca y accede al historial médico de tus pacientes</p></div>
         </div>
         <div class="patient-search-container" style="margin-bottom: 2rem;">
             <div style="position: relative; margin-bottom: 1rem;">
@@ -37,23 +37,18 @@ export async function loadClinicalHistoryView() {
                        style="width: 100%; padding: 0.75rem 1rem 0.75rem 3rem; border: 1px solid #d1d5db; border-radius: 0.5rem; font-size: 1rem;">
             </div>
             <div id="patients-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
-                ${createLoadingHTML('Cargando pacientes...')}
+                ${createHTML.loading('Cargando pacientes...')}
             </div>
         </div>
     `;
     dashboardContent.appendChild(historySection);
 
     await loadAllPatients();
-
-    // Buscador
     document.getElementById('patient-search-input')?.addEventListener('input', (e) => {
         filterPatients(e.target.value.toLowerCase().trim());
     });
 }
 
-/**
- * Carga todos los pacientes del doctor
- */
 async function loadAllPatients() {
     const patientsList = document.getElementById('patients-list');
     if (!patientsList) return;
@@ -61,69 +56,41 @@ async function loadAllPatients() {
     try {
         const { state } = await import('../state.js');
         const { ApiScheduling, Api } = await import('../api.js');
-
         const doctorId = state.doctorData?.doctorId || state.doctorData?.DoctorId;
 
         if (!doctorId) {
-            patientsList.innerHTML = createErrorHTML('No se pudo identificar al médico');
+            patientsList.innerHTML = createHTML.error('No se pudo identificar al médico');
             return;
         }
 
-        console.log('📋 Cargando pacientes del doctor:', doctorId);
-
-        // Obtener lista de pacientes del endpoint
         let patientsData = await ApiScheduling.get(`v1/Appointments/doctor/${doctorId}/patients`);
+        patientsData = Array.isArray(patientsData) ? patientsData : [patientsData];
 
-        console.log('👥 Pacientes recibidos (raw):', patientsData);
-
-        // Normalizar: convertir a array si no lo es
-        if (!Array.isArray(patientsData)) {
-            patientsData = [patientsData];
-        }
-
-        if (!patientsData || patientsData.length === 0) {
-            patientsList.innerHTML = createEmptyHTML('fa-user-slash', 'No has atendido pacientes aún');
+        if (!patientsData?.length) {
+            patientsList.innerHTML = createHTML.empty('fa-user-slash', 'No has atendido pacientes aún');
             allPatientsList = [];
             return;
         }
 
-        // 🔹 CRUCIAL: Enriquecer cada paciente con datos completos desde DirectoryMS
-        const enrichedPatients = await Promise.all(
-            patientsData.map(async (p) => {
-                const patientId = p.patientId || p.PatientId;
-                
-                if (!patientId) {
-                    return p; // Si no tiene ID, devolver tal cual
-                }
+        const enrichedPatients = await Promise.all(patientsData.map(async (p) => {
+            const patientId = p.patientId || p.PatientId;
+            if (!patientId) return p;
 
-                try {
-                    // Obtener datos completos del paciente desde DirectoryMS
-                    const fullPatient = await Api.get(`v1/Patient/${patientId}`);
-                    
-                    // Combinar datos: priorizar los del backend completo
-                    return {
-                        patientId: patientId,
-                        PatientId: patientId,
-                        name: fullPatient.name || fullPatient.Name || p.name || p.Name || '',
-                        Name: fullPatient.name || fullPatient.Name || p.name || p.Name || '',
-                        lastName: fullPatient.lastName || fullPatient.LastName || p.lastName || p.LastName || '',
-                        LastName: fullPatient.lastName || fullPatient.LastName || p.lastName || p.LastName || '',
-                        dni: fullPatient.dni || fullPatient.Dni || p.dni || p.Dni || '',
-                        Dni: fullPatient.dni || fullPatient.Dni || p.dni || p.Dni || '',
-                        // Incluir todos los demás datos completos
-                        ...fullPatient
-                    };
-                } catch (err) {
-                    console.warn(`⚠️ No se pudo enriquecer paciente ${patientId}:`, err);
-                    // Si falla, devolver los datos que ya tenemos
-                    return p;
-                }
-            })
-        );
+            try {
+                const fullPatient = await Api.get(`v1/Patient/${patientId}`);
+                return {
+                    patientId, PatientId: patientId,
+                    name: fullPatient.name || fullPatient.Name || p.name || p.Name || '',
+                    Name: fullPatient.name || fullPatient.Name || p.name || p.Name || '',
+                    lastName: fullPatient.lastName || fullPatient.LastName || p.lastName || p.LastName || '',
+                    LastName: fullPatient.lastName || fullPatient.LastName || p.lastName || p.LastName || '',
+                    dni: fullPatient.dni || fullPatient.Dni || p.dni || p.Dni || '',
+                    Dni: fullPatient.dni || fullPatient.Dni || p.dni || p.Dni || '',
+                    ...fullPatient
+                };
+            } catch { return p; }
+        }));
 
-        console.log('✅ Pacientes enriquecidos:', enrichedPatients);
-
-        // Ordenar por nombre
         enrichedPatients.sort((a, b) => {
             const nameA = `${a.name || a.Name || ''} ${a.lastName || a.LastName || ''}`.trim().toLowerCase();
             const nameB = `${b.name || b.Name || ''} ${b.lastName || b.LastName || ''}`.trim().toLowerCase();
@@ -132,26 +99,37 @@ async function loadAllPatients() {
 
         allPatientsList = enrichedPatients;
         renderPatientsList(allPatientsList);
-
     } catch (error) {
         console.error('❌ Error al cargar pacientes:', error);
-        patientsList.innerHTML = createErrorHTML('Error al cargar los pacientes del médico.');
+        patientsList.innerHTML = createHTML.error('Error al cargar los pacientes del médico.');
     }
 }
 
-/**
- * Renderiza la lista de pacientes
- */
 function renderPatientsList(patients) {
     const patientsList = document.getElementById('patients-list');
     if (!patientsList) return;
 
     if (!patients?.length) {
-        patientsList.innerHTML = createEmptyHTML('fa-user-slash', 'No hay pacientes registrados');
+        patientsList.innerHTML = createHTML.empty('fa-user-slash', 'No hay pacientes registrados');
         return;
     }
 
-    patientsList.innerHTML = patients.map(p => {
+    // ================================
+    // Filtrar pacientes únicos por ID
+    // ================================
+    const uniquePatientsMap = new Map();
+    patients.forEach(p => {
+        const id = p.patientId || p.PatientId;
+        if (!uniquePatientsMap.has(id)) {
+            uniquePatientsMap.set(id, p);
+        }
+    });
+    const uniquePatients = Array.from(uniquePatientsMap.values());
+
+    // ================================
+    // Render
+    // ================================
+    patientsList.innerHTML = uniquePatients.map(p => {
         const id = p.patientId || p.PatientId;
         const name = `${p.name || p.Name || ''} ${p.lastName || p.LastName || ''}`.trim() || 'Sin nombre';
         const dni = p.dni || p.Dni || 'N/A';
@@ -163,14 +141,10 @@ function renderPatientsList(patients) {
                  onmouseover="this.style.boxShadow='0 4px 6px rgba(0,0,0,0.1)'; this.style.borderColor='#10b981';"
                  onmouseout="this.style.boxShadow='none'; this.style.borderColor='#e5e7eb';">
                 <div style="display: flex; align-items: center; gap: 1rem;">
-                    <div style="width: 50px; height: 50px; border-radius: 50%; background: #10b981; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.5rem; font-weight: bold;">
-                        ${initial}
-                    </div>
+                    <div style="width: 50px; height: 50px; border-radius: 50%; background: #10b981; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.5rem; font-weight: bold;">${initial}</div>
                     <div style="flex: 1;">
                         <h4 style="margin: 0; color: #111827; font-size: 1.1rem; font-weight: 600;">${name}</h4>
-                        <p style="margin: 0.25rem 0 0; color: #6b7280; font-size: 0.875rem;">
-                            <i class="fas fa-id-card"></i> DNI: ${dni}
-                        </p>
+                        <p style="margin: 0.25rem 0 0; color: #6b7280; font-size: 0.875rem;"><i class="fas fa-id-card"></i> DNI: ${dni}</p>
                     </div>
                     <i class="fas fa-chevron-right" style="color: #9ca3af;"></i>
                 </div>
@@ -186,9 +160,7 @@ function renderPatientsList(patients) {
     });
 }
 
-/**
- * Filtra pacientes
- */
+
 function filterPatients(searchTerm) {
     if (!searchTerm) {
         renderPatientsList(allPatientsList);
@@ -196,24 +168,17 @@ function filterPatients(searchTerm) {
     }
 
     const filtered = allPatientsList.filter(p => {
-        const name = (p.name || p.Name || '').toLowerCase();
-        const lastName = (p.lastName || p.LastName || '').toLowerCase();
-        const dni = String(p.dni || p.Dni || '').toLowerCase();
-        return `${name} ${lastName}`.includes(searchTerm) || name.includes(searchTerm) || 
-               lastName.includes(searchTerm) || dni.includes(searchTerm);
+        const search = [p.name || p.Name, p.lastName || p.LastName, p.dni || p.Dni].join(' ').toLowerCase();
+        return search.includes(searchTerm);
     });
 
     renderPatientsList(filtered);
 }
 
-/**
- * Ver perfil de paciente
- */
 export async function viewPatientProfile(patientId) {
     const dashboardContent = document.querySelector('.dashboard-content');
     if (!dashboardContent) return;
 
-    // Ocultar búsqueda y limpiar perfil anterior
     const historySection = dashboardContent.querySelector('.clinical-history-section');
     if (historySection) historySection.style.display = 'none';
     dashboardContent.querySelector('.patient-profile-section')?.remove();
@@ -223,24 +188,18 @@ export async function viewPatientProfile(patientId) {
     profileSection.innerHTML = `
         <div class="section-header" style="margin-bottom: 2rem;">
             <div style="display: flex; align-items: center; gap: 1rem;">
-                <button id="back-to-patients" class="btn btn-secondary" style="padding: 0.5rem 1rem;">
-                    <i class="fas fa-arrow-left"></i> Volver
-                </button>
-                <div>
-                    <h3 id="patient-profile-name">Cargando...</h3>
-                    <p>Perfil e historial médico del paciente</p>
-                </div>
+                <button id="back-to-patients" class="btn btn-secondary" style="padding: 0.5rem 1rem;"><i class="fas fa-arrow-left"></i> Volver</button>
+                <div><h3 id="patient-profile-name">Cargando...</h3><p>Perfil e historial médico del paciente</p></div>
             </div>
         </div>
         <div id="patient-profile-content" style="display: grid; gap: 2rem;">
             <style>@media (min-width: 768px) { #patient-profile-content { grid-template-columns: 1fr 2fr !important; } }</style>
-            ${createCard('Información del Paciente', '<p style="color: #6b7280;">Cargando información...</p>', 'patient-info-details')}
-            ${createCard('Historial Médico', '<p style="color: #6b7280;">Cargando historial...</p>', 'patient-history-list')}
+            ${createHTML.card('Información del Paciente', '<p style="color: #6b7280;">Cargando información...</p>', 'patient-info-details')}
+            ${createHTML.card('Historial Médico', '<p style="color: #6b7280;">Cargando historial...</p>', 'patient-history-list')}
         </div>
     `;
     dashboardContent.appendChild(profileSection);
 
-    // Volver
     document.getElementById('back-to-patients')?.addEventListener('click', () => {
         profileSection.remove();
         if (historySection) historySection.style.display = '';
@@ -249,9 +208,6 @@ export async function viewPatientProfile(patientId) {
     await Promise.all([loadPatientProfileData(patientId), loadPatientHistory(patientId)]);
 }
 
-/**
- * Carga datos del perfil
- */
 async function loadPatientProfileData(patientId) {
     try {
         const { Api } = await import('../api.js');
@@ -269,21 +225,12 @@ async function loadPatientProfileData(patientId) {
             ['Teléfono', p.phone || p.Phone || 'No especificado'],
             ['Obra Social', p.healthPlan || p.HealthPlan || 'No especificado'],
             ['Nº Afiliado', p.membershipNumber || p.MembershipNumber || 'N/A']
-        ].map(([label, value]) => `
-            <div style="margin-bottom: 1rem;">
-                <strong style="color: #6b7280; display: block; margin-bottom: 0.25rem;">${label}:</strong>
-                <span style="color: #111827;">${value}</span>
-            </div>
-        `).join('');
+        ].map(([label, value]) => `<div style="margin-bottom: 1rem;"><strong style="color: #6b7280; display: block; margin-bottom: 0.25rem;">${label}:</strong><span style="color: #111827;">${value}</span></div>`).join('');
     } catch (error) {
-        console.error('Error al cargar perfil:', error);
         document.getElementById('patient-info-details').innerHTML = '<p style="color: #ef4444;">Error al cargar información</p>';
     }
 }
 
-/**
- * Calcula edad
- */
 function calculateAge(dateOfBirth) {
     if (!dateOfBirth) return 'N/A';
     try {
@@ -293,38 +240,27 @@ function calculateAge(dateOfBirth) {
         const monthDiff = today.getMonth() - birth.getMonth();
         if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) age--;
         return age;
-    } catch {
-        return 'N/A';
-    }
+    } catch { return 'N/A'; }
 }
 
-/**
- * Carga historial del paciente
- */
 async function loadPatientHistory(patientId) {
     const historyList = document.getElementById('patient-history-list');
     if (!historyList) return;
 
     try {
         const { ApiClinical, Api } = await import('../api.js');
-        
         const now = new Date();
         const threeYears = new Date(now.getFullYear() - 3, 0, 1);
-        const encounters = await ApiClinical.get(
-            `v1/Encounter?patientId=${patientId}&from=${threeYears.toISOString()}&to=${now.toISOString()}`
-        );
-
+        const encounters = await ApiClinical.get(`v1/Encounter?patientId=${patientId}&from=${threeYears.toISOString()}&to=${now.toISOString()}`);
         const list = Array.isArray(encounters) ? encounters : (encounters?.value || []);
 
         if (!list?.length) {
-            historyList.innerHTML = createEmptyHTML('fa-file-medical', 'No hay historial médico registrado');
+            historyList.innerHTML = createHTML.empty('fa-file-medical', 'No hay historial médico registrado');
             return;
         }
 
-        // Cargar doctores
         const doctorsMap = await loadDoctorsMap(list, Api);
 
-        // Renderizar
         historyList.innerHTML = list.map(enc => {
             const id = enc.encounterId || enc.EncounterId;
             const date = new Date(enc.date || enc.Date);
@@ -340,34 +276,21 @@ async function loadPatientHistory(patientId) {
                                 <i class="fas fa-calendar-alt" style="color: #10b981;"></i>
                                 <strong style="color: #111827;">${date.toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}</strong>
                             </div>
-                            <div style="display: flex; align-items: center; gap: 0.5rem; color: #6b7280;">
-                                <i class="fas fa-user-md"></i>
-                                <span>${doctorName}</span>
-                            </div>
+                            <div style="display: flex; align-items: center; gap: 0.5rem; color: #6b7280;"><i class="fas fa-user-md"></i><span>${doctorName}</span></div>
                         </div>
-                        <span style="padding: 0.25rem 0.75rem; border-radius: 0.25rem; font-size: 0.875rem; font-weight: 500; background: ${config.bg}; color: ${config.color};">
-                            ${config.label}
-                        </span>
+                        <span style="padding: 0.25rem 0.75rem; border-radius: 0.25rem; font-size: 0.875rem; font-weight: 500; background: ${config.bg}; color: ${config.color};">${config.label}</span>
                     </div>
-                    ${createInfoBlock('Motivo de consulta', enc.reasons || enc.Reasons || 'Sin motivo especificado')}
-                    ${createInfoBlock('Diagnóstico', enc.assessment || enc.Assessment || 'Sin diagnóstico')}
-                    <button onclick="viewEncounterDetailsFromDoctor(${id})" class="btn btn-primary" 
-                            style="margin-top: 1rem; padding: 0.5rem 1rem; font-size: 0.875rem;">
-                        <i class="fas fa-eye"></i> Ver detalles completos
-                    </button>
+                    ${createHTML.infoBlock('Motivo de consulta', enc.reasons || enc.Reasons || 'Sin motivo especificado')}
+                    ${createHTML.infoBlock('Diagnóstico', enc.assessment || enc.Assessment || 'Sin diagnóstico')}
+                    <button onclick="viewEncounterDetailsFromDoctor(${id})" class="btn btn-primary" style="margin-top: 1rem; padding: 0.5rem 1rem; font-size: 0.875rem;"><i class="fas fa-eye"></i> Ver detalles completos</button>
                 </div>
             `;
         }).join('');
-
     } catch (error) {
-        console.error('Error al cargar historial:', error);
-        historyList.innerHTML = createErrorHTML('Error al cargar el historial médico');
+        historyList.innerHTML = createHTML.error('Error al cargar el historial médico');
     }
 }
 
-/**
- * Carga mapa de doctores
- */
 async function loadDoctorsMap(encounters, Api) {
     const doctorsMap = new Map();
     for (const enc of encounters) {
@@ -385,20 +308,15 @@ async function loadDoctorsMap(encounters, Api) {
     return doctorsMap;
 }
 
-/**
- * Ver detalles de un encounter
- */
 export async function viewEncounterDetails(encounterId) {
     try {
         const { ApiClinical, Api } = await import('../api.js');
         const enc = await ApiClinical.get(`v1/Encounter/${encounterId}`);
-        
         if (!enc) {
             showNotification('No se encontraron los detalles', 'error');
             return;
         }
 
-        // Cargar paciente y doctor
         const [patientName, doctorName] = await Promise.all([
             loadPersonName(Api, enc.patientId || enc.PatientId, 'Patient', 'Paciente'),
             loadPersonName(Api, enc.doctorId || enc.DoctorId, 'Doctor', 'Dr.')
@@ -411,14 +329,10 @@ export async function viewEncounterDetails(encounterId) {
         modal.querySelector('.close-modal')?.addEventListener('click', () => modal.remove());
         modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
     } catch (error) {
-        console.error('Error al cargar detalles:', error);
         showNotification('Error al cargar los detalles', 'error');
     }
 }
 
-/**
- * Carga nombre de persona (paciente o doctor)
- */
 async function loadPersonName(Api, id, type, prefix) {
     if (!id) return `${prefix} desconocido`;
     try {
@@ -431,9 +345,6 @@ async function loadPersonName(Api, id, type, prefix) {
     }
 }
 
-/**
- * Genera HTML de detalles del encounter
- */
 function generateEncounterDetailsHTML(enc, date, patientName, doctorName) {
     const info = [
         ['calendar', 'Fecha', date.toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })],
@@ -452,81 +363,19 @@ function generateEncounterDetailsHTML(enc, date, patientName, doctorName) {
 
     return `
         <div class="encounter-info-section">
-            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;">
-                <i class="fas fa-info-circle" style="color: #10b981;"></i>
-                <h4 style="margin: 0;">Información General</h4>
-            </div>
-            <div style="display: grid; gap: 0.75rem;">
-                ${info.map(([icon, label, value]) => `
-                    <div style="display: flex; justify-content: space-between;">
-                        <span style="color: #6b7280;"><i class="fas fa-${icon}"></i> ${label}:</span>
-                        <span style="color: #111827; font-weight: 500;">${value}</span>
-                    </div>
-                `).join('')}
-            </div>
+            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;"><i class="fas fa-info-circle" style="color: #10b981;"></i><h4 style="margin: 0;">Información General</h4></div>
+            <div style="display: grid; gap: 0.75rem;">${info.map(([icon, label, value]) => `<div style="display: flex; justify-content: space-between;"><span style="color: #6b7280;"><i class="fas fa-${icon}"></i> ${label}:</span><span style="color: #111827; font-weight: 500;">${value}</span></div>`).join('')}</div>
         </div>
         <div class="encounter-info-section" style="margin-top: 2rem;">
-            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;">
-                <i class="fas fa-stethoscope" style="color: #10b981;"></i>
-                <h4 style="margin: 0;">Motivo de Consulta</h4>
-            </div>
+            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;"><i class="fas fa-stethoscope" style="color: #10b981;"></i><h4 style="margin: 0;">Motivo de Consulta</h4></div>
             <p style="color: #111827;">${enc.reasons || enc.Reasons || 'Sin motivo especificado'}</p>
         </div>
         <div class="encounter-info-section" style="margin-top: 2rem;">
-            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;">
-                <i class="fas fa-file-medical" style="color: #10b981;"></i>
-                <h4 style="margin: 0;">Notas SOAP</h4>
-            </div>
-            ${soap.map(([label, value]) => `
-                <div style="margin-bottom: 1rem;">
-                    <strong style="color: #6b7280; display: block; margin-bottom: 0.5rem;">${label}:</strong>
-                    <p style="color: #111827; margin: 0; white-space: pre-wrap;">${value}</p>
-                </div>
-            `).join('')}
+            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;"><i class="fas fa-file-medical" style="color: #10b981;"></i><h4 style="margin: 0;">Notas SOAP</h4></div>
+            ${soap.map(([label, value]) => `<div style="margin-bottom: 1rem;"><strong style="color: #6b7280; display: block; margin-bottom: 0.5rem;">${label}:</strong><p style="color: #111827; margin: 0; white-space: pre-wrap;">${value}</p></div>`).join('')}
         </div>
-        ${enc.notes || enc.Notes ? `
-        <div class="encounter-info-section" style="margin-top: 2rem;">
-            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;">
-                <i class="fas fa-sticky-note" style="color: #10b981;"></i>
-                <h4 style="margin: 0;">Notas Adicionales</h4>
-            </div>
-            <p style="color: #111827; white-space: pre-wrap;">${enc.notes || enc.Notes}</p>
-        </div>
-        ` : ''}
+        ${enc.notes || enc.Notes ? `<div class="encounter-info-section" style="margin-top: 2rem;"><div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;"><i class="fas fa-sticky-note" style="color: #10b981;"></i><h4 style="margin: 0;">Notas Adicionales</h4></div><p style="color: #111827; white-space: pre-wrap;">${enc.notes || enc.Notes}</p></div>` : ''}
     `;
-}
-
-/**
- * Helpers
- */
-function createCard(title, content, id) {
-    return `
-        <div style="background: white; border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 1.5rem;">
-            <h4 style="margin-top: 0; color: #111827; border-bottom: 2px solid #10b981; padding-bottom: 0.5rem;">${title}</h4>
-            <div id="${id}" style="margin-top: 1rem;">${content}</div>
-        </div>
-    `;
-}
-
-function createInfoBlock(label, text) {
-    return `
-        <div style="margin-bottom: 0.75rem;">
-            <strong style="color: #6b7280; display: block; margin-bottom: 0.25rem;">${label}:</strong>
-            <p style="color: #111827; margin: 0;">${text}</p>
-        </div>
-    `;
-}
-
-function createLoadingHTML(text) {
-    return `<div style="grid-column: 1 / -1; text-align: center; padding: 2rem; color: #6b7280;"><i class="fas fa-spinner fa-spin" style="font-size: 2rem; margin-bottom: 1rem;"></i><p>${text}</p></div>`;
-}
-
-function createErrorHTML(text) {
-    return `<div style="grid-column: 1 / -1; text-align: center; padding: 2rem; color: #ef4444;"><i class="fas fa-exclamation-circle" style="font-size: 2rem; margin-bottom: 1rem;"></i><p>${text}</p></div>`;
-}
-
-function createEmptyHTML(icon, text) {
-    return `<div style="grid-column: 1 / -1; text-align: center; padding: 2rem; color: #6b7280;"><i class="fas ${icon}" style="font-size: 2rem; margin-bottom: 1rem; opacity: 0.5;"></i><p>${text}</p></div>`;
 }
 
 function createModal(title, subtitle, body) {
@@ -535,13 +384,7 @@ function createModal(title, subtitle, body) {
     modal.style.display = 'flex';
     modal.innerHTML = `
         <div class="modal-content" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
-            <div class="modal-header">
-                <div>
-                    <h3>${title}</h3>
-                    <p style="margin: 0.5rem 0 0; color: #6b7280;">${subtitle}</p>
-                </div>
-                <button class="close-modal">&times;</button>
-            </div>
+            <div class="modal-header"><div><h3>${title}</h3><p style="margin: 0.5rem 0 0; color: #6b7280;">${subtitle}</p></div><button class="close-modal">&times;</button></div>
             <div class="modal-body">${body}</div>
         </div>
     `;
