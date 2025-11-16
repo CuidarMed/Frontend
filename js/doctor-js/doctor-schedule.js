@@ -2,7 +2,19 @@
 // Módulo para gestión de agenda y disponibilidad del doctor
 
 import { showNotification } from './doctor-ui.js';
-import { getId, formatDate, formatTime } from './doctor-core.js';
+import { getId } from './doctor-core.js';
+
+const DAYS_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+const MONTHS_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+const STATUS_CONFIG = {
+    SCHEDULED: { label: 'Programado', color: '#f59e0b' },
+    CONFIRMED: { label: 'Confirmado', color: '#10b981' },
+    COMPLETED: { label: 'Completado', color: '#10b981' },
+    CANCELLED: { label: 'Cancelado', color: '#dc2626' },
+    RESCHEDULED: { label: 'Reprogramado', color: '#8b5cf6' },
+    NO_SHOW: { label: 'No asistió', color: '#6b7280' },
+    IN_PROGRESS: { label: 'En curso', color: '#3b82f6' }
+};
 
 /**
  * Carga la vista de agenda completa
@@ -11,39 +23,45 @@ export async function loadAgendaView() {
     const dashboardContent = document.querySelector('.dashboard-content');
     if (!dashboardContent) return;
     
-    // Eliminar secciones anteriores
-    const existingAgendas = dashboardContent.querySelectorAll('.agenda-section');
-    existingAgendas.forEach(agenda => agenda.remove());
-    
-    const existingComingSoon = dashboardContent.querySelectorAll('.coming-soon-section');
-    existingComingSoon.forEach(comingSoon => comingSoon.remove());
-    
-    // Ocultar otras secciones
-    const mainDashboard = document.getElementById('mainDashboardSection');
-    const profileSection = document.getElementById('doctorProfileSection');
-    if (mainDashboard) mainDashboard.style.display = 'none';
-    if (profileSection) {
-        profileSection.style.display = 'none';
-        profileSection.classList.add('hidden');
-    }
+    // Limpiar y ocultar secciones
+    dashboardContent.querySelectorAll('.agenda-section, .coming-soon-section').forEach(el => el.remove());
+    ['mainDashboardSection', 'doctorProfileSection'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.style.display = 'none';
+            el.classList.add('hidden');
+        }
+    });
     
     // Crear sección de agenda
-    const agendaSection = document.createElement('div');
-    agendaSection.className = 'agenda-section';
+    const agendaSection = createAgendaSection();
+    dashboardContent.appendChild(agendaSection);
     
-    // Mostrar loading
-    agendaSection.innerHTML = `
+    // Event listener para actualizar
+    setTimeout(() => {
+        const refreshBtn = document.getElementById('refreshAgendaBtn');
+        if (refreshBtn) refreshBtn.addEventListener('click', () => renderAgendaContent(agendaSection));
+    }, 100);
+    
+    await renderAgendaContent(agendaSection);
+}
+
+/**
+ * Crea la estructura base de la sección de agenda
+ */
+function createAgendaSection() {
+    const section = document.createElement('div');
+    section.className = 'agenda-section';
+    section.innerHTML = `
         <div class="dashboard-section">
             <div class="section-header">
                 <div>
                     <h2>Agenda Médica</h2>
                     <p>Gestión completa de tus turnos asignados</p>
                 </div>
-                <div class="section-header-actions">
-                    <button class="btn btn-secondary" id="refreshAgendaBtn">
-                        <i class="fas fa-sync-alt"></i> Actualizar
-                    </button>
-                </div>
+                <button class="btn btn-secondary" id="refreshAgendaBtn">
+                    <i class="fas fa-sync-alt"></i> Actualizar
+                </button>
             </div>
             <div id="agenda-content" style="padding: 2rem; text-align: center;">
                 <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: #2563eb;"></i>
@@ -51,21 +69,7 @@ export async function loadAgendaView() {
             </div>
         </div>
     `;
-    
-    dashboardContent.appendChild(agendaSection);
-    
-    // Agregar event listener al botón de actualizar
-    setTimeout(() => {
-        const refreshBtn = document.getElementById('refreshAgendaBtn');
-        if (refreshBtn) {
-            refreshBtn.addEventListener('click', async () => {
-                await renderAgendaContent(agendaSection);
-            });
-        }
-    }, 100);
-    
-    // Cargar y renderizar turnos
-    await renderAgendaContent(agendaSection);
+    return section;
 }
 
 /**
@@ -77,574 +81,330 @@ export async function renderAgendaContent(agendaSection) {
     
     try {
         const { state } = await import('../state.js');
-        const currentDoctorData = state.doctorData;
-        
-        let doctorId = getId(currentDoctorData, 'doctorId');
-        if (!doctorId) {
-            agendaContent.innerHTML = `
-                <div style="padding: 2rem; text-align: center; color: #dc2626;">
-                    <i class="fas fa-exclamation-triangle" style="font-size: 2rem; margin-bottom: 1rem;"></i>
-                    <p>No se pudo identificar al médico. Por favor, recarga la página.</p>
-                </div>
-            `;
-            return;
-        }
-        
         const { ApiScheduling, Api } = await import('../api.js');
         
-        // Obtener todos los turnos del médico (próximos 3 meses)
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const threeMonthsLater = new Date(today);
-        threeMonthsLater.setMonth(threeMonthsLater.getMonth() + 3);
-        
-        const appointments = await ApiScheduling.get(
-            `v1/Appointments?doctorId=${currentDoctorData.doctorId}&startTime=${today.toISOString()}&endTime=${threeMonthsLater.toISOString()}`
-        );
-        
-        console.log('=== APPOINTMENTS DESDE API ===');
-        console.log('Total appointments:', appointments?.length);
-        if (appointments && appointments.length > 0) {
-            console.log('Primer appointment completo:', JSON.stringify(appointments[0], null, 2));
-        }
-        
-        if (!appointments || appointments.length === 0) {
-            agendaContent.innerHTML = `
-                <div style="padding: 3rem; text-align: center; color: #6b7280;">
-                    <i class="fas fa-calendar-times" style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.5;"></i>
-                    <h3 style="margin-bottom: 0.5rem;">No hay turnos asignados</h3>
-                    <p>No tienes turnos programados en los próximos 3 meses.</p>
-                </div>
-            `;
+        const doctorId = getId(state.doctorData, 'doctorId');
+        if (!doctorId) {
+            agendaContent.innerHTML = createErrorHTML('No se pudo identificar al médico');
             return;
         }
         
-        // Cargar información de pacientes para cada turno
-        const appointmentsWithPatients = await Promise.all(
-            appointments.map(async (apt) => {
-                try {
-                    const patientId = apt.patientId || apt.PatientId;
-                    const patient = await Api.get(`v1/Patient/${patientId}`);
-                    return {
-                        ...apt,
-                        patientName: `${patient.name || patient.Name || ''} ${patient.lastName || patient.LastName || ''}`.trim() || 'Paciente sin nombre',
-                        patientDni: patient.dni || patient.Dni || 'N/A'
-                    };
-                } catch (err) {
-                    console.warn(`No se pudo cargar paciente ${apt.patientId || apt.PatientId}:`, err);
-                    return {
-                        ...apt,
-                        patientName: 'Paciente desconocido',
-                        patientDni: 'N/A'
-                    };
-                }
-            })
+        // Obtener turnos (3 meses)
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const threeMonths = new Date(today);
+        threeMonths.setMonth(threeMonths.getMonth() + 3);
+        
+        const appointments = await ApiScheduling.get(
+            `v1/Appointments?doctorId=${doctorId}&startTime=${today.toISOString()}&endTime=${threeMonths.toISOString()}`
         );
         
-        // Agrupar turnos por fecha
-        const appointmentsByDate = {};
-        appointmentsWithPatients.forEach(apt => {
-            const startTimeStr = apt.startTime || apt.StartTime;
-            const startTime = new Date(startTimeStr);
-            
-            // Extraer la fecha en UTC para evitar cambios por zona horaria
-            const year = startTime.getUTCFullYear();
-            const month = String(startTime.getUTCMonth() + 1).padStart(2, '0');
-            const day = String(startTime.getUTCDate()).padStart(2, '0');
-            const dateKey = `${year}-${month}-${day}`;
-            
-            if (!appointmentsByDate[dateKey]) {
-                appointmentsByDate[dateKey] = [];
-            }
-            appointmentsByDate[dateKey].push(apt);
-        });
-        
-        // Ordenar fechas
-        const sortedDates = Object.keys(appointmentsByDate).sort();
-        
-        // Renderizar HTML
-        const daysOfWeek = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-        const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-        
-        let html = generateAgendaSummaryHTML(appointments);
-        
-        if (sortedDates.length === 0) {
-            html += '<p style="color: #6b7280; text-align: center; padding: 2rem;">No hay turnos para mostrar</p>';
-        } else {
-            html += '<div class="agenda-days-container">';
-            
-            sortedDates.forEach(dateKey => {
-                const [year, month, day] = dateKey.split('-').map(Number);
-                const date = new Date(Date.UTC(year, month - 1, day));
-                const dayName = daysOfWeek[date.getUTCDay()];
-                const dayNumber = day;
-                const monthName = months[month - 1];
-                const dayAppointments = appointmentsByDate[dateKey].sort((a, b) => {
-                    const timeA = new Date(a.startTime || a.StartTime);
-                    const timeB = new Date(b.startTime || b.StartTime);
-                    return timeA - timeB;
-                });
-                
-                html += generateDayCardHTML(dayName, dayNumber, monthName, dayAppointments);
-            });
-            
-            html += '</div>';
+        if (!appointments?.length) {
+            agendaContent.innerHTML = createEmptyStateHTML('No hay turnos asignados', 'No tienes turnos programados en los próximos 3 meses.');
+            return;
         }
         
-        agendaContent.innerHTML = html;
+        // Cargar pacientes y agrupar por fecha
+        const appointmentsWithPatients = await loadPatientsData(appointments, Api);
+        const appointmentsByDate = groupByDate(appointmentsWithPatients);
         
-        // Inicializar botones y controles
+        // Renderizar
+        agendaContent.innerHTML = generateAgendaHTML(appointments, appointmentsByDate);
+        
         setTimeout(() => {
-            initializeAttendButtonsLocal();
-            initializeStatusSelects();
+            initializeEventHandlers();
         }, 100);
         
     } catch (error) {
         console.error('Error al cargar agenda:', error);
-        agendaContent.innerHTML = `
-            <div style="padding: 2rem; text-align: center; color: #dc2626;">
-                <i class="fas fa-exclamation-triangle" style="font-size: 2rem; margin-bottom: 1rem;"></i>
-                <p>Error al cargar la agenda: ${error.message || 'Error desconocido'}</p>
-                <button class="btn btn-primary" onclick="location.reload()" style="margin-top: 1rem;">
-                    <i class="fas fa-redo"></i> Reintentar
-                </button>
-            </div>
-        `;
+        agendaContent.innerHTML = createErrorHTML(`Error al cargar la agenda: ${error.message}`);
     }
 }
 
 /**
- * Genera el HTML del resumen de la agenda
+ * Carga datos de pacientes para cada turno
  */
-function generateAgendaSummaryHTML(appointments) {
+async function loadPatientsData(appointments, Api) {
+    return Promise.all(appointments.map(async (apt) => {
+        try {
+            const patientId = apt.patientId || apt.PatientId;
+            const patient = await Api.get(`v1/Patient/${patientId}`);
+            return {
+                ...apt,
+                patientName: `${patient.name || patient.Name || ''} ${patient.lastName || patient.LastName || ''}`.trim() || 'Paciente sin nombre',
+                patientDni: patient.dni || patient.Dni || 'N/A'
+            };
+        } catch {
+            return { ...apt, patientName: 'Paciente desconocido', patientDni: 'N/A' };
+        }
+    }));
+}
+
+/**
+ * Agrupa turnos por fecha
+ */
+function groupByDate(appointments) {
+    const grouped = {};
+    appointments.forEach(apt => {
+        const startTime = new Date(apt.startTime || apt.StartTime);
+        const dateKey = `${startTime.getUTCFullYear()}-${String(startTime.getUTCMonth() + 1).padStart(2, '0')}-${String(startTime.getUTCDate()).padStart(2, '0')}`;
+        if (!grouped[dateKey]) grouped[dateKey] = [];
+        grouped[dateKey].push(apt);
+    });
+    return grouped;
+}
+
+/**
+ * Genera el HTML completo de la agenda
+ */
+function generateAgendaHTML(appointments, appointmentsByDate) {
+    const summary = generateSummaryHTML(appointments);
+    const sortedDates = Object.keys(appointmentsByDate).sort();
+    
+    const daysHTML = sortedDates.map(dateKey => {
+        const [year, month, day] = dateKey.split('-').map(Number);
+        const date = new Date(Date.UTC(year, month - 1, day));
+        const dayAppointments = appointmentsByDate[dateKey].sort((a, b) => 
+            new Date(a.startTime || a.StartTime) - new Date(b.startTime || b.StartTime)
+        );
+        
+        return generateDayCardHTML(
+            DAYS_NAMES[date.getUTCDay()],
+            day,
+            MONTHS_NAMES[month - 1],
+            dayAppointments
+        );
+    }).join('');
+    
+    return `${summary}<div class="agenda-days-container">${daysHTML}</div>`;
+}
+
+/**
+ * Genera HTML del resumen
+ */
+function generateSummaryHTML(appointments) {
+    const statuses = ['SCHEDULED', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'IN_PROGRESS'];
+    const badges = statuses.map(status => {
+        const count = appointments.filter(a => (a.status || a.Status) === status).length;
+        const config = STATUS_CONFIG[status];
+        const bgColors = { SCHEDULED: '#fef3c7', CONFIRMED: '#d1fae5', COMPLETED: '#dcfce7', CANCELLED: '#fee2e2', IN_PROGRESS: '#d1fae5' };
+        const textColors = { SCHEDULED: '#92400e', CONFIRMED: '#059669', COMPLETED: '#166534', CANCELLED: '#991b1b', IN_PROGRESS: '#059669' };
+        return `<span style="padding: 0.25rem 0.75rem; background: ${bgColors[status]}; color: ${textColors[status]}; border-radius: 4px; font-size: 0.875rem;">${config.label}s: ${count}</span>`;
+    }).join('');
+    
     return `
         <div style="margin-bottom: 2rem;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                 <h3 style="margin: 0; color: #1f2937;">Total de turnos: ${appointments.length}</h3>
-                <div style="display: flex; gap: 0.5rem;">
-                    <span style="padding: 0.25rem 0.75rem; background: #fef3c7; color: #92400e; border-radius: 4px; font-size: 0.875rem;">
-                        Programados: ${appointments.filter(a => (a.status || a.Status) === 'SCHEDULED').length}
-                    </span>
-                    <span style="padding: 0.25rem 0.75rem; background: #d1fae5; color: #059669; border-radius: 4px; font-size: 0.875rem;">
-                        Confirmados: ${appointments.filter(a => (a.status || a.Status) === 'CONFIRMED').length}
-                    </span>
-                    <span style="padding: 0.25rem 0.75rem; background: #dcfce7; color: #166534; border-radius: 4px; font-size: 0.875rem;">
-                        Completados: ${appointments.filter(a => (a.status || a.Status) === 'COMPLETED').length}
-                    </span>
-                    <span style="padding: 0.25rem 0.75rem; background: #fee2e2; color: #991b1b; border-radius: 4px; font-size: 0.875rem;">
-                        Cancelados: ${appointments.filter(a => (a.status || a.Status) === 'CANCELLED').length}
-                    </span>
-                    <span style="padding: 0.25rem 0.75rem; background: #d1fae5; color: #059669; border-radius: 4px; font-size: 0.875rem;">
-                        En curso: ${appointments.filter(a => (a.status || a.Status) === 'IN_PROGRESS').length}
-                    </span>
-                </div>
+                <div style="display: flex; gap: 0.5rem;">${badges}</div>
             </div>
         </div>
     `;
 }
 
 /**
- * Genera el HTML de una tarjeta de día
+ * Genera HTML de tarjeta de día
  */
-function generateDayCardHTML(dayName, dayNumber, monthName, dayAppointments) {
-    let html = `
-        <div class="agenda-day-card" style="margin-bottom: 1.5rem; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
-            <div class="agenda-day-header" style="background: #f3f4f6; padding: 1rem 1.5rem; border-bottom: 1px solid #e5e7eb;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <h3 style="margin: 0; color: #1f2937; font-size: 1.25rem;">
-                            ${dayName}, ${dayNumber} de ${monthName}
-                        </h3>
-                        <p style="margin: 0.25rem 0 0 0; color: #6b7280; font-size: 0.875rem;">
-                            ${dayAppointments.length} ${dayAppointments.length === 1 ? 'turno' : 'turnos'}
-                        </p>
-                    </div>
-                    <span style="padding: 0.5rem 1rem; background: #10b981; color: white; border-radius: 6px; font-weight: 600;">
-                        ${dayAppointments.length}
-                    </span>
+function generateDayCardHTML(dayName, dayNumber, monthName, appointments) {
+    const appointmentsHTML = appointments.map(apt => generateAppointmentHTML(apt)).join('');
+    return `
+        <div class="agenda-day-card" style="margin-bottom: 1.5rem; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+            <div style="background: #f3f4f6; padding: 1rem 1.5rem; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h3 style="margin: 0; color: #1f2937; font-size: 1.25rem;">${dayName}, ${dayNumber} de ${monthName}</h3>
+                    <p style="margin: 0.25rem 0 0 0; color: #6b7280; font-size: 0.875rem;">${appointments.length} ${appointments.length === 1 ? 'turno' : 'turnos'}</p>
                 </div>
+                <span style="padding: 0.5rem 1rem; background: #10b981; color: white; border-radius: 6px; font-weight: 600;">${appointments.length}</span>
             </div>
-            <div class="agenda-day-appointments" style="padding: 1rem 1.5rem;">
-    `;
-    
-    dayAppointments.forEach(apt => {
-        html += generateAppointmentItemHTML(apt);
-    });
-    
-    html += `
-            </div>
+            <div style="padding: 1rem 1.5rem;">${appointmentsHTML}</div>
         </div>
     `;
-    
-    return html;
 }
 
 /**
- * Genera el HTML de un item de appointment
+ * Genera HTML de un turno
  */
-function generateAppointmentItemHTML(apt) {
-    const startTime = new Date(apt.startTime || apt.StartTime);
-    const endTime = new Date(apt.endTime || apt.EndTime);
+function generateAppointmentHTML(apt) {
+    const start = new Date(apt.startTime || apt.StartTime);
+    const end = new Date(apt.endTime || apt.EndTime);
+    const timeStr = `${String(start.getHours()).padStart(2, '0')}:${String(start.getMinutes()).padStart(2, '0')} - ${String(end.getHours()).padStart(2, '0')}:${String(end.getMinutes()).padStart(2, '0')}`;
     const status = apt.status || apt.Status || 'SCHEDULED';
-    
-    const startHour = String(startTime.getHours()).padStart(2, '0');
-    const startMin = String(startTime.getMinutes()).padStart(2, '0');
-    const endHour = String(endTime.getHours()).padStart(2, '0');
-    const endMin = String(endTime.getMinutes()).padStart(2, '0');
-    const timeStr = `${startHour}:${startMin} - ${endHour}:${endMin}`;
-    
-    let reason = apt.reason || apt.Reason || apt.reasonText || apt.ReasonText || '';
-    if (!reason || reason.trim() === '' || reason === 'null' || reason === 'undefined') {
-        reason = 'Sin motivo especificado';
-    }
-    
+    const config = STATUS_CONFIG[status] || { color: '#6b7280' };
+    const reason = (apt.reason || apt.Reason || apt.reasonText || apt.ReasonText || '').trim() || 'Sin motivo especificado';
     const appointmentId = apt.appointmentId || apt.AppointmentId;
+    const patientId = apt.patientId || apt.PatientId;
     
-    const { statusBadge, statusColor, actionButtons } = getAppointmentStatusInfo(status, appointmentId, apt);
+    const statusOptions = Object.entries(STATUS_CONFIG).map(([key, val]) => 
+        `<option value="${key}" ${status === key ? 'selected' : ''}>${val.label}</option>`
+    ).join('');
+    
+    const actions = getActionButtons(status, appointmentId, patientId, apt.patientName);
     
     return `
-        <div class="agenda-appointment-item" style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; margin-bottom: 0.75rem; background: #f9fafb; border-radius: 6px; border-left: 4px solid ${statusColor};">
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; margin-bottom: 0.75rem; background: #f9fafb; border-radius: 6px; border-left: 4px solid ${config.color};">
             <div style="flex: 1;">
                 <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem;">
-                    <div style="font-weight: 600; color: #1f2937; font-size: 1.1rem;">
-                        ${apt.patientName}
-                    </div>
-                    <select class="appointment-status-select" 
-                            data-appointment-id="${appointmentId}"
-                            style="padding: 0.25rem 0.5rem; border: 1px solid #e5e7eb; border-radius: 4px; font-size: 0.75rem; background: white; color: ${statusColor}; font-weight: 600; cursor: pointer;">
-                        <option value="SCHEDULED" ${status === 'SCHEDULED' ? 'selected' : ''}>Programado</option>
-                        <option value="CONFIRMED" ${status === 'CONFIRMED' ? 'selected' : ''}>Confirmado</option>
-                        <option value="IN_PROGRESS" ${status === 'IN_PROGRESS' ? 'selected' : ''}>En curso</option>
-                        <option value="COMPLETED" ${status === 'COMPLETED' ? 'selected' : ''}>Completado</option>
-                        <option value="NO_SHOW" ${status === 'NO_SHOW' ? 'selected' : ''}>No asistió</option>
-                        <option value="CANCELLED" ${status === 'CANCELLED' ? 'selected' : ''}>Cancelado</option>
-                        <option value="RESCHEDULED" ${status === 'RESCHEDULED' ? 'selected' : ''}>Reprogramado</option>
+                    <div style="font-weight: 600; color: #1f2937; font-size: 1.1rem;">${apt.patientName}</div>
+                    <select class="appointment-status-select" data-appointment-id="${appointmentId}" style="padding: 0.25rem 0.5rem; border: 1px solid #e5e7eb; border-radius: 4px; font-size: 0.75rem; background: white; color: ${config.color}; font-weight: 600; cursor: pointer;">
+                        ${statusOptions}
                     </select>
                 </div>
-                <div style="color: #6b7280; font-size: 0.875rem; margin-bottom: 0.25rem;">
-                    <i class="fas fa-clock" style="margin-right: 0.5rem;"></i>${timeStr}
-                </div>
-                <div style="color: #6b7280; font-size: 0.875rem; margin-bottom: 0.25rem;">
-                    <i class="fas fa-user" style="margin-right: 0.5rem;"></i>DNI: ${apt.patientDni}
-                </div>
-                <div style="color: #6b7280; font-size: 0.875rem;">
-                    <i class="fas fa-stethoscope" style="margin-right: 0.5rem;"></i>${reason}
-                </div>
+                <div style="color: #6b7280; font-size: 0.875rem;"><i class="fas fa-clock" style="margin-right: 0.5rem;"></i>${timeStr}</div>
+                <div style="color: #6b7280; font-size: 0.875rem;"><i class="fas fa-user" style="margin-right: 0.5rem;"></i>DNI: ${apt.patientDni}</div>
+                <div style="color: #6b7280; font-size: 0.875rem;"><i class="fas fa-stethoscope" style="margin-right: 0.5rem;"></i>${reason}</div>
             </div>
-            <div style="display: flex; gap: 0.5rem; margin-left: 1rem; align-items: center;">
-                ${actionButtons}
-            </div>
+            <div style="display: flex; gap: 0.5rem; margin-left: 1rem;">${actions}</div>
         </div>
     `;
 }
 
 /**
- * Obtiene la información de estado del appointment
+ * Obtiene los botones de acción según el estado
  */
-function getAppointmentStatusInfo(status, appointmentId, apt) {
-    let statusBadge = '';
-    let statusColor = '#6b7280';
-    let actionButtons = '';
-    
-    if (status === 'SCHEDULED') {
-        statusBadge = 'Programado';
-        statusColor = '#f59e0b';
-    } else if (status === 'CONFIRMED') {
-        statusBadge = 'Confirmado';
-        statusColor = '#10b981';
-    } else if (status === 'COMPLETED') {
-        statusBadge = 'Completado';
-        statusColor = '#10b981';
-    } else if (status === 'CANCELLED') {
-        statusBadge = 'Cancelado';
-        statusColor = '#dc2626';
-    } else if (status === 'RESCHEDULED') {
-        statusBadge = 'Reprogramado';
-        statusColor = '#8b5cf6';
-    } else if (status === 'NO_SHOW') {
-        statusBadge = 'No asistió';
-        statusColor = '#6b7280';
-    } else if (status === 'IN_PROGRESS') {
-        statusBadge = 'En curso';
-        statusColor = '#3b82f6';
-    } else {
-        statusBadge = status;
-    }
-    
-    // Determinar qué acciones mostrar según el estado
+function getActionButtons(status, appointmentId, patientId, patientName) {
     if (status === 'COMPLETED') {
-        actionButtons = `
-            <span style="padding: 0.5rem 1rem; font-size: 0.875rem; color: #10b981; font-weight: 600;">
-                <i class="fas fa-check-circle"></i> Consulta realizada
-            </span>
-        `;
-    } else if (status === 'SCHEDULED' || status === 'CONFIRMED') {
-        actionButtons = `
-            <button class="btn btn-primary btn-sm attend-appointment-btn" 
-                    data-appointment-id="${appointmentId}" 
-                    data-patient-id="${apt.patientId || apt.PatientId}" 
-                    data-patient-name="${apt.patientName}"
-                    style="padding: 0.5rem 1rem; font-size: 0.875rem; margin-right: 0.5rem;">
-                <i class="fas fa-video"></i> Atender
-            </button>
-        `;
-    } else if (status === 'IN_PROGRESS') {
-        actionButtons = `
-            <button class="btn btn-success btn-sm complete-appointment-btn" 
-                    data-appointment-id="${appointmentId}" 
-                    data-patient-id="${apt.patientId || apt.PatientId}" 
-                    data-patient-name="${apt.patientName}"
-                    style="padding: 0.5rem 1rem; font-size: 0.875rem; margin-right: 0.5rem;">
-                <i class="fas fa-check"></i> Completar
-            </button>
-            <button class="btn btn-warning btn-sm no-show-appointment-btn" 
-                    data-appointment-id="${appointmentId}" 
-                    style="padding: 0.5rem 1rem; font-size: 0.875rem;">
-                <i class="fas fa-times"></i> No asistió
-            </button>
+        return '<span style="padding: 0.5rem 1rem; font-size: 0.875rem; color: #10b981; font-weight: 600;"><i class="fas fa-check-circle"></i> Consulta realizada</span>';
+    }
+    if (status === 'SCHEDULED' || status === 'CONFIRMED') {
+        return `<button class="btn btn-primary btn-sm attend-appointment-btn" data-appointment-id="${appointmentId}" data-patient-id="${patientId}" data-patient-name="${patientName}" style="padding: 0.5rem 1rem; font-size: 0.875rem;"><i class="fas fa-video"></i> Atender</button>`;
+    }
+    if (status === 'IN_PROGRESS') {
+        return `
+            <button class="btn btn-success btn-sm complete-appointment-btn" data-appointment-id="${appointmentId}" data-patient-id="${patientId}" data-patient-name="${patientName}" style="padding: 0.5rem 1rem; font-size: 0.875rem; margin-right: 0.5rem;"><i class="fas fa-check"></i> Completar</button>
+            <button class="btn btn-warning btn-sm no-show-appointment-btn" data-appointment-id="${appointmentId}" style="padding: 0.5rem 1rem; font-size: 0.875rem;"><i class="fas fa-times"></i> No asistió</button>
         `;
     }
-    
-    return { statusBadge, statusColor, actionButtons };
+    return '';
 }
 
 /**
- * Inicializa los botones de atender (versión local para agenda)
+ * Inicializa todos los event handlers
  */
-function initializeAttendButtonsLocal() {
-    console.log('🔘 Inicializando botones de atención en agenda');
-    
-    // Importar dinámicamente las funciones necesarias
-    import('./doctor-appointments.js').then(module => {
-        const { attendConsultation, updateAppointmentStatus } = module;
-        
-        // Buscar botones de atender
-        const attendButtons = document.querySelectorAll('.btn-attend, .attend-appointment-btn');
-        
-        attendButtons.forEach(button => {
-            const newButton = button.cloneNode(true);
-            button.parentNode.replaceChild(newButton, button);
-            
-            newButton.addEventListener('click', async function() {
-                const appointmentId = this.getAttribute('data-appointment-id');
-                const patientId = this.getAttribute('data-patient-id');
-                const patientName = this.getAttribute('data-patient-name');
-                
-                console.log('👨‍⚕️ Atendiendo consulta desde agenda:', { appointmentId, patientId, patientName });
-                
-                if (appointmentId) {
-                    await updateAppointmentStatus(appointmentId, 'IN_PROGRESS');
-                    
-                    if (patientId && patientName) {
-                        await attendConsultation(appointmentId, patientId, patientName);
-                    }
-                }
-            });
+function initializeEventHandlers() {
+    import('./doctor-appointments.js').then(({ attendConsultation, updateAppointmentStatus }) => {
+        // Botones de atender
+        attachEventListeners('.attend-appointment-btn', async function() {
+            const { appointmentId, patientId, patientName } = this.dataset;
+            await updateAppointmentStatus(appointmentId, 'IN_PROGRESS');
+            if (patientId && patientName) await attendConsultation(appointmentId, patientId, patientName);
         });
         
         // Botones de completar
-        const completeButtons = document.querySelectorAll('.complete-appointment-btn, .complete-consultation-btn');
-        completeButtons.forEach(button => {
-            const newButton = button.cloneNode(true);
-            button.parentNode.replaceChild(newButton, button);
-            
-            newButton.addEventListener('click', async function() {
-                const appointmentId = this.getAttribute('data-appointment-id');
-                const patientId = this.getAttribute('data-patient-id');
-                const patientName = this.getAttribute('data-patient-name');
-                
-                if (appointmentId && patientId && patientName) {
-                    await attendConsultation(appointmentId, patientId, patientName);
-                }
-            });
+        attachEventListeners('.complete-appointment-btn, .complete-consultation-btn', async function() {
+            const { appointmentId, patientId, patientName } = this.dataset;
+            if (appointmentId && patientId && patientName) await attendConsultation(appointmentId, patientId, patientName);
         });
         
         // Botones de no asistió
-        const noShowButtons = document.querySelectorAll('.no-show-appointment-btn, .no-show-consultation-btn');
-        noShowButtons.forEach(button => {
-            const newButton = button.cloneNode(true);
-            button.parentNode.replaceChild(newButton, button);
-            
-            newButton.addEventListener('click', async function() {
-                const appointmentId = this.getAttribute('data-appointment-id');
-                
-                if (appointmentId && confirm('¿El paciente no asistió a la consulta?')) {
-                    await updateAppointmentStatus(appointmentId, 'NO_SHOW', 'Paciente no asistió');
-                    showNotification('Turno marcado como "No asistió"', 'info');
-                    
-                    // Recargar agenda
-                    const agendaSection = document.querySelector('.agenda-section');
-                    if (agendaSection) {
-                        await renderAgendaContent(agendaSection);
-                    }
-                }
-            });
+        attachEventListeners('.no-show-appointment-btn', async function() {
+            const appointmentId = this.dataset.appointmentId;
+            if (appointmentId && confirm('¿El paciente no asistió a la consulta?')) {
+                await updateAppointmentStatus(appointmentId, 'NO_SHOW', 'Paciente no asistió');
+                showNotification('Turno marcado como "No asistió"', 'info');
+                const agendaSection = document.querySelector('.agenda-section');
+                if (agendaSection) await renderAgendaContent(agendaSection);
+            }
         });
         
-        console.log('✅ Botones de atención inicializados');
-    }).catch(error => {
-        console.error('❌ Error al inicializar botones:', error);
+        // Selectores de estado
+        attachEventListeners('.appointment-status-select', async function() {
+            const appointmentId = this.dataset.appointmentId;
+            const newStatus = this.value;
+            if (appointmentId && confirm(`¿Cambiar el estado del turno a "${this.options[this.selectedIndex].text}"?`)) {
+                await updateAppointmentStatus(appointmentId, newStatus);
+            } else {
+                const agendaSection = document.querySelector('.agenda-section');
+                if (agendaSection) await renderAgendaContent(agendaSection);
+            }
+        }, 'change');
     });
 }
 
 /**
- * Inicializa los selectores de estado
+ * Helper para adjuntar event listeners
  */
-function initializeStatusSelects() {
-    console.log('🔽 Inicializando selectores de estado en agenda');
-    
-    // Importar dinámicamente
-    import('./doctor-appointments.js').then(module => {
-        const { updateAppointmentStatus } = module;
-        
-        const statusSelects = document.querySelectorAll('.appointment-status-select');
-        
-        statusSelects.forEach(select => {
-            const newSelect = select.cloneNode(true);
-            select.parentNode.replaceChild(newSelect, select);
-            
-            newSelect.addEventListener('change', async function() {
-                const appointmentId = this.getAttribute('data-appointment-id');
-                const newStatus = this.value;
-                
-                if (appointmentId && newStatus) {
-                    const currentStatus = this.options[this.selectedIndex].text;
-                    
-                    if (confirm(`¿Cambiar el estado del turno a "${currentStatus}"?`)) {
-                        await updateAppointmentStatus(appointmentId, newStatus);
-                    } else {
-                        // Recargar agenda para revertir selección
-                        const agendaSection = document.querySelector('.agenda-section');
-                        if (agendaSection) {
-                            await renderAgendaContent(agendaSection);
-                        }
-                    }
-                }
-            });
-        });
-        
-        console.log('✅ Selectores de estado inicializados');
-    }).catch(error => {
-        console.error('❌ Error al inicializar selectores:', error);
+function attachEventListeners(selector, handler, event = 'click') {
+    document.querySelectorAll(selector).forEach(el => {
+        const newEl = el.cloneNode(true);
+        el.parentNode.replaceChild(newEl, el);
+        newEl.addEventListener(event, handler);
     });
 }
 
 /**
- * Abre el gestor de horarios
+ * Helpers para HTML de estados
+ */
+function createErrorHTML(message) {
+    return `<div style="padding: 2rem; text-align: center; color: #dc2626;"><i class="fas fa-exclamation-triangle" style="font-size: 2rem; margin-bottom: 1rem;"></i><p>${message}</p></div>`;
+}
+
+function createEmptyStateHTML(title, message) {
+    return `<div style="padding: 3rem; text-align: center; color: #6b7280;"><i class="fas fa-calendar-times" style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.5;"></i><h3 style="margin-bottom: 0.5rem;">${title}</h3><p>${message}</p></div>`;
+}
+
+/**
+ * Gestión de disponibilidad
  */
 export async function openScheduleManager() {
     const { state } = await import('../state.js');
-    const currentDoctorData = state.doctorData;
+    const doctorId = state.doctorData?.doctorId || state.doctorData?.DoctorId;
     
-    if (!currentDoctorData?.doctorId) {
+    if (!doctorId) {
         showNotification('No se pudo identificar al médico', 'error');
         return;
     }
 
-    const modal = document.createElement('div');
-    modal.className = 'modal';
-    modal.style.display = 'flex';
-    modal.id = 'schedule-manager-modal';
-    
-    modal.innerHTML = `
-        <div class="modal-content" style="max-width: 1000px; max-height: 90vh; overflow-y: auto;">
-            <div class="modal-header">
-                <h3>Gestionar Mi Agenda</h3>
-                <button class="close-modal">&times;</button>
+    const modal = createModal('Gestionar Mi Agenda', `
+        <div class="schedule-manager-container">
+            <div style="margin-bottom: 1.5rem;">
+                <button class="btn btn-primary" id="add-availability-btn"><i class="fas fa-plus"></i> Agregar Horario</button>
             </div>
-            <div class="modal-body">
-                <div class="schedule-manager-container">
-                    <div class="schedule-actions" style="margin-bottom: 1.5rem;">
-                        <button class="btn btn-primary" id="add-availability-btn">
-                            <i class="fas fa-plus"></i> Agregar Horario
-                        </button>
-                    </div>
-                    <div id="availability-list" style="margin-top: 1rem;">
-                        <div style="text-align: center; padding: 2rem; color: #6b7280;">
-                            <i class="fas fa-spinner fa-spin"></i> Cargando disponibilidad...
-                        </div>
-                    </div>
-                </div>
+            <div id="availability-list" style="margin-top: 1rem;">
+                <div style="text-align: center; padding: 2rem; color: #6b7280;"><i class="fas fa-spinner fa-spin"></i> Cargando disponibilidad...</div>
             </div>
         </div>
-    `;
+    `, '1000px');
     
-    document.body.appendChild(modal);
-    
-    modal.querySelectorAll('.close-modal').forEach(btn => {
-        btn.addEventListener('click', () => {
-            modal.remove();
-        });
-    });
-    
-    modal.querySelector('#add-availability-btn').addEventListener('click', () => {
-        openAddAvailabilityForm(modal);
-    });
-    
-    await loadDoctorAvailability(modal);
+    modal.querySelector('#add-availability-btn').addEventListener('click', () => openAvailabilityForm(modal, doctorId));
+    await loadDoctorAvailability(modal, doctorId);
 }
 
 /**
- * Carga la disponibilidad del doctor
+ * Carga disponibilidad del doctor
  */
-async function loadDoctorAvailability(modal) {
+async function loadDoctorAvailability(modal, doctorId) {
     try {
-        const { state } = await import('../state.js');
-        const currentDoctorData = state.doctorData;
-        const doctorId = currentDoctorData?.doctorId || currentDoctorData?.DoctorId;
-        
-        if (!doctorId) {
-            console.warn('No hay doctorId disponible para cargar disponibilidades');
-            return;
-        }
-
         const { ApiScheduling } = await import('../api.js');
         const availability = await ApiScheduling.get(`v1/DoctorAvailability/search?doctorId=${doctorId}`);
+        const list = modal.querySelector('#availability-list');
         
-        const availabilityList = modal.querySelector('#availability-list');
-        if (!availabilityList) return;
-
-        if (!availability || availability.length === 0) {
-            availabilityList.innerHTML = `
-                <div class="empty-state" style="text-align: center; padding: 3rem; color: #6b7280;">
-                    <i class="fas fa-calendar-times" style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.5;"></i>
-                    <p style="font-size: 1.1rem; margin-bottom: 0.5rem;">No tienes horarios configurados</p>
-                    <p style="font-size: 0.9rem;">Agrega tu primer horario de disponibilidad para que los pacientes puedan agendar turnos contigo.</p>
-                </div>
-            `;
+        if (!availability?.length) {
+            list.innerHTML = createEmptyStateHTML('No tienes horarios configurados', 'Agrega tu primer horario de disponibilidad.');
             return;
         }
 
-        availabilityList.innerHTML = renderAvailabilityList(availability);
-        attachAvailabilityEventListeners(modal, availabilityList);
-
+        list.innerHTML = renderAvailabilityList(availability);
+        attachAvailabilityHandlers(modal, list, doctorId);
     } catch (error) {
-        console.error('Error al cargar disponibilidad:', error);
-        const availabilityList = modal.querySelector('#availability-list');
-        if (availabilityList) {
-            availabilityList.innerHTML = `
-                <div class="error-state" style="text-align: center; padding: 2rem; color: #dc2626;">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    <p>No se pudo cargar la disponibilidad</p>
-                </div>
-            `;
-        }
+        console.error('Error:', error);
+        modal.querySelector('#availability-list').innerHTML = createErrorHTML('No se pudo cargar la disponibilidad');
     }
 }
 
 /**
- * Renderiza la lista de disponibilidad
+ * Renderiza lista de disponibilidad
+ */
+/**
+ * Renderiza lista de disponibilidad
  */
 function renderAvailabilityList(availability) {
-    const daysOfWeek = {
-        1: 'Lunes', 2: 'Martes', 3: 'Miércoles', 4: 'Jueves',
-        5: 'Viernes', 6: 'Sábado', 7: 'Domingo'
-    };
-
-    const groupedByDay = {};
+    const dayNames = { 1: 'Lunes', 2: 'Martes', 3: 'Miércoles', 4: 'Jueves', 5: 'Viernes', 6: 'Sábado', 7: 'Domingo' };
+    const grouped = {};
+    
     availability.forEach(av => {
         let day = av.dayOfWeek || av.DayOfWeek;
         
+        // Convertir string a número si es necesario
         if (typeof day === 'string') {
             const dayNameToNumber = {
                 'Monday': 1, 'Lunes': 1,
@@ -655,329 +415,273 @@ function renderAvailabilityList(availability) {
                 'Saturday': 6, 'Sábado': 6,
                 'Sunday': 7, 'Domingo': 7
             };
-            day = dayNameToNumber[day] || parseInt(day) || day;
+            day = dayNameToNumber[day] || parseInt(day);
         }
         
         day = parseInt(day);
         
         if (isNaN(day) || day < 1 || day > 7) {
-            console.warn('Día de la semana inválido:', av.dayOfWeek || av.DayOfWeek);
+            console.warn('Día inválido:', av.dayOfWeek || av.DayOfWeek, av);
             return;
         }
         
-        if (!groupedByDay[day]) {
-            groupedByDay[day] = [];
-        }
-        groupedByDay[day].push(av);
+        if (!grouped[day]) grouped[day] = [];
+        grouped[day].push(av);
     });
 
-    return Object.keys(groupedByDay)
-        .sort((a, b) => parseInt(a) - parseInt(b))
-        .map(day => {
-            const dayNum = parseInt(day);
-            const dayName = daysOfWeek[dayNum];
-            
-            if (!dayName) return '';
-            
-            const slots = groupedByDay[day];
+    console.log('Disponibilidades agrupadas:', grouped);
+
+    return Object.keys(grouped).sort((a, b) => a - b).map(day => {
+        const dayName = dayNames[day];
+        const slots = grouped[day];
+        
+        const slotsHTML = slots.map(slot => {
+            const start = formatTime(slot.startTime || slot.StartTime);
+            const end = formatTime(slot.endTime || slot.EndTime);
+            const duration = slot.durationMinutes || slot.DurationMinutes || 30;
+            const id = slot.availabilityId || slot.AvailabilityId;
+            const active = slot.isActive !== false;
             
             return `
-                <div class="availability-day-group" style="margin-bottom: 1.5rem; padding: 1rem; background: #f9fafb; border-radius: 8px;">
-                    <h4 style="margin-bottom: 1rem; color: #1f2937;">
-                        <i class="fas fa-calendar-day"></i> ${dayName}
-                    </h4>
-                    <div class="availability-slots">
-                        ${slots.map(slot => createAvailabilitySlotHTML(slot, dayNum, dayName)).join('')}
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; margin-bottom: 0.5rem; background: white; border-radius: 6px; border: 1px solid #e5e7eb;">
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <span style="font-weight: 600; color: #1f2937;">${start} - ${end}</span>
+                        <span style="color: #6b7280;">Duración: ${duration} min</span>
+                        ${!active ? '<span style="color: #dc2626;">(Inactivo)</span>' : ''}
+                    </div>
+                    <div>
+                        <button class="btn btn-sm btn-secondary edit-availability-btn" data-id="${id}" style="margin-right: 0.5rem;">
+                            <i class="fas fa-edit"></i> Editar
+                        </button>
+                        <button class="btn btn-sm btn-danger delete-availability-btn" data-id="${id}">
+                            <i class="fas fa-trash"></i> Eliminar
+                        </button>
                     </div>
                 </div>
             `;
-        })
-        .filter(html => html !== '')
-        .join('');
-}
-
-/**
- * Crea el HTML de un slot de disponibilidad
- */
-function createAvailabilitySlotHTML(slot, dayNum, dayName) {
-    const startTime = formatTimeSpan(slot.startTime || slot.StartTime);
-    const endTime = formatTimeSpan(slot.endTime || slot.EndTime);
-    const duration = slot.durationMinutes || slot.DurationMinutes || 30;
-    const isActive = slot.isActive !== false;
-    const availabilityId = slot.availabilityId || slot.AvailabilityId;
-
-    return `
-        <div class="availability-slot" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; margin-bottom: 0.5rem; background: white; border-radius: 6px; border: 1px solid #e5e7eb;">
-            <div class="slot-info" style="display: flex; align-items: center; gap: 1rem;">
-                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <i class="fas fa-lock" style="color: #6b7280; font-size: 0.875rem;"></i>
-                    <span style="font-weight: 600; color: #1f2937; font-size: 0.875rem;">${dayName}</span>
-                </div>
-                <span style="font-weight: 600; color: #1f2937;">${startTime} - ${endTime}</span>
-                <span style="color: #6b7280; margin-left: 1rem;">Duración: ${duration} min</span>
-                ${!isActive ? '<span style="color: #dc2626; margin-left: 1rem;">(Inactivo)</span>' : ''}
-            </div>
-            <div class="slot-actions">
-                <button class="btn btn-sm btn-secondary edit-availability-btn" data-availability-id="${availabilityId}" style="margin-right: 0.5rem;">
-                    <i class="fas fa-edit"></i> Editar
-                </button>
-                <button class="btn btn-sm btn-danger delete-availability-btn" data-availability-id="${availabilityId}">
-                    <i class="fas fa-trash"></i> Eliminar
-                </button>
-            </div>
-        </div>
-    `;
-}
-
-/**
- * Formatea un TimeSpan a string HH:mm
- */
-function formatTimeSpan(timeSpan) {
-    if (!timeSpan) return '00:00';
-    if (typeof timeSpan === 'string') {
-        const parts = timeSpan.split(':');
-        return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`;
-    }
-    const hours = (timeSpan.hours || timeSpan.Hours || 0).toString().padStart(2, '0');
-    const minutes = (timeSpan.minutes || timeSpan.Minutes || 0).toString().padStart(2, '0');
-    return `${hours}:${minutes}`;
-}
-
-/**
- * Adjunta event listeners a los elementos de disponibilidad
- */
-function attachAvailabilityEventListeners(modal, availabilityList) {
-    availabilityList.querySelectorAll('.edit-availability-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            const availabilityId = this.getAttribute('data-availability-id');
-            openEditAvailabilityForm(modal, availabilityId);
-        });
-    });
-
-    availabilityList.querySelectorAll('.delete-availability-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            const availabilityId = this.getAttribute('data-availability-id');
-            deleteAvailability(modal, availabilityId);
-        });
-    });
-}
-
-/**
- * Abre el formulario para agregar disponibilidad
- */
-function openAddAvailabilityForm(modal) {
-    const formModal = document.createElement('div');
-    formModal.className = 'modal';
-    formModal.style.display = 'flex';
-    formModal.style.zIndex = '1001';
-    
-    formModal.innerHTML = `
-        <div class="modal-content" style="max-width: 600px;">
-            <div class="modal-header">
-                <h3>Agregar Horario de Disponibilidad</h3>
-                <button class="close-modal">&times;</button>
-            </div>
-            <div class="modal-body">
-                <form id="add-availability-form">
-                    <div class="form-group">
-                        <label for="av-day">Día de la semana:</label>
-                        <select id="av-day" name="dayOfWeek" required>
-                            <option value="">Seleccionar día</option>
-                            <option value="1">Lunes</option>
-                            <option value="2">Martes</option>
-                            <option value="3">Miércoles</option>
-                            <option value="4">Jueves</option>
-                            <option value="5">Viernes</option>
-                            <option value="6">Sábado</option>
-                            <option value="7">Domingo</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="av-start-time">Hora de inicio:</label>
-                        <input type="time" id="av-start-time" name="startTime" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="av-end-time">Hora de fin:</label>
-                        <input type="time" id="av-end-time" name="endTime" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="av-duration">Duración de cada turno (minutos):</label>
-                        <input type="number" id="av-duration" name="durationMinutes" min="15" max="480" value="30" required>
-                        <small style="color: #6b7280;">Entre 15 y 480 minutos</small>
-                    </div>
-                    <div class="form-actions">
-                        <button type="button" class="btn btn-secondary close-modal">Cancelar</button>
-                        <button type="submit" class="btn btn-primary">Guardar Horario</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    `;
-    
-    document.body.appendChild(formModal);
-    
-    formModal.querySelectorAll('.close-modal').forEach(btn => {
-        btn.addEventListener('click', () => {
-            formModal.remove();
-        });
-    });
-    
-    formModal.querySelector('#add-availability-form').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        await saveAvailability(formModal, modal, null);
-    });
-}
-
-/**
- * Abre el formulario para editar disponibilidad
- */
-async function openEditAvailabilityForm(modal, availabilityId) {
-    try {
-        const { ApiScheduling } = await import('../api.js');
-        const availability = await ApiScheduling.get(`v1/DoctorAvailability/${availabilityId}`);
+        }).join('');
         
-        if (!availability) {
-            showNotification('No se encontró el horario', 'error');
-            return;
-        }
-
-        const formModal = document.createElement('div');
-        formModal.className = 'modal';
-        formModal.style.display = 'flex';
-        formModal.style.zIndex = '1001';
-        
-        const startTime = formatTimeSpan(availability.startTime || availability.StartTime);
-        const endTime = formatTimeSpan(availability.endTime || availability.EndTime);
-        const dayOfWeek = availability.dayOfWeek || availability.DayOfWeek;
-        const duration = availability.durationMinutes || availability.DurationMinutes;
-
-        formModal.innerHTML = `
-            <div class="modal-content" style="max-width: 600px;">
-                <div class="modal-header">
-                    <h3>Editar Horario de Disponibilidad</h3>
-                    <button class="close-modal">&times;</button>
-                </div>
-                <div class="modal-body">
-                    <form id="edit-availability-form">
-                        <div class="form-group">
-                            <label for="av-day-edit">Día de la semana:</label>
-                            <select id="av-day-edit" name="dayOfWeek" required>
-                                <option value="1" ${dayOfWeek === 1 ? 'selected' : ''}>Lunes</option>
-                                <option value="2" ${dayOfWeek === 2 ? 'selected' : ''}>Martes</option>
-                                <option value="3" ${dayOfWeek === 3 ? 'selected' : ''}>Miércoles</option>
-                                <option value="4" ${dayOfWeek === 4 ? 'selected' : ''}>Jueves</option>
-                                <option value="5" ${dayOfWeek === 5 ? 'selected' : ''}>Viernes</option>
-                                <option value="6" ${dayOfWeek === 6 ? 'selected' : ''}>Sábado</option>
-                                <option value="7" ${dayOfWeek === 7 ? 'selected' : ''}>Domingo</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="av-start-time-edit">Hora de inicio:</label>
-                            <input type="time" id="av-start-time-edit" name="startTime" value="${startTime}" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="av-end-time-edit">Hora de fin:</label>
-                            <input type="time" id="av-end-time-edit" name="endTime" value="${endTime}" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="av-duration-edit">Duración de cada turno (minutos):</label>
-                            <input type="number" id="av-duration-edit" name="durationMinutes" min="15" max="480" value="${duration}" required>
-                            <small style="color: #6b7280;">Entre 15 y 480 minutos</small>
-                        </div>
-                        <div class="form-actions">
-                            <button type="button" class="btn btn-secondary close-modal">Cancelar</button>
-                            <button type="submit" class="btn btn-primary">Guardar Cambios</button>
-                        </div>
-                    </form>
-                </div>
+        return `
+            <div style="margin-bottom: 1.5rem; padding: 1rem; background: #f9fafb; border-radius: 8px;">
+                <h4 style="margin-bottom: 1rem; color: #1f2937;"><i class="fas fa-calendar-day"></i> ${dayName}</h4>
+                ${slotsHTML}
             </div>
         `;
-        
-        document.body.appendChild(formModal);
-        
-        formModal.querySelectorAll('.close-modal').forEach(btn => {
-            btn.addEventListener('click', () => {
-                formModal.remove();
-            });
-        });
-        
-        formModal.querySelector('#edit-availability-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            await saveAvailability(formModal, modal, availabilityId);
-        });
-    } catch (error) {
-        console.error('Error al cargar horario para editar:', error);
-        showNotification('No se pudo cargar el horario', 'error');
-    }
+    }).join('');
 }
 
 /**
- * Guarda la disponibilidad (crear o actualizar)
+ * Formatea tiempo
  */
-async function saveAvailability(formModal, scheduleModal, availabilityId) {
-    try {
-        const { state } = await import('../state.js');
-        const currentDoctorData = state.doctorData;
-        const doctorId = currentDoctorData?.doctorId || currentDoctorData?.DoctorId;
-        
-        if (!doctorId) {
-            showNotification('No se pudo identificar al médico', 'error');
-            return;
+/**
+ * Formatea tiempo
+ */
+function formatTime(time) {
+    if (!time) return '00:00';
+    
+    // Si es un string tipo "HH:mm:ss" o "HH:mm"
+    if (typeof time === 'string') {
+        const parts = time.split(':');
+        return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`;
+    }
+    
+    // Si es un objeto con propiedades hours/minutes
+    const hours = time.hours || time.Hours || 0;
+    const minutes = time.minutes || time.Minutes || 0;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Adjunta handlers de disponibilidad
+ */
+function attachAvailabilityHandlers(modal, list, doctorId) {
+    list.querySelectorAll('.edit-availability-btn').forEach(btn => {
+        btn.addEventListener('click', () => openAvailabilityForm(modal, doctorId, btn.dataset.id));
+    });
+    list.querySelectorAll('.delete-availability-btn').forEach(btn => {
+        btn.addEventListener('click', () => deleteAvailability(modal, doctorId, btn.dataset.id));
+    });
+}
+
+/**
+ * Abre formulario de disponibilidad
+ */
+async function openAvailabilityForm(parentModal, doctorId, availabilityId = null) {
+    let availability = null;
+
+    if (availabilityId) {
+        const { ApiScheduling } = await import('../api.js');
+        availability = await ApiScheduling.get(`v1/DoctorAvailability/${availabilityId}`);
+        console.log("🟦 Disponibilidad cargada para editar:", availability);
+    }
+
+    // Map para convertir string → número
+    const dayMap = {
+        "Monday": 1,
+        "Tuesday": 2,
+        "Wednesday": 3,
+        "Thursday": 4,
+        "Friday": 5,
+        "Saturday": 6,
+        "Sunday": 7
+    };
+
+    let selectedDay = 0;
+
+    if (availability) {
+        // Detecta si viene "Monday" o si viene number
+        const rawDay = availability.dayOfWeek || availability.DayOfWeek;
+
+        if (typeof rawDay === "string") {
+            selectedDay = dayMap[rawDay] || 0;
+        } else {
+            selectedDay = parseInt(rawDay) || 0;
         }
+    }
 
-        const form = formModal.querySelector('form');
-        const formData = new FormData(form);
-        
-        const dayOfWeek = parseInt(formData.get('dayOfWeek'));
-        const startTimeStr = formData.get('startTime');
-        const endTimeStr = formData.get('endTime');
-        const durationMinutes = parseInt(formData.get('durationMinutes'));
+    console.log("📌 Día detectado:", selectedDay);
 
-        const [startHours, startMinutes] = startTimeStr.split(':').map(Number);
-        const [endHours, endMinutes] = endTimeStr.split(':').map(Number);
+    const names = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
-        const availabilityData = {
-            dayOfWeek: dayOfWeek,
-            startTime: `${startHours.toString().padStart(2, '0')}:${startMinutes.toString().padStart(2, '0')}:00`,
-            endTime: `${endHours.toString().padStart(2, '0')}:${endMinutes.toString().padStart(2, '0')}:00`,
-            durationMinutes: durationMinutes
+    const dayOptions = [1, 2, 3, 4, 5, 6, 7].map(d => `
+        <option value="${d}" ${selectedDay === d ? 'selected' : ''}>${names[d]}</option>
+    `).join('');
+
+    const startTime = availability ? formatTime(availability.startTime || availability.StartTime) : '';
+    const endTime = availability ? formatTime(availability.endTime || availability.EndTime) : '';
+    const duration = availability ? (availability.durationMinutes || availability.DurationMinutes) : 30;
+
+    const modal = createModal(
+        availabilityId ? 'Editar Horario' : 'Agregar Horario',
+        `
+        <form id="availability-form">
+            <div class="form-group">
+                <label>Día de la semana:</label>
+                <select name="dayOfWeek" required>
+                    <option value="">Seleccionar</option>
+                    ${dayOptions}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Hora de inicio:</label>
+                <input type="time" name="startTime" value="${startTime}" required>
+            </div>
+            <div class="form-group">
+                <label>Hora de fin:</label>
+                <input type="time" name="endTime" value="${endTime}" required>
+            </div>
+            <div class="form-group">
+                <label>Duración (minutos):</label>
+                <input type="number" name="durationMinutes" min="15" max="480" value="${duration}" required>
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn btn-secondary close-modal">Cancelar</button>
+                <button type="submit" class="btn btn-primary">Guardar</button>
+            </div>
+        </form>
+        `,
+        '600px',
+        1001
+    );
+
+    modal.querySelector('form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await saveAvailability(modal, parentModal, doctorId, availabilityId);
+    });
+}
+
+
+/**
+ * Guarda disponibilidad
+ */
+/**
+ * Guarda disponibilidad
+ */
+async function saveAvailability(formModal, parentModal, doctorId, availabilityId) {
+    try {
+        const formData = new FormData(formModal.querySelector('form'));
+
+        const dayNames = {
+            1: "Monday",
+            2: "Tuesday",
+            3: "Wednesday",
+            4: "Thursday",
+            5: "Friday",
+            6: "Saturday",
+            7: "Sunday"
         };
 
+        const numericDay = parseInt(formData.get('dayOfWeek'));
+        const dayString = dayNames[numericDay];
+
+        const [startH, startM] = formData.get('startTime').split(':');
+        const [endH, endM] = formData.get('endTime').split(':');
+
+        const data = {
+            doctorId: doctorId,
+            dayOfWeek: dayString, // ← ← ← el backend lo quiere en texto
+            startTime: `${startH.padStart(2, '0')}:${startM.padStart(2, '0')}:00`,
+            endTime: `${endH.padStart(2, '0')}:${endM.padStart(2, '0')}:00`,
+            durationMinutes: parseInt(formData.get('durationMinutes'))
+        };
+
+        console.log("📤 Enviando PATCH/POST:", data);
+
         const { ApiScheduling } = await import('../api.js');
-        
+
+        let response;
         if (availabilityId) {
-            await ApiScheduling.patch(`v1/DoctorAvailability/${availabilityId}`, availabilityData);
-            showNotification('Horario actualizado exitosamente', 'success');
+            response = await ApiScheduling.patch(`v1/DoctorAvailability/${availabilityId}`, data);
+            showNotification('Horario actualizado', 'success');
         } else {
-            await ApiScheduling.post(`v1/DoctorAvailability/${doctorId}`, availabilityData);
-            showNotification('Horario agregado exitosamente', 'success');
+            response = await ApiScheduling.post(`v1/DoctorAvailability/${doctorId}`, data);
+            showNotification('Horario agregado', 'success');
         }
 
+        console.log("📥 Respuesta servidor:", response);
+
         formModal.remove();
-        await loadDoctorAvailability(scheduleModal);
-        
+        await loadDoctorAvailability(parentModal, doctorId);
+
     } catch (error) {
-        console.error('Error al guardar disponibilidad:', error);
-        showNotification(`Error al guardar horario: ${error.message || 'Error desconocido'}`, 'error');
+        console.error('❌ Error al guardar disponibilidad:', error);
+        showNotification(`Error: ${error.message}`, 'error');
     }
 }
 
-/**
- * Elimina una disponibilidad
- */
-async function deleteAvailability(modal, availabilityId) {
-    if (!confirm('¿Estás seguro de que deseas eliminar este horario?')) {
-        return;
-    }
 
+/**
+ * Elimina disponibilidad
+ */
+async function deleteAvailability(modal, doctorId, availabilityId) {
+    if (!confirm('¿Eliminar este horario?')) return;
     try {
         const { ApiScheduling } = await import('../api.js');
         await ApiScheduling.delete(`v1/DoctorAvailability/${availabilityId}`);
-        
-        showNotification('Horario eliminado exitosamente', 'success');
-        await loadDoctorAvailability(modal);
+        showNotification('Horario eliminado', 'success');
+        await loadDoctorAvailability(modal, doctorId);
     } catch (error) {
-        console.error('Error al eliminar disponibilidad:', error);
-        showNotification('No se pudo eliminar el horario', 'error');
+        showNotification('Error al eliminar', 'error');
     }
+}
+
+/**
+ * Helper para crear modales
+ */
+function createModal(title, content, maxWidth = '1000px', zIndex = 1000) {
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.style.cssText = `display: flex; z-index: ${zIndex};`;
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: ${maxWidth}; max-height: 90vh; overflow-y: auto;">
+            <div class="modal-header">
+                <h3>${title}</h3>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">${content}</div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    modal.querySelectorAll('.close-modal').forEach(btn => btn.addEventListener('click', () => modal.remove()));
+    return modal;
 }
