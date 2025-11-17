@@ -173,45 +173,43 @@ export async function loadDoctorStats() {
 async function loadTodayConsultationsForDashboard() {
     const consultationsList = document.getElementById('consultations-list');
     if (!consultationsList) return;
-
+    
     try {
         const doctorId = getId(doctorState.currentDoctorData, 'doctorId');
         if (!doctorId) {
             consultationsList.innerHTML = '<p style="color: #6b7280; padding: 2rem; text-align: center;">No se pudo identificar al médico</p>';
             return;
         }
-
+        
         const { ApiScheduling } = await import('../api.js');
-
-        // --- FECHAS LOCALES SIN UTC ---
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-
         const tomorrow = new Date(today);
         tomorrow.setDate(tomorrow.getDate() + 1);
-
-        const formatLocal = (d) =>
-            `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T00:00:00`;
-
-        const startLocal = formatLocal(today);
-        const endLocal = formatLocal(tomorrow);
-        // --------------------------------
-
+        
         console.log('📅 Cargando consultas del día para dashboard');
-
+        
         const appointments = await ApiScheduling.get(
-            `v1/Appointments?doctorId=${doctorId}&startTime=${startLocal}&endTime=${endLocal}`
+            `v1/Appointments?doctorId=${doctorId}&startTime=${today.toISOString()}&endTime=${tomorrow.toISOString()}`
         );
-
-        const allAppointments = Array.isArray(appointments) ? appointments : [];
-
-        console.log('✅ Consultas encontradas:', allAppointments.length);
-
+        
+        // Filtrar consultas completadas, canceladas y no show
+        const allAppointments = Array.isArray(appointments) 
+            ? appointments.filter(apt => {
+                const status = apt.status || apt.Status;
+                return status !== 'COMPLETED' && status !== 'CANCELLED' && status !== 'NO_SHOW';
+            })
+            : [];
+        
+        console.log('✅ Consultas activas encontradas:', allAppointments.length);
+        
         // Cargar nombres de pacientes
         const { Api } = await import('../api.js');
-
         for (const apt of allAppointments) {
-            if (apt.patientName && apt.patientName.trim() !== '') continue;
+            // Si ya viene el nombre desde el backend → lo usamos tal cual
+            if (apt.patientName && apt.patientName.trim() !== '') {
+                continue;
+            }
 
             const patientId = apt.patientId || apt.PatientId;
             if (!patientId) {
@@ -219,6 +217,7 @@ async function loadTodayConsultationsForDashboard() {
                 continue;
             }
 
+            // Como fallback, recién ahí pedimos el patient
             try {
                 const patient = await Api.get(`v1/Patient/${patientId}`);
                 apt.patientName = `${patient.Name || patient.name || ''} ${patient.lastName || patient.LastName || ''}`.trim() || 'Paciente sin nombre';
@@ -227,34 +226,18 @@ async function loadTodayConsultationsForDashboard() {
                 apt.patientName = 'Paciente desconocido';
             }
         }
-
-        // --- FILTRO: SOLO CONSULTAS NO COMPLETADAS ---
-        const pendingAppointments = allAppointments.filter(apt => {
-            const status = apt.status || apt.Status || apt.appointmentStatus || apt.state;
-            const s = (status || "").toString().toLowerCase();
-
-            return !(
-                s.includes("completed") ||
-                s.includes("done") ||
-                s.includes("finalizada") ||
-                s.includes("cancel") ||
-                s.includes("attended")
-            );
-        });
-        // ------------------------------------------------
-
+        
         // Renderizar lista
         consultationsList.innerHTML = '';
-
-        if (pendingAppointments.length > 0) {
-            pendingAppointments.forEach(apt => {
+        
+        if (allAppointments && allAppointments.length > 0) {
+            allAppointments.forEach(apt => {
                 const consultationItem = createConsultationItemElement(apt);
                 consultationsList.appendChild(consultationItem);
             });
         } else {
-            const dateStr = today.toLocaleDateString('es-AR', {
-                day: 'numeric', month: 'long', year: 'numeric'
-            });
+            const today = new Date();
+            const dateStr = today.toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' });
             consultationsList.innerHTML = `
                 <div style="text-align: center; padding: 3rem; color: #6b7280;">
                     <i class="fas fa-check-circle" style="font-size: 3rem; margin-bottom: 1rem; color: #10b981; opacity: 0.5;"></i>
@@ -263,12 +246,12 @@ async function loadTodayConsultationsForDashboard() {
                 </div>
             `;
         }
-
+        
     } catch (error) {
         console.error('❌ Error al cargar consultas:', error);
         consultationsList.innerHTML = '<p style="color: #6b7280; padding: 2rem; text-align: center;">No se pudieron cargar las consultas del día</p>';
     }
-
+    
     // Reinicializar botones de atención
     setTimeout(async () => {
         const { initializeAttendButtons } = await import('./doctor-appointments.js');
@@ -276,9 +259,6 @@ async function loadTodayConsultationsForDashboard() {
     }, 100);
 }
 
-/**
- * Carga la agenda semanal para el dashboard principal
- */
 /**
  * Carga la agenda semanal para el dashboard principal
  */
@@ -331,9 +311,9 @@ async function loadWeeklySchedule() {
                 appointmentsByDay[dateKey].count++;
             });
             
-            // Mostrar los próximos 7 días
+            // Mostrar los próximos 5 días
             const scheduleItems = [];
-            for (let i = 0; i < 7; i++) {
+            for (let i = 0; i < 5; i++) {
                 const date = new Date(today);
                 date.setDate(date.getDate() + i);
                 const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -350,19 +330,9 @@ async function loadWeeklySchedule() {
             }
             
             scheduleItems.forEach(day => {
-            const scheduleItem = createScheduleItemElement(day);
-
-            // === Resaltar HOY ===
-            const today = new Date();
-            const todayStr = today.toISOString().split("T")[0];
-
-            if (day.dateStr === todayStr) {
-                scheduleItem.style.border = "2px solid #10b981"; // verde
-                scheduleItem.setAttribute("data-is-today", "true");
-            }
-
-            weeklySchedule.appendChild(scheduleItem);
-        });
+                const scheduleItem = createScheduleItemElement(day);
+                weeklySchedule.appendChild(scheduleItem);
+            });
             
             // Agregar event listeners a los items de la agenda
             initializeScheduleItemClickHandlers();
@@ -375,70 +345,15 @@ async function loadWeeklySchedule() {
         weeklySchedule.innerHTML = '<p style="color: #6b7280; padding: 2rem; text-align: center;">No se pudo cargar la agenda</p>';
     }
 }
-
-/**
- * Crea el elemento HTML para un día de la agenda
- */
-function createScheduleItemElement(day) {
-    const item = document.createElement('div');
-    item.className = 'schedule-item';
-    item.style.cursor = 'pointer';
-    item.style.transition = 'all 0.2s ease';
-    item.setAttribute('data-date', day.dateStr);
-    item.setAttribute('data-day-name', `${day.abbreviation} ${day.dayNumber}`);
-    
-    // Añadir efecto hover
-    item.addEventListener('mouseenter', function() {
-        this.style.backgroundColor = '#f0fdf4';
-        this.style.transform = 'translateY(-2px)';
-        this.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
-    });
-    
-    item.addEventListener('mouseleave', function() {
-        this.style.backgroundColor = '';
-        this.style.transform = '';
-        this.style.boxShadow = '';
-    });
-    
-    item.innerHTML = `
-        <div class="schedule-day-badge">
-            <span class="day-abbr">${day.abbreviation || ''}</span>
-            <span class="day-num">${day.dayNumber || ''}</span>
-        </div>
-        <span>${day.count || 0} consultas</span>
-        <div class="schedule-count-badge">${day.count || 0}</div>
-    `;
-    
-    return item;
-}
-function highlightTodayInSchedule() {
-    const todayItem = document.querySelector('.schedule-item[data-is-today="true"]');
-    
-    if (todayItem) {
-        // Resetear estilos del resto
-        document.querySelectorAll('.schedule-item').forEach(si => {
-            si.style.border = '';
-            si.style.backgroundColor = '';
-        });
-
-        // Marcar HOY en verde
-        todayItem.style.border = "3px solid #10b981";
-        todayItem.style.backgroundColor = "#f0fdf4";
-    }
-}
-
-/**
- * Inicializa los event handlers para los items de la agenda
- */
 function initializeScheduleItemClickHandlers() {
     const scheduleItems = document.querySelectorAll('.schedule-item[data-date]');
     
     scheduleItems.forEach(item => {
+        // Remover listeners previos
         const newItem = item.cloneNode(true);
         item.parentNode.replaceChild(newItem, item);
-
-        const isToday = newItem.getAttribute("data-is-today") === "true";
-
+        
+        // Mantener los event listeners de hover
         newItem.addEventListener('mouseenter', function() {
             this.style.backgroundColor = '#f0fdf4';
             this.style.transform = 'translateY(-2px)';
@@ -450,141 +365,36 @@ function initializeScheduleItemClickHandlers() {
             this.style.transform = '';
             this.style.boxShadow = '';
         });
-
+        
+        // Agregar evento de click
         newItem.addEventListener('click', async function() {
             const dateStr = this.getAttribute('data-date');
-            const isTodayClick = this.getAttribute("data-is-today") === "true";
-
-            // Resetear bordes primero
+            const dayName = this.getAttribute('data-day-name');
+            
+            console.log('📅 Cargando consultas para:', dayName, dateStr);
+            
+            // Resaltar el día seleccionado
             document.querySelectorAll('.schedule-item').forEach(si => {
                 si.style.border = '';
                 si.style.backgroundColor = '';
             });
-
-            // Marcar el día clickeado
-            this.style.border = "3px solid #10b981";
-            this.style.backgroundColor = "#f0fdf4";
-
-            const consultationsList = document.getElementById('consultations-list');
-
-            // === CLIC EN HOY ===
-            if (isTodayClick) {
-                console.log("📅 Clic en HOY → cargar consultas de hoy");
-
-                if (consultationsList) {
-                    consultationsList.innerHTML = `
-                        <div style="text-align:center; padding:1.2rem; color:#6b7280;">
-                            <i class="fas fa-spinner fa-spin" style="font-size:1.8rem;"></i>
-                            <p>Cargando tus consultas de hoy...</p>
-                        </div>
-                    `;
-                }
-
-                await loadTodayConsultationsForDashboard();
-                return;
-            }
-
-            // === OTRO DÍA ===
-            console.log("📅 Cargando consultas para:", dateStr);
-            updateConsultationsListTitle(this.getAttribute('data-day-name'), dateStr);
+            this.style.border = '2px solid #10b981';
+            this.style.backgroundColor = '#f0fdf4';
+            
+            // Actualizar el título del historial
+            updateConsultationsListTitle(dayName, dateStr);
+            
+            // Cargar consultas de ese día
             await loadConsultationsForDate(dateStr);
         });
-
-        // Al cargar la agenda, resaltar HOY
-        if (isToday) {
-            newItem.style.border = "3px solid #10b981";
-        }
     });
 }
-
-
-
-/**
- * Actualiza el título de la sección de consultas
- */
-function updateConsultationsListTitle(dayName, dateStr) {
-    // Buscar el título de la sección de consultas
-    const consultationsSection = document.querySelector('#consultations-list')?.closest('.dashboard-section');
-    if (!consultationsSection) return;
-    
-    const header = consultationsSection.querySelector('.section-header h3');
-    if (header) {
-        // Parsear la fecha correctamente usando componentes locales
-        const [year, month, day] = dateStr.split('-').map(Number);
-        const date = new Date(year, month - 1, day);
-        
-        // Formatear la fecha en zona horaria local
-        const formattedDate = date.toLocaleDateString('es-AR', { 
-            weekday: 'long', 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
-        });
-        
-        // Capitalizar primera letra
-        const capitalizedDate = formattedDate.charAt(0).toUpperCase() + formattedDate.slice(1);
-        
-        header.innerHTML = `
-            <span style="display: flex; align-items: center; gap: 0.5rem;">
-                <i class="fas fa-calendar-day" style="color: #10b981;"></i>
-                Consultas del ${capitalizedDate}
-            </span>
-        `;
-        
-        // Agregar botón para volver a hoy
-        let backButton = consultationsSection.querySelector('.back-to-today-btn');
-        if (!backButton) {
-            backButton = document.createElement('button');
-            backButton.className = 'btn btn-secondary btn-sm back-to-today-btn';
-            backButton.innerHTML = '<i class="fas fa-arrow-left"></i> Hoy';
-            backButton.style.marginLeft = '1rem';
-            
-            backButton.addEventListener('click', async () => {
-                
-                // 1️⃣ Limpiar estilos previos de la agenda
-                document.querySelectorAll('.schedule-item').forEach(si => {
-                    si.style.border = '';
-                    si.style.backgroundColor = '';
-                });
-
-                // 2️⃣ Marcar día actual en verde
-                const todayItem = document.querySelector('.schedule-item[data-is-today="true"]');
-                if (todayItem) {
-                    todayItem.style.border = "3px solid #10b981";
-                    todayItem.style.backgroundColor = "#f0fdf4";
-                }
-
-                // 3️⃣ Restaurar título
-                header.innerHTML = 'Consultas de Hoy';
-
-                // 4️⃣ Eliminar botón
-                backButton.remove();
-
-                // 5️⃣ Cargar consultas del día
-                await loadTodayConsultationsForDashboard();
-            });
-            
-            header.parentElement.appendChild(backButton);
-        }
-
-    }
-}
-
 /**
  * Carga las consultas para una fecha específica
  */
-
 async function loadConsultationsForDate(dateStr) {
     const consultationsList = document.getElementById('consultations-list');
     if (!consultationsList) return;
-    // Si recibe HOY por error → no mostrar nada
-    const today = new Date().toISOString().split("T")[0];
-    if (dateStr === today) {
-        console.log("⛔ loadConsultationsForDate recibido HOY → no mostrar nada");
-        const consultationsList = document.getElementById('consultations-list');
-        if (consultationsList) consultationsList.innerHTML = "";
-        return;
-    }
     
     try {
         const doctorId = getId(doctorState.currentDoctorData, 'doctorId');
@@ -616,18 +426,7 @@ async function loadConsultationsForDate(dateStr) {
         const appointments = await ApiScheduling.get(
             `v1/Appointments?doctorId=${doctorId}&startTime=${selectedDate.toISOString()}&endTime=${nextDay.toISOString()}`
         );
-        // --- DETECCIÓN DE FECHA HOY ---
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        const [Y, M, D] = dateStr.split('-').map(Number);
-        const parsedDate = new Date(Y, M - 1, D);
-        parsedDate.setHours(0, 0, 0, 0);
-
-        if (parsedDate.getTime() === today.getTime()) {
-            console.log("📅 loadConsultationsForDate recibió HOY → redirigiendo a historial");
-            return await loadTodayConsultationsForDashboard();
-        }
+        
         // Filtrar consultas completadas, canceladas y no show
         const allAppointments = Array.isArray(appointments) 
             ? appointments.filter(apt => {
@@ -701,9 +500,97 @@ async function loadConsultationsForDate(dateStr) {
         initializeAttendButtons();
     }, 100);
 }
-
-// Exportar las nuevas funciones
-export { loadConsultationsForDate, updateConsultationsListTitle };
+function updateConsultationsListTitle(dayName, dateStr) {
+    // Buscar el título de la sección de consultas
+    const consultationsSection = document.querySelector('#consultations-list')?.closest('.dashboard-section');
+    if (!consultationsSection) return;
+    
+    const header = consultationsSection.querySelector('.section-header h3');
+    if (header) {
+        // Parsear la fecha correctamente usando componentes locales
+        const [year, month, day] = dateStr.split('-').map(Number);
+        const date = new Date(year, month - 1, day);
+        
+        // Formatear la fecha en zona horaria local
+        const formattedDate = date.toLocaleDateString('es-AR', { 
+            weekday: 'long', 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+        });
+        
+        // Capitalizar primera letra
+        const capitalizedDate = formattedDate.charAt(0).toUpperCase() + formattedDate.slice(1);
+        
+        header.innerHTML = `
+            <span style="display: flex; align-items: center; gap: 0.5rem;">
+                <i class="fas fa-calendar-day" style="color: #10b981;"></i>
+                Consultas del ${capitalizedDate}
+            </span>
+        `;
+        
+        // Agregar botón para volver a hoy
+        let backButton = consultationsSection.querySelector('.back-to-today-btn');
+        if (!backButton) {
+            backButton = document.createElement('button');
+            backButton.className = 'btn btn-secondary btn-sm back-to-today-btn';
+            backButton.innerHTML = '<i class="fas fa-arrow-left"></i> Hoy';
+            backButton.style.marginLeft = '1rem';
+            
+            backButton.addEventListener('click', async () => {
+                // Remover selección de la agenda
+                document.querySelectorAll('.schedule-item').forEach(si => {
+                    si.style.border = '';
+                    si.style.backgroundColor = '';
+                });
+                
+                // Restaurar título original
+                header.innerHTML = 'Consultas de Hoy';
+                backButton.remove();
+                
+                // Cargar consultas de hoy
+                await loadTodayConsultationsForDashboard();
+            });
+            
+            header.parentElement.appendChild(backButton);
+        }
+    }
+}
+/**
+ * Crea el elemento HTML para un día de la agenda
+ */
+function createScheduleItemElement(day) {
+    const item = document.createElement('div');
+    item.className = 'schedule-item';
+    item.style.cursor = 'pointer';
+    item.style.transition = 'all 0.2s ease';
+    item.setAttribute('data-date', day.dateStr);
+    item.setAttribute('data-day-name', `${day.abbreviation} ${day.dayNumber}`);
+    
+    // Añadir efecto hover
+    item.addEventListener('mouseenter', function() {
+        this.style.backgroundColor = '#f0fdf4';
+        this.style.transform = 'translateY(-2px)';
+        this.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
+    });
+    
+    item.addEventListener('mouseleave', function() {
+        this.style.backgroundColor = '';
+        this.style.transform = '';
+        this.style.boxShadow = '';
+    });
+    
+    item.innerHTML = `
+        <div class="schedule-day-badge">
+            <span class="day-abbr">${day.abbreviation || ''}</span>
+            <span class="day-num">${day.dayNumber || ''}</span>
+        </div>
+        <span>${day.count || 0} consultas</span>
+        <div class="schedule-count-badge">${day.count || 0}</div>
+    `;
+    
+    return item;
+}
 
 // Exportar doctorState
 export { doctorState };

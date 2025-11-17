@@ -1,18 +1,3 @@
-/*
- * Perfil del Médico - CuidarMed+
- * Modernización UI manteniendo identidad visual del tema
- * Usa paleta, tipografías y espaciados de styles.css
- * 
- * Cambios:
- * - Grid responsivo 4/8 en desktop, stack en mobile
- * - Header sticky con sombra al hacer scroll
- * - Cards modernas con mejor jerarquía visual
- * - Foto de perfil mejorada con preview en vivo
- * - Chips para especialidad y datos profesionales
- * - Biografía expandible (3 líneas → ver más/ver menos)
- * - Micro-interacciones sutiles (hover, transiciones)
- */
-
 /* ========================================
    PROFILE SECTION - Layout Base
    ======================================== */
@@ -604,6 +589,7 @@
     max-height: 120px;
     overflow: hidden;
     display: -webkit-box;
+    line-clamp: 3;
     -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     text-overflow: ellipsis;
@@ -613,6 +599,7 @@
 .profile-textarea[data-expanded="true"] {
     max-height: none;
     display: block;
+    line-clamp: 3;
     -webkit-line-clamp: unset;
     overflow: visible;
 }
@@ -1891,4 +1878,96 @@ body {
 
 #patient-suggestions::-webkit-scrollbar-thumb:hover {
     background: #94a3b8;
+}
+
+
+/*APPOINTMENT CSS*/
+/* ===== Estados ===== */
+.status-completed {
+    color: #10b981;
+    font-weight: 600;
+    font-size: .875rem;
+}
+
+.status-cancelled {
+    color: #dc2626;
+    font-weight: 600;
+    font-size: .875rem;
+}
+
+.status-no-show {
+    color: #6b7280;
+    font-weight: 600;
+    font-size: .875rem;
+}
+
+/* ===== Botón toggle ===== */
+.appointment-action-menu {
+    position: relative;
+    display: inline-block;
+}
+
+.appointment-action-toggle {
+    background-color: #6b7280; 
+    border: none;
+    padding: .45rem .7rem;
+    font-size: .85rem;
+    border-radius: 8px;
+    color: white;
+    cursor: pointer;
+    transition: background .2s ease, transform .1s ease;
+}
+
+.appointment-action-toggle:hover {
+    background-color: #4b5563;
+}
+
+.appointment-action-toggle:active {
+    transform: scale(.95);
+}
+
+/* ===== Dropdown ===== */
+.appointment-action-dropdown {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: 110%;
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 7px 20px rgba(0,0,0,0.12);
+    border: 1px solid #e5e7eb;
+    padding: .35rem 0;
+    min-width: 160px;
+    z-index: 999;
+}
+
+.appointment-action-dropdown.show {
+    display: block;
+}
+
+/* ===== Items ===== */
+.appointment-action-dropdown .dropdown-item {
+    background: none;
+    border: none;
+    width: 100%;
+    text-align: left;
+    padding: .55rem 1rem;
+    font-size: .9rem;
+    color: #374151;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+}
+
+.appointment-action-dropdown .dropdown-item:hover {
+    background-color: #f3f4f6;
+}
+
+.appointment-action-dropdown .cancel-appointment-btn {
+    color: #dc2626 !important;
+}
+
+.appointment-action-dropdown .cancel-appointment-btn:hover {
+    background-color: #fee2e2;
 }
