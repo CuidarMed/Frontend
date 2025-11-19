@@ -3357,7 +3357,6 @@ async function loadAvailableTimes(doctorId, selectedDate) {
 
         // Obtener disponibilidades del doctor
         const availabilitiesResponse = await ApiScheduling.get(`v1/DoctorAvailability/search?doctorId=${doctorId}`);
-        // El API puede devolver un objeto con 'value' o directamente un array
         const availabilities = Array.isArray(availabilitiesResponse) ? availabilitiesResponse : (availabilitiesResponse?.value || availabilitiesResponse || []);
         
         console.log('=== CARGANDO HORARIOS DISPONIBLES ===');
@@ -3366,45 +3365,75 @@ async function loadAvailableTimes(doctorId, selectedDate) {
         console.log('Disponibilidades recibidas:', availabilities);
         
         if (!availabilities || availabilities.length === 0) {
+            timeSelect.innerHTML = '<option value="">No hay disponibilidades configuradas</option>';
             return;
         }
 
-        // Obtener el día de la semana de la fecha seleccionada
-        const selectedDateObj = new Date(selectedDate + 'T00:00:00');
+        // FIX: Crear fecha local correctamente (sin conversión automática a UTC)
+        const [year, month, day] = selectedDate.split('-').map(Number);
+        const selectedDateObj = new Date(year, month - 1, day);
         const dayOfWeekJS = selectedDateObj.getDay(); // 0 = Domingo, 1 = Lunes, etc.
-        // Mapear a WeekDay enum del backend: Monday=1, Tuesday=2, ..., Sunday=7
-        const weekDayMap = { 0: 7, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6 }; // JS Sunday=0 -> Backend Sunday=7
-        const backendDayOfWeek = weekDayMap[dayOfWeekJS];
+        
+        console.log('Día de la semana JS (0=Dom, 1=Lun...):', dayOfWeekJS);
+
+        // FIX: Mapear correctamente días de la semana
+        // JavaScript: 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday
+        // Backend: 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday, 7=Sunday
+        const dayNameMap = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+        const expectedDayName = dayNameMap[dayOfWeekJS];
+        const backendDayOfWeek = dayOfWeekJS === 0 ? 7 : dayOfWeekJS; // Convertir Domingo de 0 a 7
+
+        console.log('Día esperado (nombre):', expectedDayName);
+        console.log('Día esperado (backend enum):', backendDayOfWeek);
 
         // Filtrar disponibilidades para este día de la semana
         const dayAvailabilities = availabilities.filter(av => {
             const avDay = av.dayOfWeek || av.DayOfWeek;
-            // El backend puede devolver el número del enum o el nombre
-            return avDay === backendDayOfWeek || 
-                   avDay === dayOfWeekJS || 
-                   (typeof avDay === 'string' && avDay.toLowerCase() === ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][dayOfWeekJS]?.toLowerCase());
+            const isActive = av.isActive !== false && av.IsActive !== false;
+            
+            // Comparar por número o por nombre (case-insensitive)
+            const matchesDay = avDay === backendDayOfWeek || 
+                               (typeof avDay === 'string' && avDay.toLowerCase() === expectedDayName);
+            
+            console.log(`  Disponibilidad: dayOfWeek=${avDay}, isActive=${isActive}, matches=${matchesDay}`);
+            
+            return isActive && matchesDay;
         });
+
+        console.log('Disponibilidades para este día:', dayAvailabilities.length);
 
         if (dayAvailabilities.length === 0) {
             timeSelect.innerHTML = '<option value="">No hay disponibilidad este día</option>';
+            showNotification('Este médico no tiene disponibilidad configurada para este día', 'warning');
             return;
         }
 
         // Obtener appointments existentes para esta fecha
-        const startOfDay = new Date(selectedDate + 'T00:00:00');
-        const endOfDay = new Date(selectedDate + 'T23:59:59');
+        const startOfDay = new Date(year, month - 1, day, 0, 0, 0, 0);
+        const endOfDay = new Date(year, month - 1, day, 23, 59, 59, 999);
+        
+        console.log('Buscando appointments desde:', startOfDay.toISOString());
+        console.log('Hasta:', endOfDay.toISOString());
         
         const appointmentsResponse = await ApiScheduling.get(`v1/Appointments?doctorId=${doctorId}&startTime=${startOfDay.toISOString()}&endTime=${endOfDay.toISOString()}`);
-        // El API puede devolver un objeto con 'value' o directamente un array
         const appointments = Array.isArray(appointmentsResponse) ? appointmentsResponse : (appointmentsResponse?.value || appointmentsResponse || []);
         
-        console.log('Appointments existentes para esta fecha:', appointments);
+        console.log('Appointments existentes para esta fecha:', appointments.length);
+        if (appointments.length > 0) {
+            console.log('Appointments:', appointments.map(a => ({
+                start: a.startTime || a.StartTime,
+                end: a.endTime || a.EndTime
+            })));
+        }
         
         // Calcular slots disponibles
         const availableSlots = calculateAvailableTimeSlots(dayAvailabilities, appointments || [], selectedDate);
         
+        console.log('Slots disponibles calculados:', availableSlots.length);
+
         if (availableSlots.length === 0) {
             timeSelect.innerHTML = '<option value="">No hay horarios disponibles</option>';
+            showNotification('No hay horarios disponibles para esta fecha', 'info');
             return;
         }
 
@@ -3412,9 +3441,7 @@ async function loadAvailableTimes(doctorId, selectedDate) {
         availableSlots.forEach(slot => {
             const option = document.createElement('option');
             
-            // Si el slot es un objeto con información local, usarlo
             if (typeof slot === 'object' && slot.isoString) {
-                // Guardar el objeto completo como JSON string para poder reconstruir la hora local
                 option.value = JSON.stringify({
                     isoString: slot.isoString,
                     localHours: slot.localHours,
@@ -3425,7 +3452,6 @@ async function loadAvailableTimes(doctorId, selectedDate) {
                 const minutes = String(slot.localMinutes).padStart(2, '0');
                 option.textContent = `${hours}:${minutes}`;
             } else {
-                // Fallback: si es un string ISO, parsearlo
                 option.value = slot;
                 const slotDate = new Date(slot);
                 const hours = String(slotDate.getHours()).padStart(2, '0');
@@ -3436,9 +3462,15 @@ async function loadAvailableTimes(doctorId, selectedDate) {
             timeSelect.appendChild(option);
         });
 
+        console.log('✅ Horarios cargados exitosamente');
+
     } catch (error) {
-        console.error('Error al cargar horarios disponibles:', error);
+        console.error('❌ Error al cargar horarios disponibles:', error);
         showNotification('No se pudieron cargar los horarios disponibles', 'error');
+        const timeSelect = document.getElementById('time');
+        if (timeSelect) {
+            timeSelect.innerHTML = '<option value="">Error al cargar horarios</option>';
+        }
     }
 }
 
@@ -3835,27 +3867,37 @@ function initializeEmptyCalendar() {
 function calculateAvailableTimeSlots(availabilities, appointments, selectedDate) {
     const slots = [];
     
-    availabilities.forEach(av => {
+    // Crear fecha base en hora local
+    const [year, month, day] = selectedDate.split('-').map(Number);
+    const baseDate = new Date(year, month - 1, day, 0, 0, 0, 0);
+    
+    console.log('=== CALCULANDO SLOTS ===');
+    console.log('Fecha base:', baseDate.toString());
+    console.log('Disponibilidades a procesar:', availabilities.length);
+    
+    availabilities.forEach((av, index) => {
         const startTime = av.startTime || av.StartTime;
         const endTime = av.endTime || av.EndTime;
         const durationMinutes = av.durationMinutes || av.DurationMinutes || 30;
+        
+        console.log(`  Disponibilidad ${index + 1}:`, {
+            startTime,
+            endTime,
+            durationMinutes
+        });
         
         // Convertir TimeSpan a minutos desde medianoche
         const startMinutes = timeSpanToMinutes(startTime);
         const endMinutes = timeSpanToMinutes(endTime);
         
-        // Crear fecha base en hora local (sin conversión a UTC)
-        // selectedDate viene como "YYYY-MM-DD", crear fecha local
-        const [year, month, day] = selectedDate.split('-').map(Number);
-        const baseDate = new Date(year, month - 1, day, 0, 0, 0, 0); // Hora local, no UTC
+        console.log(`  Minutos: ${startMinutes} - ${endMinutes}`);
         
         // Generar slots cada durationMinutes
         for (let minutes = startMinutes; minutes + durationMinutes <= endMinutes; minutes += durationMinutes) {
-            // Crear fecha/hora local sumando minutos desde medianoche local
+            // Crear fecha/hora local
             const slotStartLocal = new Date(baseDate);
             slotStartLocal.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
             
-            // Crear fecha de fin del slot
             const slotEndLocal = new Date(slotStartLocal);
             slotEndLocal.setMinutes(slotEndLocal.getMinutes() + durationMinutes);
             
@@ -3864,50 +3906,58 @@ function calculateAvailableTimeSlots(availabilities, appointments, selectedDate)
                 const aptStart = new Date(apt.startTime || apt.StartTime);
                 const aptEnd = new Date(apt.endTime || apt.EndTime);
                 
-                // Verificar solapamiento comparando en hora local
+                // Verificar solapamiento
                 return (slotStartLocal < aptEnd && slotEndLocal > aptStart);
             });
             
             // Solo agregar slots futuros
             const now = new Date();
             if (!isOccupied && slotStartLocal > now) {
-                // Guardar el slot con la hora local correcta
-                // El ISO string se usará para enviar al backend, pero la hora mostrada
-                // será la hora local que el usuario ve (10:00, 10:30, etc.)
                 slots.push({
                     isoString: slotStartLocal.toISOString(),
                     localHours: Math.floor(minutes / 60),
                     localMinutes: minutes % 60,
                     date: slotStartLocal
                 });
+                
+                console.log(`    ✓ Slot disponible: ${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}`);
+            } else if (isOccupied) {
+                console.log(`    ✗ Slot ocupado: ${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}`);
             }
         }
     });
     
     // Ordenar slots por hora local
     slots.sort((a, b) => {
-        if (typeof a === 'object' && typeof b === 'object') {
-            const timeA = a.localHours * 60 + a.localMinutes;
-            const timeB = b.localHours * 60 + b.localMinutes;
-            return timeA - timeB;
-        }
-        // Fallback para strings ISO
-        return a.localeCompare(b);
+        const timeA = a.localHours * 60 + a.localMinutes;
+        const timeB = b.localHours * 60 + b.localMinutes;
+        return timeA - timeB;
     });
+    
+    console.log(`Total de slots disponibles: ${slots.length}`);
     
     return slots;
 }
 
 // Convertir TimeSpan (formato "HH:mm:ss" o objeto) a minutos desde medianoche
 function timeSpanToMinutes(timeSpan) {
+    if (!timeSpan) return 0;
+    
+    // Si es un string en formato "HH:mm:ss" o "HH:mm"
     if (typeof timeSpan === 'string') {
         const parts = timeSpan.split(':');
-        return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+        const hours = parseInt(parts[0] || 0);
+        const minutes = parseInt(parts[1] || 0);
+        return hours * 60 + minutes;
     }
-    // Si es un objeto con horas y minutos
-    if (timeSpan.hours !== undefined) {
-        return timeSpan.hours * 60 + (timeSpan.minutes || 0);
+    
+    // Si es un objeto con propiedades hours y minutes
+    if (typeof timeSpan === 'object') {
+        const hours = timeSpan.hours || timeSpan.Hours || 0;
+        const minutes = timeSpan.minutes || timeSpan.Minutes || 0;
+        return hours * 60 + minutes;
     }
+    
     return 0;
 }
 
