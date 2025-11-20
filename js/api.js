@@ -10,6 +10,11 @@ const AUTH_API_BASE_URLS = [
   ...defaultHostnames.flatMap(host => [`http://${host}:8082/api`, `http://${host}:5093/api`])
 ].filter((value, index, self) => self.indexOf(value) === index);
 
+// NotificationsMS: puerto Docker (8082)
+const NOTIFICATIONS_API_BASE_URLS = [
+  ...defaultHostnames.flatMap(host => [`http://${host}:8082/api`])
+].filter((value, index, self) => self.indexOf(value) === index);
+
 // SchedulingMS: puertos Docker (8083) e IIS Express (34372), Development (5140)
 const SCHEDULING_API_BASE_URLS = [
   ...defaultHostnames.flatMap(host => [`http://${host}:8083/api`, `http://${host}:34372/api`, `http://${host}:5140/api`])

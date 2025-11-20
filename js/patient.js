@@ -2456,7 +2456,7 @@ function timeSpanToMinutes(timeSpan) {
 // Manejar envío del formulario de turno
 async function handleAppointmentSubmit(e) {
     e.preventDefault();
-    
+
     try {
         const doctorId = parseInt(document.getElementById('doctor').value);
         const date = document.getElementById('date').value;
@@ -2473,46 +2473,176 @@ async function handleAppointmentSubmit(e) {
             return;
         }
 
-        // El timeValue ahora es un ISO string completo (viene de calculateAvailableTimeSlots)
-        // Este ISO string ya tiene la hora local correcta convertida a UTC
-        let startDateTime = new Date(timeValue);
-        
-        // Asegurar que estamos usando la hora local correcta
-        // El ISO string viene en UTC, pero representa la hora local que el usuario seleccionó
-        // Por ejemplo, si el usuario selecciona 10:00 local y está en UTC-3,
-        // el ISO string será 13:00 UTC, pero cuando se crea el Date y se muestra,
-        // JavaScript lo convierte de vuelta a 10:00 local
-        
-        // Obtener la duración del slot desde las disponibilidades
+        // ============================================================
+        // 1) PROCESAR FECHA Y HORA
+        // ============================================================
+
+        let slotData;
+        let startDateTime;
+        let localHours, localMinutes;
+
+        try {
+            slotData = JSON.parse(timeValue);
+            if (slotData.localHours !== undefined && slotData.localMinutes !== undefined) {
+                localHours = slotData.localHours;
+                localMinutes = slotData.localMinutes;
+                const [year, month, day] = date.split('-').map(Number);
+                startDateTime = new Date(year, month - 1, day, localHours, localMinutes, 0, 0);
+            } else {
+                startDateTime = new Date(slotData.isoString || slotData.date || timeValue);
+                localHours = startDateTime.getHours();
+                localMinutes = startDateTime.getMinutes();
+            }
+        } catch (e) {
+            startDateTime = new Date(timeValue);
+            localHours = startDateTime.getHours();
+            localMinutes = startDateTime.getMinutes();
+        }
+
+        const year = startDateTime.getFullYear();
+        const month = String(startDateTime.getMonth() + 1).padStart(2, '0');
+        const day = String(startDateTime.getDate()).padStart(2, '0');
+        const hours = String(localHours).padStart(2, '0');
+        const minutes = String(localMinutes).padStart(2, '0');
+        const seconds = '00';
+
+        const timezoneOffset = -startDateTime.getTimezoneOffset();
+        const offsetHours = Math.floor(Math.abs(timezoneOffset) / 60);
+        const offsetMinutes = Math.abs(timezoneOffset) % 60;
+        const offsetSign = timezoneOffset >= 0 ? '+' : '-';
+        const offsetString = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMinutes).padStart(2, '0')}`;
+
+        const startTimeLocal = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${offsetString}`;
+
+        // ============================================================
+        // 2) BUSCAR DURACIÓN DEL SLOT
+        // ============================================================
+
         const { ApiScheduling } = await import('./api.js');
         const availabilitiesResponse = await ApiScheduling.get(`v1/DoctorAvailability/search?doctorId=${doctorId}`);
-        // El API puede devolver un objeto con 'value' o directamente un array
-        const availabilities = Array.isArray(availabilitiesResponse) ? availabilitiesResponse : (availabilitiesResponse?.value || availabilitiesResponse || []);
-        const durationMinutes = availabilities && availabilities.length > 0 
-            ? (availabilities[0].durationMinutes || availabilities[0].DurationMinutes || 30)
-            : 30;
-        
+        const availabilities = Array.isArray(availabilitiesResponse)
+            ? availabilitiesResponse
+            : (availabilitiesResponse?.value || availabilitiesResponse || []);
+
+        const durationMinutes = availabilities?.[0]?.durationMinutes ||
+                               availabilities?.[0]?.DurationMinutes ||
+                               30;
+
         const endDateTime = new Date(startDateTime.getTime() + durationMinutes * 60000);
+        const endYear = endDateTime.getFullYear();
+        const endMonth = String(endDateTime.getMonth() + 1).padStart(2, '0');
+        const endDay = String(endDateTime.getDate()).padStart(2, '0');
+        const endHours = String(endDateTime.getHours()).padStart(2, '0');
+        const endMinutes = String(endDateTime.getMinutes()).padStart(2, '0');
+        const endTimeLocal = `${endYear}-${endMonth}-${endDay}T${endHours}:${endMinutes}:${seconds}${offsetString}`;
+
+        // ============================================================
+        // 3) CREAR EL TURNO
+        // ============================================================
+
         const appointment = await ApiScheduling.post('v1/Appointments', {
             doctorId: doctorId,
             patientId: currentPatient.patientId,
             startTime: startDateTime.toISOString(),
             endTime: endDateTime.toISOString(),
             reason: reason
-            // El status se establece automáticamente como SCHEDULED en el backend
         });
 
+        // ============================================================
+        // 4) OBTENER appointmentId y normalizarlo
+        // ============================================================
+
+        let appointmentId =
+            appointment?.appointmentId ||
+            appointment?.AppointmentId ||
+            appointment?.id ||
+            appointment?.Id ||
+            null;
+
+        if (typeof appointmentId === "number") {
+            appointmentId = numberToDeterministicGuid(appointmentId);
+        }
+
+        // ============================================================
+        // 5) PARAMETROS COMUNES PARA LAS DOS NOTIFICACIONES
+        // ============================================================
+
+        const doctorSelect = document.getElementById('doctor');
+        const doctorLabel = doctorSelect?.selectedOptions?.[0]?.textContent || '';
+        const [doctorDisplayName, specialtyFromLabel] = doctorLabel.split(' - ');
+
+        const patientName = [
+            currentPatient?.name || currentPatient?.firstName,
+            currentPatient?.lastName
+        ].filter(Boolean).join(' ').trim();
+
+        const [appointmentDatePart, appointmentTimeWithOffset] = startTimeLocal.split('T');
+        const appointmentTimePart = appointmentTimeWithOffset?.split(/[+-]/)[0] || '';
+
+        const notificationPayloadBase = {
+            appointmentId,
+            patientName,
+            doctorName: (doctorDisplayName || '').replace(/^Dr\.\s*/i, '').trim(),
+            specialty: (specialtyFromLabel || '').trim(),
+            appointmentDate: `${appointmentDatePart}T00:00:00`,
+            appointmentTime: appointmentTimePart,
+            appointmentType: appointment?.appointmentType || appointment?.AppointmentType || 'Presencial',
+            meetingLink: appointment?.meetingLink || appointment?.MeetingLink || '',
+            notes: reason,
+            status: appointment?.status || appointment?.Status || 'Pending'
+        };
+
+        // ============================================================
+        // 6) NOTIFICACIÓN AL PACIENTE
+        // ============================================================
+
+        try {
+            const { ApiAuth } = await import('/js/api.js');
+
+            const notificationRequest = {
+                userId: currentUser?.userId || currentUser?.UserId || currentPatient?.patientId,
+                eventType: 'AppointmentCreated',
+                payload: notificationPayloadBase
+            };
+
+            console.log("Request al paciente:", notificationRequest);
+
+            await ApiAuth.post('v1/notifications/events', notificationRequest);
+            console.log("📨 Notificación enviada al PACIENTE.");
+        } catch (err) {
+            console.error("❌ No se pudo enviar notificación al PACIENTE:", err);
+        }
+
+        // ============================================================
+        // 7) NOTIFICACIÓN AL DOCTOR
+        // ============================================================
+
+        try {
+            const { ApiAuth } = await import('/js/api.js');
+
+            const doctorNotification = {
+                userId: doctorId, // usamos doctorId como userId
+                eventType: 'AppointmentCreatedDoctor',
+                payload: notificationPayloadBase
+            };
+
+            console.log("Request al DOCTOR:", doctorNotification);
+
+            await ApiAuth.post('v1/notifications/events', doctorNotification);
+            console.log("📬 Notificación enviada al DOCTOR.");
+        } catch (err) {
+            console.error("❌ No se pudo enviar notificación al doctor:", err);
+        }
+
+        // ============================================================
+        // 8) UI UPDATE
+        // ============================================================
+
         showNotification('Turno agendado exitosamente', 'success');
-        
-        const appointmentModal = document.getElementById('appointment-modal');
-        if (appointmentModal) {
-            appointmentModal.classList.add('hidden');
-        }
-        
-        const appointmentForm = document.getElementById('appointment-form');
-        if (appointmentForm) {
-            appointmentForm.reset();
-        }
+
+        document.getElementById('appointment-modal')?.classList.add('hidden');
+        document.getElementById('appointment-form')?.reset();
+
         await loadPatientAppointments();
         await loadPatientStats();
 
@@ -2637,7 +2767,6 @@ async function loadPatientHistoryFull() {
             const dateB = new Date(b.date || b.Date || 0);
             return dateB - dateA;
         });
-
         // Renderizar encounters
         historyListFull.innerHTML = encounters.map(enc => {
             const encounterId = enc.encounterId || enc.EncounterId;
@@ -2706,6 +2835,31 @@ async function loadPatientHistoryFull() {
             `;
         }
     }
+}
+
+function numberToDeterministicGuid(num) {
+    // Crear un Array de 16 bytes (GUID = 128 bits)
+    const bytes = new Uint8Array(16);
+
+    // Insertar el número en los primeros 8 bytes (Big Endian)
+    for (let i = 0; i < 8; i++) {
+        bytes[7 - i] = num & 0xff;
+        num = num >> 8;
+    }
+
+    // Forzar versión 4
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+    // Convertir a string GUID
+    const hex = [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
+    return [
+        hex.substr(0, 8),
+        hex.substr(8, 4),
+        hex.substr(12, 4),
+        hex.substr(16, 4),
+        hex.substr(20)
+    ].join('-');
 }
 
 // Actualizar handleSectionNavigation para cargar turnos e historial
