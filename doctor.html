@@ -16,7 +16,6 @@
         <div class="actions">
             <div class="user-menu" id="userMenu">
                 <button class="user-btn" id="userBtn">
-                    <img id="userMenuAvatar" class="user-menu-avatar" src="https://icons.veryicon.com/png/o/internet--web/prejudice/user-128.png" alt="Foto de perfil" />
                     <span id="userMenuName">Mi cuenta</span>
                     <i class="fas fa-chevron-down" style="font-size:0.8rem;"></i>
                 </button>
@@ -177,11 +176,6 @@
             </div>
 
             <!-- Perfil del Profesional -->
-            <!-- 
-                Modernización del perfil del médico - Manteniendo identidad visual de CuidarMed+
-                Estructura: Breadcrumb → Header sticky → Grid responsivo (4/8 en desktop, stack en mobile)
-                Mantiene todos los IDs y names existentes para compatibilidad con doctor.js
-            -->
             <div class="dashboard-section profile-section hidden" id="doctorProfileSection">
                 <!-- Breadcrumb -->
                 <nav class="breadcrumb" aria-label="Breadcrumb">
@@ -204,42 +198,8 @@
                     </div>
                 </header>
 
-                <!-- Profile Grid -->
-                <main class="profile-grid">
-                    <!-- Sidebar: Foto y Acciones -->
-                    <aside class="profile-sidebar">
-                        <div class="profile-card profile-card--sidebar">
-                            <div class="profile-avatar-section">
-                                <div class="profile-avatar-wrapper">
-                                    <img id="doctor-avatar-preview" 
-                                         src="https://icons.veryicon.com/png/o/internet--web/prejudice/user-128.png" 
-                                         alt="Foto de perfil del médico" 
-                                         class="profile-avatar-main">
-                                </div>
-                                <div class="profile-avatar-controls">
-                                    <label class="profile-label" for="doctor-image-file">Foto de perfil</label>
-                                    <input type="file" 
-                                           id="doctor-image-file" 
-                                           accept="image/*"
-                                           style="display: none;">
-                                    <button type="button" id="doctor-selectImageBtn" class="btn btn-secondary" style="width: 100%; margin-bottom: 0.5rem;">
-                                        <i class="fas fa-image"></i> Seleccionar de galería
-                                    </button>
-                                    <input type="text" 
-                                           id="doctor-image-url-input" 
-                                           class="profile-input profile-input--url" 
-                                           placeholder="O ingresa una URL (https://ejemplo.com/imagen.jpg)"
-                                           aria-describedby="avatar-url-help">
-                                    <p class="profile-help-text" id="avatar-url-help">
-                                        <i class="fas fa-info-circle"></i>
-                                        Selecciona una imagen de tu galería o ingresa una URL
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    </aside>
-
-                    <!-- Content: Información -->
+                <!-- Profile Content -->
+                <main class="profile-content-wrapper">
                     <section class="profile-content">
                         <form id="doctorProfileForm" class="profile-form" novalidate>
                             <!-- Información de contacto -->
@@ -317,13 +277,9 @@
                                             <span class="profile-specialty-chip" id="specialtyChip" aria-hidden="true"></span>
                                         </div>
                                     </div>
-                                    <!-- Espacio reservado para futuros datos profesionales -->
                                     <div class="profile-professional-extras" aria-label="Información profesional adicional">
-                                        <!-- Contenedor para Obra social / Modalidad / Horarios (chips) -->
                                         <div class="profile-chips-container" id="professionalChips" role="list">
-                                            <!-- Los chips se agregarán dinámicamente si hay datos -->
                                         </div>
-                                        <!-- Ubicación del consultorio -->
                                         <div class="profile-location" role="group" aria-label="Ubicación del consultorio">
                                             <i class="fas fa-map-marker-alt" aria-hidden="true"></i>
                                             <span>Consultorio Onsari</span>
@@ -437,16 +393,13 @@
     </div>
 
     <script type="module">
-    // Importar e inicializar el panel
     import { initializeDoctorPanel } from './js/doctor-js/doctor-main.js';
     
-    // Esperar a que el DOM esté listo
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', async () => {
             await initializeDoctorPanel();
         });
     } else {
-        // DOM ya está listo
         initializeDoctorPanel();
     }
 </script>
@@ -479,37 +432,10 @@
             }
         })();
 
-        /*
-         * Perfil del Médico - JavaScript Mínimo
-         * Funcionalidades:
-         * 1. Preview del avatar al cambiar URL
-         * 2. Header sticky al hacer scroll
-         * 3. Toggle de biografía expandible
-         * 4. Actualización de chip de especialidad
-         */
         (function() {
             'use strict';
 
-            // 1. Preview del avatar en tiempo real
-            const avatarUrlInput = document.getElementById('doctor-image-url-input');
-            const avatarPreview = document.getElementById('doctor-avatar-preview');
-            
-            if (avatarUrlInput && avatarPreview) {
-                avatarUrlInput.addEventListener('input', function() {
-                    const url = this.value.trim();
-                    if (url) {
-                        avatarPreview.src = url;
-                        avatarPreview.onerror = function() {
-                            // Si falla la carga, mantener imagen por defecto
-                            this.src = 'https://icons.veryicon.com/png/o/internet--web/prejudice/user-128.png';
-                        };
-                    } else {
-                        avatarPreview.src = 'https://icons.veryicon.com/png/o/internet--web/prejudice/user-128.png';
-                    }
-                });
-            }
-
-            // 2. Header sticky con sombra al hacer scroll
+            // Header sticky con sombra al hacer scroll
             const profilePageHeader = document.getElementById('profilePageHeader');
             const profileSection = document.getElementById('doctorProfileSection');
             
@@ -527,7 +453,6 @@
                     rootMargin: '-60px 0px 0px 0px'
                 });
                 
-                // Observar un elemento al inicio del contenido para detectar scroll
                 const headerTrigger = document.createElement('div');
                 headerTrigger.style.position = 'absolute';
                 headerTrigger.style.top = '0';
@@ -537,7 +462,7 @@
                 observer.observe(headerTrigger);
             }
 
-            // 3. Toggle de biografía expandible
+            // Toggle de biografía expandible
             const bioTextarea = document.getElementById('profileBioInput');
             const bioToggle = document.getElementById('bioToggle');
             
@@ -559,13 +484,9 @@
             }
             
             if (bioToggle && bioTextarea) {
-                // Verificar longitud inicial
                 checkBioLength();
-                
-                // Verificar cuando cambia el contenido
                 bioTextarea.addEventListener('input', checkBioLength);
                 
-                // Toggle de expandir/contraer
                 bioToggle.addEventListener('click', function() {
                     const isExpanded = bioTextarea.getAttribute('data-expanded') === 'true';
                     
@@ -581,7 +502,7 @@
                 });
             }
 
-            // 4. Actualizar chip de especialidad cuando cambia el input
+            // Actualizar chip de especialidad cuando cambia el input
             const specialtyInput = document.getElementById('profileSpecialtyInput');
             const specialtyChip = document.getElementById('specialtyChip');
             
@@ -600,11 +521,10 @@
             
             if (specialtyInput && specialtyChip) {
                 specialtyInput.addEventListener('input', updateSpecialtyChip);
-                // Actualizar al cargar datos existentes
                 setTimeout(updateSpecialtyChip, 500);
             }
 
-            // 5. Navegación del breadcrumb
+            // Navegación del breadcrumb
             const breadcrumbLink = document.querySelector('.breadcrumb-link');
             if (breadcrumbLink) {
                 breadcrumbLink.addEventListener('click', function(e) {
