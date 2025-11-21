@@ -258,7 +258,7 @@ async function handleAppointmentSubmit(e) {
         const endMinutes = String(endDateTime.getMinutes()).padStart(2, '0');
         const endTimeLocal = `${endYear}-${endMonth}-${endDay}T${endHours}:${endMinutes}:${seconds}${offsetString}`;
         
-        await ApiScheduling.post('v1/Appointments', {
+        const appointment = await ApiScheduling.post('v1/Appointments', {
             doctorId: doctorId,
             patientId: appState.currentPatient.patientId,
             startTime: startTimeLocal,
@@ -267,6 +267,108 @@ async function handleAppointmentSubmit(e) {
         });
 
         showNotification('Turno agendado exitosamente', 'success');
+        
+        
+        // ============================================================
+        //  NOTIFICACIONES POR MAIL (PACIENTE + DOCTOR)
+        // ============================================================
+
+        try {
+            const { ApiAuth } = await import('../api.js');
+
+            // ===============================
+            // 1) Obtener appointmentId
+            // ===============================
+            let appointmentId =
+                appointment?.appointmentId ||
+                appointment?.AppointmentId ||
+                appointment?.id ||
+                appointment?.Id ||
+                null;
+
+            // Convertir número a GUID determinístico
+            if (typeof appointmentId === "number") {
+                appointmentId = numberToDeterministicGuid(appointmentId);
+            }
+
+            // ===============================
+            // 2) Obtener etiquetas del doctor
+            // ===============================
+            const doctorSelect = document.getElementById('doctor');
+            const doctorLabel = doctorSelect?.selectedOptions?.[0]?.textContent || '';
+            const [doctorDisplayName, specialtyFromLabel] = doctorLabel.split(' - ');
+
+            // ===============================
+            // 3) Nombre completo del paciente
+            // ===============================
+            const patientName = [
+                appState.currentPatient?.firstName,
+                appState.currentPatient?.lastName
+            ].filter(Boolean).join(' ').trim();
+
+            // ===============================
+            // 4) Extraer fecha y hora del turno
+            // ===============================
+            const [appointmentDatePart, appointmentTimeWithOffset] = startTimeLocal.split('T');
+            const appointmentTimePart = appointmentTimeWithOffset?.split(/[+-]/)[0];
+
+            // ===============================
+            // 5) Payload BASE para paciente/doctor
+            // ===============================
+            const notificationPayloadBase = {
+                appointmentId,
+                patientName,
+                doctorName: (doctorDisplayName || '').replace(/^Dr\.\s*/i, '').trim(),
+                specialty: (specialtyFromLabel || '').trim(),
+                appointmentDate: `${appointmentDatePart}T00:00:00`,
+                appointmentTime: appointmentTimePart,
+                appointmentType: 'Presencial',
+                notes: reason,
+                status: 'Pending'
+            };
+
+            // ===============================
+            // 📩 6) Notificación al PACIENTE
+            // ===============================
+            const patientNotification = {
+                userId: appState.currentPatient.userId || appState.currentPatient.patientId,
+                eventType: 'AppointmentCreated',
+                payload: notificationPayloadBase
+            };
+
+            console.log("📨 Enviando notificación al paciente:", patientNotification);
+            await ApiAuth.post('v1/notifications/events', patientNotification);
+
+            // ===============================
+            // 📩 7) Notificación al DOCTOR
+            // ===============================
+
+            //Obtenemos el userId del doctor
+            const { Api } = await import('../api.js');
+
+            // Obtener info completa del doctor
+            const doctorResponse = await Api.get(`v1/doctor/${doctorId}`);
+            const doctorUserId = doctorResponse?.userId;
+
+            if (!doctorUserId) {
+                console.error("⚠ No se puedo obtener UserId del doctor");
+            }
+
+            const doctorNotification = {
+                userId: doctorUserId, // usamos doctorId como userId
+                eventType: 'AppointmentCreatedDoctor',
+                payload: notificationPayloadBase
+            };
+
+            console.log("📨 Enviando notificación al doctor:", doctorNotification);
+            await ApiAuth.post('v1/notifications/events', doctorNotification);
+
+            console.log("✅ Notificaciones enviadas exitosamente");
+
+        } catch (notificationError) {
+            console.error('❌ Error enviando notificaciones:', notificationError);
+        }
+
         
         const appointmentModal = document.getElementById('appointment-modal');
         if (appointmentModal) {
@@ -285,4 +387,16 @@ async function handleAppointmentSubmit(e) {
         console.error('Error al agendar turno:', error);
         showNotification(`Error al agendar turno: ${error.message || 'Error desconocido'}`, 'error');
     }
+}
+
+
+function numberToDeterministicGuid(num) {
+    const hex = num.toString(16).padStart(32, "0");
+    return [
+        hex.substring(0, 8),
+        hex.substring(8, 12),
+        hex.substring(12, 16),
+        hex.substring(16, 20),
+        hex.substring(20)
+    ].join("-");
 }
