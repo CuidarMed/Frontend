@@ -160,31 +160,47 @@ export async function loadDoctorContext() {
         
         console.log('✅ Usuario cargado:', doctorState.currentUser.email);
         
-        // Intentar sincronizar el perfil, pero no fallar si hay error
+        // PASO 1: Verificar token (NO redirigir si falla, solo loguear)
         try {
-            await ensureDoctorProfile(state.token);
+            // Importar directamente desde api.js en lugar de usar window
+            const { ensureValidToken } = await import('../api.js');
+            await ensureValidToken();
+            console.log('✅ Token validado/renovado');
+        } catch (tokenError) {
+            // NO redirigir inmediatamente, intentar continuar con datos locales
+            console.warn('⚠️ Error con token, continuando con datos locales:', tokenError.message);
+        }
+        
+        // PASO 2: Intentar sincronizar el perfil (OPCIONAL - no crítico)
+        try {
+            await ensureDoctorProfile();
             const { state: updatedState } = await import('../state.js');
             doctorState.currentUser = updatedState.user;
             console.log('✅ Perfil sincronizado correctamente');
         } catch (profileError) {
-            console.warn('⚠️ No se pudo sincronizar el perfil, continuando con datos locales:', profileError.message);
-            // Continuar con los datos que ya tenemos en localStorage
+            // NO redirigir por errores de perfil, continuar con datos locales
+            console.warn('⚠️ No se pudo sincronizar perfil, usando datos locales:', profileError.message);
         }
+        
+        // Siempre continuar si tenemos datos básicos del usuario
+        console.log('✅ Contexto del doctor cargado (con datos locales si fue necesario)');
+        
     } catch (error) {
         console.error('❌ Error crítico al cargar contexto:', error);
-        window.location.href = 'login.html';
+        // Solo redirigir si realmente no hay datos del usuario
+        if (!doctorState.currentUser) {
+            window.location.href = 'login.html';
+        }
     }
 }
-
 /**
  * Asegura que el perfil del doctor esté sincronizado
  */
-export async function ensureDoctorProfile(token) {
+export async function ensureDoctorProfile() {
     const userId = doctorState.currentUser?.userId;
     
-    // Si no hay token o userId, salir silenciosamente
-    if (!token || !userId) {
-        console.warn('⚠️ No se puede sincronizar perfil: falta token o userId');
+    if (!userId) {
+        console.warn('⚠️ No se puede sincronizar perfil: falta userId');
         return;
     }
     
@@ -192,7 +208,7 @@ export async function ensureDoctorProfile(token) {
         console.log('🔄 Sincronizando perfil del usuario...');
         
         const { getUserById } = await import('../apis/authms.js');
-        const profile = await getUserById(userId, token);
+        const profile = await getUserById(userId);
         
         if (!profile) {
             console.warn('⚠️ No se recibió perfil del servidor');
@@ -201,6 +217,7 @@ export async function ensureDoctorProfile(token) {
         
         console.log('📥 Perfil recibido del servidor');
         
+        // ... resto del código de actualización del perfil igual ...
         const newFirstName = getValue(profile, 'firstName', 'FirstName') ?? doctorState.currentUser?.firstName ?? '';
         const newLastName = getValue(profile, 'lastName', 'LastName') ?? doctorState.currentUser?.lastName ?? '';
         const newImageUrl = getValue(profile, 'imageUrl', 'ImageUrl') ?? doctorState.currentUser?.imageUrl;
@@ -212,10 +229,7 @@ export async function ensureDoctorProfile(token) {
         
         const finalImageUrl = (newImageUrl && !isDefaultImage && newImageUrl.trim() !== '') 
             ? newImageUrl 
-            : (doctorState.currentUser?.imageUrl && doctorState.currentUser.imageUrl !== DEFAULT_AVATAR_URL && 
-               !doctorState.currentUser.imageUrl.includes('icons.veryicon.com/png/o/internet--web/prejudice/user-128.png'))
-                ? doctorState.currentUser.imageUrl
-                : DEFAULT_AVATAR_URL;
+            : DEFAULT_AVATAR_URL;
         
         doctorState.currentUser = {
             ...doctorState.currentUser,
@@ -231,32 +245,12 @@ export async function ensureDoctorProfile(token) {
         
         const { state } = await import('../state.js');
         state.user = doctorState.currentUser;
+        localStorage.setItem('user', JSON.stringify(doctorState.currentUser));
         
-        try {
-            localStorage.setItem('user', JSON.stringify(doctorState.currentUser));
-            console.log('💾 Perfil actualizado en localStorage');
-        } catch (storageError) {
-            console.warn('⚠️ No se pudo guardar en localStorage:', storageError);
-        }
-        
-        if (finalImageUrl && finalImageUrl !== DEFAULT_AVATAR_URL) {
-            try {
-                const { updateAllDoctorAvatars } = await import('./doctor-ui.js');
-                updateAllDoctorAvatars(finalImageUrl);
-                console.log('🖼️ Avatares actualizados en la UI');
-            } catch (uiError) {
-                console.warn('⚠️ No se pudieron actualizar avatares:', uiError);
-            }
-        }
     } catch (error) {
-        // Si el error es 401 (Unauthorized), el token puede haber expirado
-        if (error.message?.includes('Unauthorized') || error.status === 401) {
-            console.warn('⚠️ Token expirado o inválido, usando datos locales');
-            // No redirigir a login, solo usar los datos que ya tenemos
-        } else {
-            console.warn('⚠️ Error al sincronizar perfil:', error.message);
-        }
-        // No lanzar el error, continuar con los datos locales
+        // NUNCA lanzar excepción, solo loguear
+        console.warn('⚠️ Error al sincronizar perfil (no crítico):', error.message);
+        // Continuar con datos locales
     }
 }
 
