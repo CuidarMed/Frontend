@@ -337,7 +337,7 @@ async function handleAppointmentSubmit(e) {
             };
 
             console.log("📨 Enviando notificación al paciente:", patientNotification);
-            await ApiAuth.post('v1/notifications/events', patientNotification);
+            await ApiAuth.post('notifications/events', patientNotification);
 
             // ===============================
             // 📩 7) Notificación al DOCTOR
@@ -361,7 +361,7 @@ async function handleAppointmentSubmit(e) {
             };
 
             console.log("📨 Enviando notificación al doctor:", doctorNotification);
-            await ApiAuth.post('v1/notifications/events', doctorNotification);
+            await ApiAuth.post('notifications/events', doctorNotification);
 
             console.log("✅ Notificaciones enviadas exitosamente");
 

@@ -55,7 +55,7 @@ export async function handleSectionNavigation(section) {
             // Cargar datos de inicio
             const { loadPatientData } = await import('./patient-data.js');
             const { loadPatientAppointments } = await import('./patient-appointments.js');
-            const { loadRecentPatientHistory } = await import('./patient-history.js');
+            const { loadRecentPatientHistory } = await import('./patient-history-recent.js');
             
             await loadPatientData();
             await loadPatientAppointments();

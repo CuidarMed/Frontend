@@ -18,6 +18,7 @@ export async function loadPatientHistoryFull() {
         const encountersResp = await ApiClinical.get(`v1/Encounter?patientId=${patientId}&from=${from.toISOString()}&to=${now.toISOString()}`);
         const encounters = Array.isArray(encountersResp) ? encountersResp : encountersResp?.value || [];
         if (!encounters.length) return showEmpty(container, "No hay historial médico disponible");
+        
 
         // Obtener información de doctores en paralelo
         const doctorIds = [...new Set(encounters.map(e => e.doctorId || e.DoctorId).filter(Boolean))];

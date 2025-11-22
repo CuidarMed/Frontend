@@ -17,7 +17,6 @@ const showFeedback = (message, type = "error") => {
     feedback.textContent = "";
     return;
   }
-
   feedback.textContent = message;
   feedback.classList.remove("error", "success");
   feedback.classList.add(type === "success" ? "success" : "error", "visible");
@@ -25,7 +24,6 @@ const showFeedback = (message, type = "error") => {
 
 const toggleLoading = (isLoading) => {
   if (!button) return;
-
   if (isLoading) {
     button.disabled = true;
     button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Iniciando sesión...';
@@ -40,12 +38,8 @@ const parseJwt = (token) => {
     const base64Url = token.split(".")[1];
     const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
     const jsonPayload = decodeURIComponent(
-      atob(base64)
-        .split("")
-        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-        .join("")
+      atob(base64).split("").map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join("")
     );
-
     return JSON.parse(jsonPayload);
   } catch (error) {
     console.error("No se pudo parsear el token JWT", error);
@@ -57,12 +51,8 @@ const getClaimValue = (payload, keys) => {
   if (!payload) return null;
   for (const key of keys) {
     const value = payload[key];
-    if (Array.isArray(value) && value.length > 0) {
-      return value[0];
-    }
-    if (typeof value === "string" && value.trim() !== "") {
-      return value;
-    }
+    if (Array.isArray(value) && value.length > 0) return value[0];
+    if (typeof value === "string" && value.trim() !== "") return value;
   }
   return null;
 };
@@ -71,16 +61,8 @@ const getClaimValue = (payload, keys) => {
 document.querySelectorAll(".form-group input").forEach((input) => {
   const icon = input.parentElement?.querySelector("i");
   if (!icon) return;
-
-  input.addEventListener("focus", () => {
-    icon.style.color = "#2563eb";
-  });
-
-  input.addEventListener("blur", () => {
-    if (!input.value) {
-      icon.style.color = "#6b7280";
-    }
-  });
+  input.addEventListener("focus", () => { icon.style.color = "#2563eb"; });
+  input.addEventListener("blur", () => { if (!input.value) icon.style.color = "#6b7280"; });
 });
 
 form?.addEventListener("submit", async (event) => {
@@ -104,73 +86,68 @@ form?.addEventListener("submit", async (event) => {
       throw new Error(response?.message || "No se recibió el token de acceso.");
     }
 
-    const payload = parseJwt(response.accessToken);
-
-    const role = getClaimValue(payload, [
-      "role",
-      "Role",
-      "roles",
-      "http://schemas.microsoft.com/ws/2008/06/identity/claims/role",
-    ]);
-
-    const resolvedEmail = getClaimValue(payload, [
-      "email",
-      "Email",
-      "userEmail",
-      "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress",
-    ]) || email;
-
-    const userId = getClaimValue(payload, [
-      "sub",
-      "userId",
-      "UserId",
-      "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier",
-    ]);
-
-    // Cargar información completa del usuario desde el backend (incluyendo imagen)
-    let fullUserInfo = {
-      email: resolvedEmail,
-      userId: parseInt(userId),
-      role,
-    };
-
-    // Intentar cargar datos completos del usuario desde AuthMS
-    try {
-      const { getUserById } = await import("../apis/authms.js");
-      const userProfile = await getUserById(parseInt(userId), response.accessToken);
-      
-      console.log("=== PERFIL CARGADO DURANTE LOGIN ===");
-      console.log("userProfile completo:", userProfile);
-      console.log("userProfile.imageUrl:", userProfile?.imageUrl ?? userProfile?.ImageUrl);
-      
-      if (userProfile) {
-        const imageUrl = userProfile.imageUrl ?? userProfile.ImageUrl ?? null;
-        
-        fullUserInfo = {
-          ...fullUserInfo,
-          firstName: userProfile.firstName ?? userProfile.FirstName ?? "",
-          lastName: userProfile.lastName ?? userProfile.LastName ?? "",
-          imageUrl: imageUrl,
-          dni: userProfile.dni ?? userProfile.Dni ?? null,
-        };
-        
-        console.log("fullUserInfo después de cargar perfil:", fullUserInfo);
-        console.log("imageUrl guardado:", fullUserInfo.imageUrl);
-      }
-    } catch (error) {
-      console.warn("No se pudo cargar el perfil completo del usuario durante el login:", error);
-      console.error("Error detallado:", error);
-      // Continuar con la información básica si falla
-    }
-
-    setUser(fullUserInfo, response.accessToken);
-
+    // Guardar tokens PRIMERO
+    localStorage.setItem("token", response.accessToken);
     if (response.refreshToken) {
       localStorage.setItem("refreshToken", response.refreshToken);
     }
 
+    const payload = parseJwt(response.accessToken);
+
+    const role = getClaimValue(payload, [
+      "role", "Role", "roles",
+      "http://schemas.microsoft.com/ws/2008/06/identity/claims/role",
+    ]);
+
+    const resolvedEmail = getClaimValue(payload, [
+      "email", "Email", "userEmail",
+      "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress",
+    ]) || email;
+
+    const userId = getClaimValue(payload, [
+      "sub", "userId", "UserId",
+      "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier",
+    ]);
+
+    // Extraer nombre del JWT si está disponible
+    const firstName = getClaimValue(payload, [
+      "given_name", "firstName", "FirstName",
+      "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname",
+    ]) || "";
+
+    const lastName = getClaimValue(payload, [
+      "family_name", "lastName", "LastName", 
+      "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname",
+    ]) || "";
+
+    // Crear usuario con datos del JWT (SIN llamar al backend adicional)
+    const userInfo = {
+      email: resolvedEmail,
+      userId: parseInt(userId),
+      role,
+      firstName,
+      lastName,
+      imageUrl: null, // Se cargará en doctor.html o patient.html
+    };
+
+    console.log("✅ Login exitoso, usuario:", userInfo);
+
+    // Guardar usuario en el state
+    setUser(userInfo, response.accessToken);
+
+    // Iniciar keep-alive usando la función global (más seguro)
+    try {
+      const { startKeepAlive } = await import('../api.js');
+      startKeepAlive();
+      console.log("✅ Keep-alive iniciado");
+    } catch (error) {
+      console.warn("⚠️ No se pudo iniciar keep-alive:", error);
+    }
+
+    // Redirigir según rol
     const target = role && role.toLowerCase() === "doctor" ? "doctor.html" : "patient.html";
     window.location.href = target;
+
   } catch (error) {
     console.error("Error al iniciar sesión:", error);
     showFeedback(error.message || "Error al iniciar sesión. Intenta nuevamente.");
@@ -182,4 +159,3 @@ form?.addEventListener("submit", async (event) => {
 goRegisterBtn?.addEventListener("click", () => {
   window.location.href = "registro.html";
 });
-
