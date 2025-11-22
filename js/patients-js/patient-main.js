@@ -62,23 +62,27 @@ async function initializePatientPanel() {
         await renderPrescriptionsHome();
     }
 
-    // Auto refresco cada 30s
+    // ✅ CAMBIO: Auto refresco cada 10 segundos (antes era 30)
     if (appState.autoRefreshInterval) {
         clearInterval(appState.autoRefreshInterval);
     }
 
     appState.autoRefreshInterval = setInterval(async () => {
+        console.log('🔄 Auto-refresh ejecutándose...');
+        
         await loadPatientData();
         await loadPatientAppointments();
         await loadPatientStats();
-        await loadRecentPatientHistory();
+        await loadRecentPatientHistory(); // ✅ Esto actualizará las 3 últimas consultas
         
         // Refrescar recetas en home si existe el contenedor
         const prescriptionsHomeContainer = document.getElementById('prescriptions-home-list');
         if (prescriptionsHomeContainer) {
             await renderPrescriptionsHome();
         }
-    }, 30000);
+        
+        console.log('✅ Auto-refresh completado');
+    }, 10000); // ✅ 10 segundos en lugar de 30
 }
 
 // Inicialización cuando el DOM esté listo
@@ -93,4 +97,3 @@ window.PatientPanel = {
     loadPatientAppointments,
     loadRecentPatientHistory,
 };
-

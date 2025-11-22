@@ -135,10 +135,11 @@ async function handlePrescriptionSubmit(e) {
     const patientId = formData.get('patient-id');
     const encounterId = formData.get('encounter-id');
     const appointmentId = formData.get('appointment-id');
+    
     const prescription = {
         patient: formData.get('patient-name'),
         patientId: patientId ? parseInt(patientId) : null,
-        encounterId: encounterId ? parseInt(encounterId) : null,
+        encounterId: encounterId ? parseInt(encounterId) : null,  // ✅ YA viene parseado
         appointmentId: appointmentId ? parseInt(appointmentId) : null,
         diagnosis: formData.get('diagnosis'),
         medication: formData.get('medication'),
@@ -171,35 +172,51 @@ async function handlePrescriptionSubmit(e) {
     try {
         const { ApiClinical } = await import('../api.js');
         
-        // Si no hay encounterId pero hay appointmentId, intentar obtenerlo
+        // ✅ CAMBIO PRINCIPAL: Solo buscar encounter si NO tenemos uno
         let finalEncounterId = prescription.encounterId;
+        
         if (!finalEncounterId && prescription.appointmentId) {
+            console.log('🔍 No hay encounterId, buscando por appointmentId:', prescription.appointmentId);
             try {
                 const encounters = await ApiClinical.get(`v1/Encounter?appointmentId=${prescription.appointmentId}`);
                 if (encounters && Array.isArray(encounters) && encounters.length > 0) {
                     finalEncounterId = encounters[0].encounterId || encounters[0].EncounterId;
-                    console.log('Encounter encontrado para asociar con la receta:', finalEncounterId);
+                    console.log('✅ Encounter encontrado:', finalEncounterId);
+                } else {
+                    console.warn('⚠️ No se encontró encounter para appointmentId:', prescription.appointmentId);
                 }
             } catch (err) {
-                console.warn('No se pudo obtener el encounter para asociar con la receta:', err);
+                console.warn('⚠️ Error al buscar encounter:', err);
             }
+        } else if (finalEncounterId) {
+            console.log('✅ EncounterId ya proporcionado:', finalEncounterId);
         }
         
+        // ✅ CAMBIO CRÍTICO: Solo incluir encounterId si realmente tenemos uno válido
         const prescriptionData = {
-            PatientId: prescription.patientId,
-            DoctorId: currentDoctorData.doctorId,
-            EncounterId: finalEncounterId,
-            Diagnosis: prescription.diagnosis,
-            Medication: prescription.medication,
-            Dosage: prescription.dosage,
-            Frequency: prescription.frequency,
-            Duration: prescription.duration,
-            AdditionalInstructions: prescription.additionalInstructions || null
+            patientId: prescription.patientId,
+            doctorId: currentDoctorData.doctorId,
+            diagnosis: prescription.diagnosis,
+            medication: prescription.medication,
+            dosage: prescription.dosage,
+            frequency: prescription.frequency,
+            duration: prescription.duration,
+            additionalInstructions: prescription.additionalInstructions || ""
         };
         
-        console.log('Creando receta con datos:', prescriptionData);
+        // Solo agregar encounterId si existe y es válido
+        if (finalEncounterId && finalEncounterId > 0) {
+            prescriptionData.encounterId = finalEncounterId;
+            console.log('✅ Incluyendo encounterId en payload:', finalEncounterId);
+        } else {
+            console.log('ℹ️ No se incluyó encounterId en el payload (no disponible)');
+        }
+        
+        console.log('📋 Creando receta con datos:', prescriptionData);
+        
         const response = await ApiClinical.post('v1/Prescription', prescriptionData);
         
+        console.log('✅ Receta creada exitosamente:', response);
         showNotification(`Receta generada exitosamente para ${prescription.patient}`, 'success');
         
         // Actualizar contador
@@ -208,10 +225,25 @@ async function handlePrescriptionSubmit(e) {
         // Cerrar modal
         closePrescriptionModal();
         
-        console.log('Prescripción guardada:', response);
     } catch (error) {
-        console.error('Error al guardar la receta:', error);
-        showNotification(`Error al guardar la receta: ${error.message || 'Error desconocido'}`, 'error');
+        console.error('❌ Error al guardar la receta:', error);
+        console.error('   Status:', error.status);
+        console.error('   Message:', error.message);
+        
+        let errorMessage = 'Error al guardar la receta';
+        
+        if (error.details) {
+            console.error('   Details:', error.details);
+            const detailsArray = Object.entries(error.details).map(([field, errors]) => {
+                const errorList = Array.isArray(errors) ? errors.join(', ') : errors;
+                return `${field}: ${errorList}`;
+            });
+            errorMessage += ':\n' + detailsArray.join('\n');
+        } else if (error.message) {
+            errorMessage += `: ${error.message}`;
+        }
+        
+        showNotification(errorMessage, 'error');
     }
 }
 
