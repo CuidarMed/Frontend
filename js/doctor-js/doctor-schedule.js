@@ -556,9 +556,9 @@ async function openAvailabilityForm(parentModal, doctorId, availabilityId = null
         `
         <form id="availability-form">
             <div class="form-group">
-                <label>Día de la semana:</label>
-                <select name="dayOfWeek" required>
-                    <option value="">Seleccionar</option>
+                <label style="display: block; margin-bottom: 0.5rem; color: #374151; font-weight: 600; font-size: 0.9rem;">Día de la semana:</label>
+                <select name="dayOfWeek" required style="width: 100%; padding: 0.75rem 1rem; border: 2px solid #e5e7eb; border-radius: 10px; font-size: 0.95rem; color: #374151; background: white; cursor: pointer; transition: all 0.3s ease; appearance: none; background-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23374151' d='M6 9L1 4h10z'/%3E%3C/svg%3E\"); background-repeat: no-repeat; background-position: right 1rem center; padding-right: 2.5rem;">
+                    <option value="">Seleccionar día</option>
                     ${dayOptions}
                 </select>
             </div>
@@ -574,9 +574,9 @@ async function openAvailabilityForm(parentModal, doctorId, availabilityId = null
                 <label>Duración (minutos):</label>
                 <input type="number" name="durationMinutes" min="15" max="480" value="${duration}" required>
             </div>
-            <div class="form-actions">
-                <button type="button" class="btn btn-secondary close-modal">Cancelar</button>
-                <button type="submit" class="btn btn-primary">Guardar</button>
+            <div class="form-actions" style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid #e5e7eb; flex-wrap: wrap;">
+                <button type="button" class="btn btn-secondary close-modal" style="padding: 0.75rem 1.5rem; min-width: 120px; white-space: nowrap;">Cancelar</button>
+                <button type="submit" class="btn btn-primary" style="padding: 0.75rem 1.5rem; min-width: 120px; white-space: nowrap;">Guardar</button>
             </div>
         </form>
         `,

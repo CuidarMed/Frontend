@@ -304,8 +304,8 @@ export async function updateAppointmentStatus(appointmentId, newStatus, reason =
         if (!currentAppointment) throw new Error('No se encontró el appointment');
         
         await ApiScheduling.patch(`v1/Appointments/${appointmentId}/status`, {
-            status: newStatus,
-            reason: reason || currentAppointment.reason || currentAppointment.Reason || null
+            Status: newStatus,
+            Reason: reason || currentAppointment.reason || currentAppointment.Reason || null
         });
         
         if (!silent) {

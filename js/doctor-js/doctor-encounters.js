@@ -21,6 +21,26 @@ const createEncounterForm = (appointmentId, patientId, patientName) => `
                 <input type="hidden" id="encounter-appointment-id" value="${appointmentId}">
                 <input type="hidden" id="encounter-patient-id" value="${patientId}">
                 
+                <div id="video-call-section" style="margin-bottom: 1.5rem; padding: 1rem; background: #f0f9ff; border-radius: 0.5rem; border: 1px solid #bae6fd;">
+                    <h4 style="margin-bottom: 0.5rem; color: #0369a1; display: flex; align-items: center; gap: 0.5rem;">
+                        <i class="fas fa-video"></i> Videollamada
+                    </h4>
+                    <div id="video-call-container" style="min-height: 200px; background: #000; border-radius: 0.5rem; position: relative; display: flex; align-items: center; justify-content: center; color: #fff;">
+                        <p id="video-loading" style="text-align: center;">Cargando videollamada...</p>
+                    </div>
+                    <div id="video-controls" style="margin-top: 0.5rem; display: flex; gap: 0.5rem; justify-content: center;">
+                        <button type="button" id="toggle-mic" class="btn btn-secondary" style="padding: 0.5rem 1rem;">
+                            <i class="fas fa-microphone"></i> Micrófono
+                        </button>
+                        <button type="button" id="toggle-camera" class="btn btn-secondary" style="padding: 0.5rem 1rem;">
+                            <i class="fas fa-video"></i> Cámara
+                        </button>
+                        <button type="button" id="end-call" class="btn btn-danger" style="padding: 0.5rem 1rem;">
+                            <i class="fas fa-phone-slash"></i> Finalizar
+                        </button>
+                    </div>
+                </div>
+                
                 <div class="form-group">
                     <label for="encounter-reasons">Motivo de consulta: *</label>
                     <textarea id="encounter-reasons" rows="2" required placeholder="Ej: Dolor de cabeza intenso desde hace 3 días"></textarea>
@@ -264,6 +284,9 @@ export async function openEncounterModal(appointmentId, patientId, patientName) 
     setupDownloadHL7Button(modal);
     setupPrescribeButton(modal);
     
+    // Inicializar videollamada
+    initializeVideoCall(modal, appointmentId, patientId, patientName);
+    
     let isSaving = false;
     modal.querySelector('#encounter-form').addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -308,8 +331,8 @@ async function saveEncounter(modal, appointmentId, patientId) {
             Objetive: document.getElementById('encounter-objective').value.trim(),
             Assessment: document.getElementById('encounter-assessment').value.trim(),
             Plan: document.getElementById('encounter-plan').value.trim(),
-            Notes: document.getElementById('encounter-notes').value.trim(),
-            Status: 'COMPLETED',
+            Notes: document.getElementById('encounter-notes').value.trim() || 'Sin notas adicionales',
+            Status: 'Open',
             Date: new Date().toISOString()
         };
         
@@ -344,7 +367,13 @@ async function saveEncounter(modal, appointmentId, patientId) {
             console.log('✅ Estado del appointment actualizado a COMPLETED');
         } catch (err) {
             console.error('❌ Error al actualizar estado:', err);
-            showNotification('Consulta guardada, pero no se pudo actualizar el estado del turno', 'warning');
+            const errorMessage = err.message || 'Error desconocido';
+            console.error('❌ Detalles del error:', {
+                message: errorMessage,
+                status: err.status,
+                appointmentId: appointmentId
+            });
+            showNotification(`Consulta guardada, pero no se pudo actualizar el estado del turno: ${errorMessage}`, 'warning');
         }
         
         updateCounter('active-consultation', -1);
@@ -515,6 +544,174 @@ export async function viewEncounterDetailsFromDoctor(encounterId) {
 
 if (typeof window !== 'undefined') {
     window.viewEncounterDetailsFromDoctor = viewEncounterDetailsFromDoctor;
+}
+
+// ===================================
+// VIDELLAMADA
+// ===================================
+
+async function initializeVideoCall(modal, appointmentId, patientId, patientName) {
+    try {
+        const videoSection = modal.querySelector('#video-call-section');
+        const videoContainer = modal.querySelector('#video-call-container');
+        const videoLoading = modal.querySelector('#video-loading');
+        
+        if (!videoSection || !videoContainer) {
+            console.warn('⚠️ Sección de videollamada no encontrada');
+            return;
+        }
+        
+        // Mostrar la sección
+        videoSection.style.display = 'block';
+        
+        // Intentar obtener token del backend
+        try {
+            const { ApiScheduling } = await import('../api.js');
+            const doctorId = getId(doctorState.currentDoctorData, 'doctorId');
+            
+            if (!doctorId) {
+                throw new Error('No se pudo identificar al médico');
+            }
+            
+            // Crear/obtener sala (la respuesta ya incluye el token)
+            const roomResponse = await ApiScheduling.post(`v1/Video/room/${appointmentId}?doctorId=${doctorId}&patientId=${patientId}`, {});
+            console.log('✅ Sala de videollamada creada/obtenida:', roomResponse);
+            
+            // El token viene en la respuesta de crear la sala
+            const token = roomResponse.token || roomResponse.Token;
+            const roomUrl = roomResponse.roomUrl || roomResponse.RoomUrl;
+            const roomName = roomResponse.roomName || roomResponse.RoomName || `appointment-${appointmentId}`;
+            
+            if (!token) {
+                throw new Error('No se recibió el token de videollamada en la respuesta');
+            }
+            
+            if (!roomUrl) {
+                throw new Error('No se recibió la URL de la sala en la respuesta');
+            }
+            
+            // Verificar si Daily.co está disponible
+            if (typeof window.DailyIframe === 'undefined') {
+                // Cargar Daily.co SDK
+                const script = document.createElement('script');
+                script.src = 'https://unpkg.com/@daily-co/daily-js';
+                script.onload = () => {
+                    startVideoCall(videoContainer, roomUrl, token, modal, appointmentId);
+                };
+                script.onerror = () => {
+                    showVideoError(videoContainer, 'No se pudo cargar el SDK de videollamada');
+                };
+                document.head.appendChild(script);
+            } else {
+                startVideoCall(videoContainer, roomUrl, token, modal, appointmentId);
+            }
+            
+        } catch (error) {
+            console.error('❌ Error al inicializar videollamada:', error);
+            showVideoError(videoContainer, `Videollamada no disponible: ${error.message || 'Error desconocido'}`);
+        }
+        
+    } catch (error) {
+        console.error('❌ Error en initializeVideoCall:', error);
+    }
+}
+
+function startVideoCall(videoContainer, roomUrl, token, modal, appointmentId) {
+    try {
+        if (typeof window.DailyIframe === 'undefined') {
+            showVideoError(videoContainer, 'SDK de Daily.co no disponible');
+            return;
+        }
+        
+        const callFrame = window.DailyIframe.createFrame(videoContainer, {
+            showLeaveButton: false,
+            showFullscreenButton: true,
+            iframeStyle: {
+                position: 'absolute',
+                width: '100%',
+                height: '100%',
+                border: '0',
+                borderRadius: '0.5rem'
+            }
+        });
+        
+        // Guardar referencia al callFrame
+        modal.callFrame = callFrame;
+        
+        // Configurar controles
+        setupVideoControls(modal, callFrame, appointmentId);
+        
+        // Unirse a la sala usando la URL completa que viene del backend
+        callFrame.join({ url: roomUrl, token: token })
+            .then(() => {
+                console.log('✅ Unido a la videollamada');
+                const loading = videoContainer.querySelector('#video-loading');
+                if (loading) loading.style.display = 'none';
+            })
+            .catch((error) => {
+                console.error('❌ Error al unirse a la videollamada:', error);
+                showVideoError(videoContainer, `Error al conectar: ${error.message || 'Error desconocido'}`);
+            });
+        
+        // Manejar eventos
+        callFrame.on('left-meeting', () => {
+            console.log('👋 Salido de la videollamada');
+        });
+        
+    } catch (error) {
+        console.error('❌ Error al crear videollamada:', error);
+        showVideoError(videoContainer, `Error: ${error.message || 'Error desconocido'}`);
+    }
+}
+
+function setupVideoControls(modal, callFrame, appointmentId) {
+    const toggleMic = modal.querySelector('#toggle-mic');
+    const toggleCamera = modal.querySelector('#toggle-camera');
+    const endCall = modal.querySelector('#end-call');
+    
+    let micEnabled = true;
+    let cameraEnabled = true;
+    
+    if (toggleMic) {
+        toggleMic.addEventListener('click', () => {
+            micEnabled = !micEnabled;
+            callFrame.setLocalAudio(micEnabled);
+            toggleMic.innerHTML = micEnabled 
+                ? '<i class="fas fa-microphone"></i> Micrófono'
+                : '<i class="fas fa-microphone-slash"></i> Micrófono';
+            toggleMic.classList.toggle('btn-danger', !micEnabled);
+        });
+    }
+    
+    if (toggleCamera) {
+        toggleCamera.addEventListener('click', () => {
+            cameraEnabled = !cameraEnabled;
+            callFrame.setLocalVideo(cameraEnabled);
+            toggleCamera.innerHTML = cameraEnabled
+                ? '<i class="fas fa-video"></i> Cámara'
+                : '<i class="fas fa-video-slash"></i> Cámara';
+            toggleCamera.classList.toggle('btn-danger', !cameraEnabled);
+        });
+    }
+    
+    if (endCall) {
+        endCall.addEventListener('click', () => {
+            if (callFrame) {
+                callFrame.leave();
+            }
+        });
+    }
+}
+
+function showVideoError(videoContainer, message) {
+    if (videoContainer) {
+        videoContainer.innerHTML = `
+            <div style="padding: 2rem; text-align: center; color: #fff;">
+                <i class="fas fa-exclamation-triangle" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+                <p>${message}</p>
+            </div>
+        `;
+    }
 }
 
 export { doctorState };
