@@ -4,6 +4,8 @@
 
 import { doctorState, getId, formatTime } from './doctor-core.js';
 import { showNotification } from './doctor-ui.js';
+import { handleAppointmentChatCreation, addChatButtomToAppointment, openChatModal } from '../chat/ChatIntegration.js';
+import { doctorState, getDoctorDisplayName } from './doctor-core.js'; 
 
 // ===================================
 // UTILIDADES
@@ -64,6 +66,10 @@ const getActionButtons = (status, appointmentId, patientId, patientName) => {
             <button class="btn btn-primary btn-sm attend-appointment-btn" ${dataAttrs}>
                 <i class="fas fa-video"></i> Atender
             </button>
+            <!-- Boton del chat -->
+            <button class="btn btn-chat-doctor btn-sm open-chat-btn" ${dataAttrs} style="background: #10b981; color: white; border: none;>
+                <i class="fas fa-comments"></i> Chat
+            </button>
         `;
     } else if (status === 'IN_PROGRESS') {
         buttons = `
@@ -72,6 +78,10 @@ const getActionButtons = (status, appointmentId, patientId, patientName) => {
             </button>
             <button class="btn btn-warning btn-sm no-show-appointment-btn" data-appointment-id="${appointmentId}">
                 <i class="fas fa-user-slash"></i> No asistió
+            </button>
+            <!-- Boton del chat -->
+            <button class="btn btn-chat-doctor btn-sm open-chat-btn" ${dataAttrs} style="background: #10b981; color: white; border: none;>
+                <i class="fas fa-comments"></i> Chat
             </button>
         `;
     }
@@ -341,6 +351,57 @@ async function reloadAppointmentViews() {
 // EVENT HANDLERS
 // ===================================
 
+async function handlerDoctorChatOpen(appointmentId, patientId, patientName){
+    try{
+        console.log('Abriendo chat: ', {AppointmentId, patientId, patientName})
+
+        const {ApiScheduling} = await import('../api.js')
+
+        // Obtener datos completos del appoinment
+        const appoinment = await ApiScheduling.get(`v1/Appointments/${appointmentId}`)
+
+        if(!appoinment){
+            showNotification('No se encontró el turno', 'error')
+            return
+        }
+
+        // Verificar que este confirmado
+        const status = appoinment.status || appoinment.Status
+        if(status !== 'CONFIRMED' && status !== 'IN_PROGRESS'){
+            showNotification('El chat solo esta disponible para turnos confirmados')
+            return
+        }
+
+        // Crear o recuperar sala del chat
+        const chatRoom = await handleAppointmentChatCreation({
+            ...appoinment,
+            currentUserId: doctorState.currentUser.UserId
+        })
+
+        if(!chatRoom){
+            showNotification('No se pudo iniciar el chat. Verifica la conexion.', 'error')
+            return
+        }
+
+        // Obtener nombre del doctor
+        const { getDoctorDisplayName } = await import('./doctor-core.js')
+        const doctorName = getDoctorDisplayName()
+
+        // Abrir modal del chat
+        openChatModal(chatRoom, {
+            currentUserId: doctorState.currentUser.UserId,
+            currentUserName: doctorName,
+            otherUserName: patientName || 'Paciente',
+            userType: 'doctor'
+        })
+
+        showNotification('Chat iniciado', 'success')
+    } catch(error){
+        console.error('Error al abrir chat: ', error)
+        showNotification('Ocurrio un error al intentar abrir el chat', 'error')
+    }
+}
+
 const replaceEventListener = (button, eventType, handler) => {
     const newButton = button.cloneNode(true);
     button.parentNode.replaceChild(newButton, button);
@@ -446,6 +507,26 @@ export function initializeAttendButtons() {
             }
         });
     });
+
+    document.querySelectorAll('.open-chat-btn').forEach(button => {
+        replaceEventListener(button, 'click', async function(e) {
+            e.preventDefault()
+            e.stopPropagation()
+
+            const appointmentId = this.getAttribute('data-appointment-id')
+            const patientId = this.getAttribute('data-patient-id')
+            const patientName = this.getAttribute('data-patient-name')
+
+            console.log('Click en boton de chat: ', { appointmentId, patientId, patientName })
+
+            if(appointmentId && patientId && patientName){
+                await handlerDoctorChatOpen(appointmentId, patientId, patientName)
+            } else {
+                console.error('Datos incompletas para abrir chat')
+                showNotification('No se puede abrir el chat: datos incompletos', 'error')
+            }
+        })
+    })
     
     // Inicializar dropdowns (para los botones de menú)
     initializeDropdowns();

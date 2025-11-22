@@ -5,6 +5,7 @@
 import { appState } from './patient-state.js';
 import { getActiveSection } from './patient-utils.js';
 import { showNotification } from './patient-notifications.js';
+import { handleAppointmentChatCreation, openChatModal } from '../chat/chat-integration.js';
 
 /**
  * Renderiza turnos para la página de inicio (solo 3 próximos)
@@ -92,6 +93,9 @@ export function renderAppointmentsFull(appointments) {
         const appointmentId = apt.appointmentId || apt.AppointmentId;
         const canCancel = status === "confirmed" || status === "scheduled" || status === "rescheduled";
 
+        // Verificarmos si el chat esta disponible(turno confirmado o en progreso)
+        const chatAvailable = status === 'confirmed' || status === 'in-progress'
+
         return `
             <div class="appointment-clean-card">
                 <div class="appointment-clean-icon">
@@ -113,8 +117,18 @@ export function renderAppointmentsFull(appointments) {
                         <strong>Motivo:</strong> ${reason}
                     </div>
                 </div>
-                ${canCancel ? `
                 <div class="appointment-clean-actions">
+                    ${chatAvailable ? `
+                            <button class="btn-clean-chat"
+                                data-appoinment-id="${appointmentId}"
+                                data-doctor-id="${apt.doctorId || apt.DoctorId}"
+                                data-doctor-name=${doctorName}
+                                title="Chat con el doctor"
+                                style="background: #3b82f6; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.5rem;">
+                                <i class="fas fa-comments"></i> Chat
+                            </button>
+                        ` : ""}
+                    ${canCancel ? `
                     <button class="btn-clean-cancel" onclick="cancelAppointment(${appointmentId})" title="Cancelar turno">
                         <i class="fas fa-times"></i>
                         Cancelar
@@ -123,6 +137,91 @@ export function renderAppointmentsFull(appointments) {
             </div>
         `;
     }).join('');
+}
+
+// Funcion Handler del chat para pasiente
+
+async function handlerPatientChatOpen(appointmentId, doctorId, doctorName){
+    try{
+        console.log('Abriendo chat: ', {appointmentId, doctorId, doctorName})
+
+        const {ApiScheduling} = await import('../api.js')
+
+        // Obtenemos los datos completos del appointment
+        const appoinment = await ApiScheduling.get(`v1/Appointments/${appointmentId}`)
+
+        if(!appoinment){
+            showNotification('No se encontro el turno', error)
+            return
+        }
+
+        // Verificamos que este confirmado 
+        const status = (appoinment.status || appoinment.Status || '').toLocaleTimeString()
+        if(status !== 'confirmed' && status !== 'in_progress'){
+            showNotification(' El chat solo esta disponible para turnos confirmados', 'warning')
+            return
+        }
+
+        // Crear o recurar sala de chat
+        const chatRoom = await handleAppointmentChatCreation(
+            {
+                ...appoinment,
+                currentUSerId: appState.currentUser.currentUSerId
+            }
+        )
+
+        if(!chatRoom){
+            showNotification('No se pudo iniciar el chat. Verificar la conexion.', 'error')
+            return
+        }
+
+        const patientFirstName = appState.currentPatient?.firstName || appState.currentPatient?.FirstName || ''
+
+        const patientLastName = appState.currentPatient?.LastName || appState.currentPatient?.LastName || ''
+
+        const patientName = `${patientFirstName} ${patientLastName}`.trim() || 'Paciente'
+
+        // abrir modal del chat 
+        openChatModal(chatRoom, {
+            currentUSerId: appState.currentUser.UserId,
+            currentUserName: patientName,
+            otherUserName: doctorName || 'Doctor',
+            userType: 'patient'
+        })
+
+        showNotification('Chat iniciado', 'success') 
+    } catch(error){
+        console.error('Error al abrir el chat: ', error)
+        showNotification('Ocurrio un error al intentar abrir el chat', 'error')
+    }
+}
+
+// Inicializar botones del chat
+function initializeChatButtons(){
+    console.log('Inicializando botones de chat para paciente')
+
+    document.querySelectorAll('.btn-clean-chat').forEach(button => {
+        const newButton = button.cloneNode(true)
+        button.parentNode.replaceChild(newButton, button)
+
+        newButton.addEventListener('click', async function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const appointmentId = this.getAttribute('data-appointment-id');
+            const doctorId = this.getAttribute('data-doctor-id');
+            const doctorName = this.getAttribute('data-doctor-name');
+            
+            console.log('🗨️ Click en botón de chat:', { appointmentId, doctorId, doctorName });
+            
+            if (appointmentId && doctorId && doctorName) {
+                await handlePatientChatOpen(appointmentId, doctorId, doctorName);
+            } else {
+                console.error('Datos incompletos para abrir chat');
+                showNotification('No se puede abrir el chat: datos incompletos', 'error');
+            }
+        })
+    })
 }
 
 /**
@@ -189,6 +288,11 @@ export async function loadPatientAppointments() {
         }
         else if (activeSection === "turnos") {
             appointmentsList.innerHTML = renderAppointmentsFull(appointments);
+
+            // Inicializamos botones de chat despues de renderizar
+            setTimeout(() => {
+                initializeChatButtons();
+            }, 100)
         }
 
     } catch (error) {
