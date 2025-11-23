@@ -1,9 +1,7 @@
 // COMPONENTE DE CHAT - CuidarMed+
-
-import * as signalR from "@microsoft/signalr";
 import { getChatMessages, markMessagesAsRead } from './chat-service.js';
 
-const SIGNALR_URL = "http://localhost:8083/chathub";
+const SIGNALR_URL = "http://localhost:5046/chathub";
 
 export class ChatComponent {
     constructor(config) {
@@ -15,6 +13,29 @@ export class ChatComponent {
         this.theme = config.theme || 'doctor'; // 'doctor' o 'patient'
         this.container = config.container;
         
+        // ✅ Validar que los IDs existan
+        console.log('🔧 ChatComponent config:', {
+            chatRoomId: this.chatRoomId,
+            currentUserId: this.currentUserId,
+            currentUserName: this.currentUserName,
+            otherUserName: this.otherUserName
+        });
+        
+        if (!this.chatRoomId || !this.currentUserId) {
+            console.error('❌ Faltan IDs requeridos:', {
+                chatRoomId: this.chatRoomId,
+                currentUserId: this.currentUserId
+            });
+            this.container.innerHTML = `
+                <div style="padding: 2rem; text-align: center; color: #ef4444;">
+                    <i class="fas fa-exclamation-triangle" style="font-size: 3rem; margin-bottom: 1rem;"></i>
+                    <p>Error: No se pudo inicializar el chat</p>
+                    <p style="font-size: 0.875rem; color: #6b7280;">Faltan datos necesarios</p>
+                </div>
+            `;
+            return;
+        }
+
         this.connection = null;
         this.messages = [];
         this.isTyping = false;
@@ -25,7 +46,6 @@ export class ChatComponent {
 
     
      // Inicializa el componente
-     
     async init() {
         this.render();
         await this.setupSignalR();
@@ -227,22 +247,35 @@ export class ChatComponent {
     //Carga mensajes existentes
     async loadMessages() {
         try {
+            console.log('💬 Cargando mensajes con:', {
+                chatRoomId: this.chatRoomId,
+                currentUserId: this.currentUserId
+            });
+
             const response = await getChatMessages(
                 this.chatRoomId, 
                 this.currentUserId, 
                 1, 
                 50, 
-                this.token
             );
             
             this.messages = response.items || [];
             this.renderMessages();
             this.scrollToBottom();
             
-            // Marcar como leídos
-            await markMessagesAsRead(this.chatRoomId, this.currentUserId, this.token);
+            // ✅ Solo marcar como leídos si hay mensajes
+        if (this.messages.length > 0) {
+            try {
+                await markMessagesAsRead(this.chatRoomId, this.currentUserId);
+            } catch (err) {
+                console.warn('⚠️ No se pudieron marcar mensajes como leídos:', err);
+            }
+        }
         } catch (error) {
             console.error('❌ Error al cargar mensajes:', error);
+            // ✅ Mostrar UI vacía en lugar de fallar
+            this.messages = [];
+            this.renderMessages();
         }
     }
 

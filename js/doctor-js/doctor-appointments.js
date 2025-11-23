@@ -4,8 +4,7 @@
 
 import { doctorState, getId, formatTime } from './doctor-core.js';
 import { showNotification } from './doctor-ui.js';
-import { handleAppointmentChatCreation, addChatButtomToAppointment, openChatModal } from '../chat/ChatIntegration.js';
-import { doctorState, getDoctorDisplayName } from './doctor-core.js'; 
+import { handleAppointmentChatCreation, openChatModal } from '../chat/chat-integration.js';
 
 // ===================================
 // UTILIDADES
@@ -351,9 +350,61 @@ async function reloadAppointmentViews() {
 // EVENT HANDLERS
 // ===================================
 
-async function handlerDoctorChatOpen(appointmentId, patientId, patientName){
+async function handleDoctorChatOpen(appointmentId, patientId, patientName){
     try{
-        console.log('Abriendo chat: ', {AppointmentId, patientId, patientName})
+        console.log('Abriendo chat: ', {appointmentId, patientId, patientName})
+
+        // ✅ DEBUG: Ver TODO el estado
+        console.log('🔍 DEBUG doctorState completo:', doctorState);
+        console.log('🔍 DEBUG doctorState.currentUser:', doctorState.currentUser);
+        
+        if (!doctorState.currentUser) {
+            console.error('❌ No hay usuario autenticado');
+            showNotification('Error: No hay usuario autenticado', 'error');
+            return;
+        }
+        
+        // ✅ Ver TODAS las propiedades del usuario
+        console.log('🔍 Keys del currentUser:', Object.keys(doctorState.currentUser));
+        console.log('🔍 currentUser completo:', JSON.stringify(doctorState.currentUser, null, 2));
+        
+        const currentUserId = doctorState.currentUser.userId || 
+                            doctorState.currentUser.UserId || 
+                            doctorState.currentUser.id || 
+                            doctorState.currentUser.Id;
+        
+        console.log('✅ userId extraído:', currentUserId);
+        
+        if (!currentUserId) {
+            console.error('❌ No se pudo obtener userId. Propiedades disponibles:', Object.keys(doctorState.currentUser));
+            showNotification('Error: No se pudo identificar al usuario', 'error');
+            return;
+        }
+
+        // ✅ Validar parámetros
+        if (!appointmentId || !patientId || !patientName) {
+            console.error('❌ Parámetros incompletos:', { appointmentId, patientId, patientName });
+            showNotification('No se puede abrir el chat: datos incompletos', 'error');
+            return;
+        }
+
+        // ✅ Validar que tengamos el usuario actual
+        if (!doctorState.currentUser) {
+            console.error('❌ No hay usuario autenticado');
+            showNotification('Error: No hay usuario autenticado', 'error');
+            return;
+        }
+        
+        console.log('👤 Usuario actual:', {
+            currentUser: doctorState.currentUser,
+            currentUserId: currentUserId
+        });
+        
+        if (!currentUserId) {
+            console.error('❌ No se pudo obtener userId:', doctorState.currentUser);
+            showNotification('Error: No se pudo identificar al usuario', 'error');
+            return;
+        }
 
         const {ApiScheduling} = await import('../api.js')
 
@@ -375,7 +426,7 @@ async function handlerDoctorChatOpen(appointmentId, patientId, patientName){
         // Crear o recuperar sala del chat
         const chatRoom = await handleAppointmentChatCreation({
             ...appoinment,
-            currentUserId: doctorState.currentUser.UserId
+            currentUserId: currentUserId
         })
 
         if(!chatRoom){
@@ -387,9 +438,20 @@ async function handlerDoctorChatOpen(appointmentId, patientId, patientName){
         const { getDoctorDisplayName } = await import('./doctor-core.js')
         const doctorName = getDoctorDisplayName()
 
+        // ✅ ANTES de llamar a openChatModal
+        const configParaChat = {
+            currentUserId: currentUserId,
+            currentUserName: getDoctorDisplayName(),
+            otherUserName: patientName || 'Paciente',
+            userType: 'doctor'
+        };
+        
+        console.log('📞 Config que se pasa a openChatModal:', configParaChat);
+        console.log('📞 chatRoom que se pasa:', chatRoom);
+
         // Abrir modal del chat
         openChatModal(chatRoom, {
-            currentUserId: doctorState.currentUser.UserId,
+            currentUserId: currentUserId,
             currentUserName: doctorName,
             otherUserName: patientName || 'Paciente',
             userType: 'doctor'
@@ -508,6 +570,7 @@ export function initializeAttendButtons() {
         });
     });
 
+    // Boton de chat
     document.querySelectorAll('.open-chat-btn').forEach(button => {
         replaceEventListener(button, 'click', async function(e) {
             e.preventDefault()
@@ -519,12 +582,18 @@ export function initializeAttendButtons() {
 
             console.log('Click en boton de chat: ', { appointmentId, patientId, patientName })
 
-            if(appointmentId && patientId && patientName){
-                await handlerDoctorChatOpen(appointmentId, patientId, patientName)
-            } else {
-                console.error('Datos incompletas para abrir chat')
-                showNotification('No se puede abrir el chat: datos incompletos', 'error')
+            // ✅ Validar todos los datos
+            if (!appointmentId || !patientId || !patientName) {
+                console.error('❌ Datos incompletos:', { 
+                    appointmentId: appointmentId || 'FALTA',
+                    patientId: patientId || 'FALTA',
+                    patientName: patientName || 'FALTA'
+                });
+                showNotification('No se puede abrir el chat: datos incompletos', 'error');
+                return;
             }
+            
+            await handleDoctorChatOpen(appointmentId, patientId, patientName);
         })
     })
     

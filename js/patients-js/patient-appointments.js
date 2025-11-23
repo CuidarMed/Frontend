@@ -63,6 +63,9 @@ export function renderAppointmentsHome(appointments) {
  */
 export function renderAppointmentsFull(appointments) {
     return appointments.map(apt => {
+        // ✅ DEBUG: Ver TODO el objeto
+        console.log('📋 APPOINTMENT COMPLETO:', JSON.stringify(apt, null, 2));
+
         const aptStart = new Date(apt.startTime || apt.StartTime);
 
         const weekday = aptStart.toLocaleDateString("es-AR", { weekday: "long" });
@@ -90,7 +93,14 @@ export function renderAppointmentsFull(appointments) {
             rescheduled: "Reprogramado"
         };
 
-        const appointmentId = apt.appointmentId || apt.AppointmentId;
+        const appointmentId = 
+            apt.appointmentId || 
+            apt.AppointmentId || 
+            apt.id || 
+            apt.Id || 
+            apt.appointmentID ||
+            apt.AppointmentID;
+        const doctorId = apt.doctorId || apt.DoctorId
         const canCancel = status === "confirmed" || status === "scheduled" || status === "rescheduled";
 
         // Verificarmos si el chat esta disponible(turno confirmado o en progreso)
@@ -118,7 +128,7 @@ export function renderAppointmentsFull(appointments) {
                     </div>
                 </div>
                 <div class="appointment-clean-actions">
-                    ${chatAvailable ? `
+                    ${chatAvailable && appointmentId && doctorId && doctorName ? `
                             <button class="btn-clean-chat"
                                 data-appoinment-id="${appointmentId}"
                                 data-doctor-id="${apt.doctorId || apt.DoctorId}"
@@ -139,11 +149,41 @@ export function renderAppointmentsFull(appointments) {
     }).join('');
 }
 
-// Funcion Handler del chat para pasiente
+// Funcion Handle del chat para pasiente
 
-async function handlerPatientChatOpen(appointmentId, doctorId, doctorName){
+async function handlePatientChatOpen(appointmentId, doctorId, doctorName){
     try{
         console.log('Abriendo chat: ', {appointmentId, doctorId, doctorName})
+
+        if (!appointmentId || !doctorId || !doctorName) {
+            console.error('❌ Parámetros incompletos:', { appointmentId, doctorId, doctorName });
+            showNotification('No se puede abrir el chat: datos incompletos', 'error');
+            return;
+        }
+        
+        // ✅ Validar que tengamos el usuario actual
+        if (!appState.currentUser) {
+            console.error('❌ No hay usuario autenticado');
+            showNotification('Error: No hay usuario autenticado', 'error');
+            return;
+        }
+        
+        // ✅ Obtener userId con múltiples fallbacks
+        const currentUserId = appState.currentUser.userId || 
+                            appState.currentUser.UserId || 
+                            appState.currentUser.id || 
+                            appState.currentUser.Id;
+        
+        console.log('👤 Usuario actual:', {
+            currentUser: appState.currentUser,
+            currentUserId: currentUserId
+        });
+
+        if (!currentUserId) {
+            console.error('❌ No se pudo obtener userId:', appState.currentUser);
+            showNotification('Error: No se pudo identificar al usuario', 'error');
+            return;
+        }
 
         const {ApiScheduling} = await import('../api.js')
 
@@ -156,7 +196,7 @@ async function handlerPatientChatOpen(appointmentId, doctorId, doctorName){
         }
 
         // Verificamos que este confirmado 
-        const status = (appoinment.status || appoinment.Status || '').toLocaleTimeString()
+        const status = (appoinment.status || appoinment.Status || '').toLowerCase()
         if(status !== 'confirmed' && status !== 'in_progress'){
             showNotification(' El chat solo esta disponible para turnos confirmados', 'warning')
             return
@@ -166,7 +206,7 @@ async function handlerPatientChatOpen(appointmentId, doctorId, doctorName){
         const chatRoom = await handleAppointmentChatCreation(
             {
                 ...appoinment,
-                currentUSerId: appState.currentUser.currentUSerId
+                currentUSerId: currentUserId
             }
         )
 
@@ -214,12 +254,18 @@ function initializeChatButtons(){
             
             console.log('🗨️ Click en botón de chat:', { appointmentId, doctorId, doctorName });
             
-            if (appointmentId && doctorId && doctorName) {
-                await handlePatientChatOpen(appointmentId, doctorId, doctorName);
-            } else {
-                console.error('Datos incompletos para abrir chat');
+            // ✅ Validar que todos los datos existan
+            if (!appointmentId || !doctorId || !doctorName) {
+                console.error('❌ Datos incompletos:', { 
+                    appointmentId: appointmentId || 'FALTA', 
+                    doctorId: doctorId || 'FALTA', 
+                    doctorName: doctorName || 'FALTA' 
+                });
                 showNotification('No se puede abrir el chat: datos incompletos', 'error');
+                return;
             }
+            
+            await handlePatientChatOpen(appointmentId, doctorId, doctorName)
         })
     })
 }
