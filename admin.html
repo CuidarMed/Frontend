@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CuidarMed+ - Panel Administrativo</title>
+    <link rel="stylesheet" href="css/admin.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <header class="admin-topbar">
+        <div class="admin-brand">
+            <i class="fas fa-heart"></i>
+            <div>
+                <span class="brand-title">CuidarMed+</span>
+                <span class="brand-subtitle">Administración</span>
+            </div>
+        </div>
+        <div class="admin-quick-actions">
+            <button class="icon-btn" id="refreshDataBtn" title="Refrescar datos">
+                <i class="fas fa-rotate"></i>
+            </button>
+            <div class="notifications-menu" id="notificationsMenu">
+                <button class="icon-btn" id="openNotificationsBtn" title="Notificaciones">
+                    <i class="fas fa-bell"></i>
+                    <span class="badge" id="alertsBadge">0</span>
+                </button>
+                <div class="notifications-dropdown hidden" id="notificationsDropdown">
+                    <div class="notifications-header">
+                        <h3>Notificaciones</h3>
+                        <button id="markAllReadBtn" class="ghost-btn-small">Marcar todas como leídas</button>
+                    </div>
+                    <div class="notifications-list" id="notificationsList">
+                        <p class="no-notifications">No hay notificaciones</p>
+                    </div>
+                </div>
+            </div>
+            <div class="user-menu" id="userMenu">
+                <button class="user-toggle" id="userMenuBtn">
+                    <div class="user-avatar" id="userInitials">AD</div>
+                    <div class="user-meta">
+                        <span id="userDisplayName">Administrador</span>
+                        <small>Superusuario</small>
+                    </div>
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+                <div class="user-dropdown" id="userDropdown">
+                    <button id="goToProfileBtn"><i class="fas fa-user-cog"></i> Perfil</button>
+                    <button id="logoutBtn"><i class="fas fa-sign-out-alt"></i> Cerrar sesión</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="admin-shell">
+        <aside class="admin-sidebar">
+            <div class="sidebar-section">
+                <p class="sidebar-title">Navegación</p>
+                <nav>
+                    <button class="sidebar-link active" data-section="dashboard">
+                        <i class="fas fa-chart-pie"></i> Resumen
+                    </button>
+                    <button class="sidebar-link" data-section="users">
+                        <i class="fas fa-users-cog"></i> Usuarios
+                    </button>
+                    <button class="sidebar-link" data-section="services">
+                        <i class="fas fa-server"></i> Servicios
+                    </button>
+                    <button class="sidebar-link" data-section="catalog">
+                        <i class="fas fa-briefcase-medical"></i> Catálogo clínico
+                    </button>
+                    <button class="sidebar-link" data-section="audit">
+                        <i class="fas fa-shield-alt"></i> Auditoría
+                    </button>
+                    <button class="sidebar-link" data-section="profile">
+                        <i class="fas fa-user"></i> Perfil
+                    </button>
+                </nav>
+            </div>
+            <div class="sidebar-section">
+                <p class="sidebar-title">Estado general</p>
+                <div class="status-card ok" id="statusDirectory">
+                    <h4>DirectoryMS</h4>
+                    <span>OK</span>
+                </div>
+                <div class="status-card ok" id="statusAuth">
+                    <h4>AuthMS</h4>
+                    <span>OK</span>
+                </div>
+                <div class="status-card ok" id="statusClinical">
+                    <h4>ClinicalMS</h4>
+                    <span>OK</span>
+                </div>
+                <div class="status-card ok" id="statusScheduling">
+                    <h4>SchedulingMS</h4>
+                    <span>OK</span>
+                </div>
+            </div>
+        </aside>
+
+        <section class="admin-content">
+            <section class="content-view" data-section="dashboard" id="dashboardSection">
+                <header class="view-header">
+                    <div>
+                        <h1>Resumen Ejecutivo</h1>
+                        <p id="dashboardGreeting">Monitoreo en tiempo real del ecosistema</p>
+                    </div>
+                    <div class="last-sync">
+                        <i class="fas fa-clock"></i>
+                        <span id="lastSyncLabel">Sincronizado hace unos segundos</span>
+                    </div>
+                </header>
+
+                <div class="cards-grid" id="metricsGrid"></div>
+
+                <div class="two-columns">
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h2>Actividad reciente</h2>
+                            <button class="ghost-btn" id="clearActivityBtn">Limpiar</button>
+                        </div>
+                        <ul class="timeline" id="activityTimeline"></ul>
+                    </div>
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h2>Alertas del sistema</h2>
+                            <span class="badge neutral" id="alertsCounter">0</span>
+                        </div>
+                        <ul class="alerts-list" id="alertsList"></ul>
+                    </div>
+                </div>
+            </section>
+
+            <section class="content-view hidden" data-section="users" id="usersSection">
+                <header class="view-header">
+                    <div>
+                        <h1>Usuarios</h1>
+                        <p>Control de roles y accesos</p>
+                    </div>
+                    <div class="table-filters">
+                        <select id="roleFilter">
+                            <option value="ALL">Todos</option>
+                            <option value="DOCTOR">Médicos</option>
+                            <option value="PATIENT">Pacientes</option>
+                            <option value="ADMIN">Administradores</option>
+                        </select>
+                        <input type="search" id="searchUsers" placeholder="Buscar por nombre o correo">
+                    </div>
+                </header>
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Nombre</th>
+                                <th>Correo</th>
+                                <th>Rol</th>
+                                <th>Último acceso</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="content-view hidden" data-section="services" id="servicesSection">
+                <header class="view-header">
+                    <div>
+                        <h1>Servicios</h1>
+                        <p>Disponibilidad de microservicios</p>
+                    </div>
+                    <button class="ghost-btn" id="runDiagnosticsBtn">
+                        <i class="fas fa-stethoscope"></i> Diagnóstico rápido
+                    </button>
+                </header>
+                <div class="service-grid" id="servicesGrid"></div>
+            </section>
+
+            <section class="content-view hidden" data-section="catalog" id="catalogSection">
+                <header class="view-header">
+                    <div>
+                        <h1>Catálogo clínico</h1>
+                        <p>Especialidades y configuraciones médicas</p>
+                    </div>
+                    <div class="ghost-group">
+                        <button class="ghost-btn" id="resetSpecialtiesBtn">
+                            <i class="fas fa-rotate-left"></i> Restaurar
+                        </button>
+                    </div>
+                </header>
+                <div class="catalog-grid">
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h2>Especialidades activas</h2>
+                            <span class="badge neutral" id="specialtyCount">0</span>
+                        </div>
+                        <div class="chip-list" id="specialtiesList"></div>
+                    </div>
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h2>Nueva especialidad</h2>
+                            <small>Completa los datos y guardá</small>
+                        </div>
+                        <form id="addSpecialtyForm" class="specialty-form">
+                            <label>
+                                Nombre
+                                <input type="text" id="specialtyName" required placeholder="Ej. Cardiología">
+                            </label>
+                            <label>
+                                Color de etiqueta
+                                <input type="color" id="specialtyColor" value="#2563eb">
+                            </label>
+                            <button type="submit" class="btn-primary">Agregar especialidad</button>
+                        </form>
+                    </div>
+                </div>
+            </section>
+
+            <section class="content-view hidden" data-section="audit" id="auditSection">
+                <header class="view-header">
+                    <div>
+                        <h1>Auditoría</h1>
+                        <p>Registro de acciones críticas</p>
+                    </div>
+                    <button class="ghost-btn" id="exportAuditBtn">
+                        <i class="fas fa-file-export"></i> Exportar
+                    </button>
+                </header>
+                <div class="panel">
+                    <ul class="timeline" id="auditTimeline"></ul>
+                </div>
+            </section>
+
+            <section class="content-view hidden" data-section="profile" id="profileSection">
+                <header class="view-header">
+                    <div>
+                        <h1>Perfil del administrador</h1>
+                        <p>Datos visibles para el equipo interno</p>
+                    </div>
+                </header>
+                <div class="profile-wrapper">
+                    <div class="profile-card">
+                        <div class="profile-avatar" id="profileAvatar">AD</div>
+                        <div class="profile-info">
+                            <h2 id="profileName">Administrador</h2>
+                            <p id="profileEmail">admin@cuidarmed.com</p>
+                            <span class="role-pill">Superusuario</span>
+                        </div>
+                        <button class="ghost-btn" id="editProfileBtn">
+                            <i class="fas fa-edit"></i> Editar
+                        </button>
+                    </div>
+                    <div class="profile-data-grid">
+                        <div>
+                            <h3>Contacto</h3>
+                            <p id="profilePhone">+54 11 0000-0000</p>
+                            <p id="profileLocation">Oficina central</p>
+                        </div>
+                        <div>
+                            <h3>Sesión</h3>
+                            <p id="profileLastLogin">-</p>
+                            <p id="profileSessionId">-</p>
+                        </div>
+                        <div>
+                            <h3>Permisos</h3>
+                            <ul id="profilePermissions">
+                                <li>Gestión de usuarios</li>
+                                <li>Supervisión de servicios</li>
+                                <li>Auditoría completa</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </section>
+    </main>
+
+    <template id="metricCardTemplate">
+        <article class="metric-card">
+            <div class="metric-icon"><i class="fas fa-chart-line"></i></div>
+            <div>
+                <p class="metric-label"></p>
+                <p class="metric-value"></p>
+                <small class="metric-trend"></small>
+            </div>
+        </article>
+    </template>
+
+    <template id="alertItemTemplate">
+        <li class="alert-item">
+            <div class="alert-icon"></div>
+            <div>
+                <p class="alert-title"></p>
+                <small class="alert-meta"></small>
+            </div>
+        </li>
+    </template>
+
+    <template id="serviceCardTemplate">
+        <article class="service-card">
+            <header>
+                <div>
+                    <h3></h3>
+                    <small class="service-url"></small>
+                </div>
+                <span class="status-pill"></span>
+            </header>
+            <p class="service-description"></p>
+            <footer>
+                <span class="latency-label"></span>
+                <button class="ghost-btn">Ver logs</button>
+            </footer>
+        </article>
+    </template>
+
+    <!-- Modal para logs de servicios -->
+    <div id="logsModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="logsModalTitle">Logs del servicio</h2>
+                <button id="closeLogsModal" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="logsContent" class="logs-content">
+                    <p>Cargando logs...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="./js/admin-js/admin-main.js"></script>
+</body>
+</html>
+

@@ -17,7 +17,7 @@ async function tryFetch(endpoint, options) {
             const fullUrl = `${baseUrl}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
             const response = await fetch(fullUrl, { 
                 ...options, 
-                signal: AbortSignal.timeout(8000) 
+                signal: AbortSignal.timeout(5000) 
             });
             
             if (response.status !== 0 && response.status !== undefined) {
@@ -25,6 +25,10 @@ async function tryFetch(endpoint, options) {
             }
         } catch (err) {
             lastError = err;
+            // Si es un error de conexión, no intentar con otras URLs
+            if (err.message?.includes('Failed to fetch') || err.message?.includes('ERR_CONNECTION_REFUSED')) {
+                throw new Error("El servicio de chat no está disponible. Por favor, verifica que el servicio esté corriendo.");
+            }
             continue;
         }
     }
@@ -35,7 +39,43 @@ async function tryFetch(endpoint, options) {
  * Crea una sala de chat entre doctor y paciente
  */
 export async function createChatRoom(doctorId, patientId, appointmentId, token) {
-    console.log('📨 Creando sala de chat:', { doctorId, patientId, appointmentId });
+    if (!appointmentId) {
+        throw new Error('AppointmentId es requerido para crear una sala de chat');
+    }
+    
+    console.log('📨 Creando/buscando sala de chat:', { doctorId, patientId, appointmentId });
+    
+    // Validar que appointmentId sea un número válido
+    const appointmentIdNum = Number(appointmentId);
+    if (isNaN(appointmentIdNum) || appointmentIdNum <= 0) {
+        console.error('❌ AppointmentId inválido:', appointmentId, 'Tipo:', typeof appointmentId);
+        throw new Error(`AppointmentId inválido: ${appointmentId}. Debe ser un número mayor a 0.`);
+    }
+    
+    // Asegurar que todos los valores sean números enteros
+    const doctorIdNum = Number(doctorId);
+    const patientIdNum = Number(patientId);
+    
+    if (isNaN(doctorIdNum) || doctorIdNum <= 0) {
+        throw new Error(`DoctorId inválido: ${doctorId}`);
+    }
+    
+    if (isNaN(patientIdNum) || patientIdNum <= 0) {
+        throw new Error(`PatientId inválido: ${patientId}`);
+    }
+    
+    const requestBody = {
+        DoctorId: doctorIdNum,
+        PatientId: patientIdNum,
+        AppointmentId: appointmentIdNum // SIEMPRE incluir AppointmentId como número válido
+    };
+    
+    console.log('📤 Request body (antes de enviar):', JSON.stringify(requestBody, null, 2));
+    console.log('📤 Tipos:', {
+        DoctorId: typeof requestBody.DoctorId,
+        PatientId: typeof requestBody.PatientId,
+        AppointmentId: typeof requestBody.AppointmentId
+    });
     
     const response = await tryFetch('/Chat/create/room', {
         method: 'POST',
@@ -43,20 +83,29 @@ export async function createChatRoom(doctorId, patientId, appointmentId, token) 
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-            DoctorId: doctorId,
-            PatientId: patientId,
-            AppointmentId: appointmentId
-        })
+        body: JSON.stringify(requestBody)
     });
 
     if (!response.ok) {
-        const error = await response.json().catch(() => ({ message: 'Error al crear sala de chat' }));
-        throw new Error(error.message);
+        const errorText = await response.text();
+        console.error('❌ Error al crear sala de chat:', errorText);
+        let errorMessage = 'Error al crear sala de chat';
+        try {
+            const error = JSON.parse(errorText);
+            errorMessage = error.message || errorMessage;
+        } catch (e) {
+            errorMessage = errorText || errorMessage;
+        }
+        throw new Error(errorMessage);
     }
 
     const result = await response.json();
-    console.log('✅ Sala de chat creada:', result);
+    console.log('✅ Sala de chat creada/obtenida:', { 
+        id: result.id || result.Id,
+        appointmentId: result.appointmentId || result.AppointmentId,
+        doctorId: result.doctorId || result.DoctorId,
+        patientId: result.patientId || result.PatientId
+    });
     return result;
 }
 

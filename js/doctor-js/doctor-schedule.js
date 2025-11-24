@@ -216,7 +216,7 @@ function generateDayCardHTML(dayName, dayNumber, monthName, appointments) {
                 </div>
                 <span style="padding: 0.5rem 1rem; background: #10b981; color: white; border-radius: 6px; font-weight: 600;">${appointments.length}</span>
             </div>
-            <div style="padding: 1rem 1.5rem;">${appointmentsHTML}</div>
+            <div class="appointments-grid" style="padding: 1rem 1.5rem; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;">${appointmentsHTML}</div>
         </div>
     `;
 }
@@ -241,19 +241,35 @@ function generateAppointmentHTML(apt) {
     const actions = getActionButtons(status, appointmentId, patientId, apt.patientName);
     
     return `
-        <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; margin-bottom: 0.75rem; background: #f9fafb; border-radius: 6px; border-left: 4px solid ${config.color};">
-            <div style="flex: 1;">
-                <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem;">
-                    <div style="font-weight: 600; color: #1f2937; font-size: 1.1rem;">${apt.patientName}</div>
-                    <select class="appointment-status-select" data-appointment-id="${appointmentId}" style="padding: 0.25rem 0.5rem; border: 1px solid #e5e7eb; border-radius: 4px; font-size: 0.75rem; background: white; color: ${config.color}; font-weight: 600; cursor: pointer;">
+        <div class="appointment-card" style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05); transition: all 0.3s; border-top: 4px solid ${config.color};">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
+                <h4 style="margin: 0; font-weight: 700; color: #1f2937; font-size: 1.125rem; flex: 1;">${apt.patientName}</h4>
+                ${status === 'COMPLETED' || status === 'NO_SHOW' 
+                    ? `<span style="padding: 0.375rem 0.75rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.75rem; background: ${status === 'COMPLETED' ? '#d1fae5' : '#f3f4f6'}; color: ${config.color}; font-weight: 600; white-space: nowrap;">${STATUS_CONFIG[status].label}</span>`
+                    : `<select class="appointment-status-select" data-appointment-id="${appointmentId}" style="padding: 0.375rem 0.75rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.75rem; background: white; color: ${config.color}; font-weight: 600; cursor: pointer; white-space: nowrap;">
                         ${statusOptions}
-                    </select>
-                </div>
-                <div style="color: #6b7280; font-size: 0.875rem;"><i class="fas fa-clock" style="margin-right: 0.5rem;"></i>${timeStr}</div>
-                <div style="color: #6b7280; font-size: 0.875rem;"><i class="fas fa-user" style="margin-right: 0.5rem;"></i>DNI: ${apt.patientDni}</div>
-                <div style="color: #6b7280; font-size: 0.875rem;"><i class="fas fa-stethoscope" style="margin-right: 0.5rem;"></i>${reason}</div>
+                    </select>`
+                }
             </div>
-            <div style="display: flex; gap: 0.5rem; margin-left: 1rem;">${actions}</div>
+            
+            <div style="display: flex; flex-direction: column; gap: 0.5rem; flex: 1;">
+                <div style="color: #6b7280; font-size: 0.875rem; display: flex; align-items: center; gap: 0.5rem;">
+                    <i class="fas fa-clock" style="color: #10b981; width: 16px;"></i>
+                    <span>${timeStr}</span>
+                </div>
+                <div style="color: #6b7280; font-size: 0.875rem; display: flex; align-items: center; gap: 0.5rem;">
+                    <i class="fas fa-user" style="color: #10b981; width: 16px;"></i>
+                    <span>DNI: ${apt.patientDni}</span>
+                </div>
+                <div style="color: #6b7280; font-size: 0.875rem; display: flex; align-items: flex-start; gap: 0.5rem;">
+                    <i class="fas fa-stethoscope" style="color: #10b981; width: 16px; margin-top: 0.25rem;"></i>
+                    <span style="line-height: 1.4;">${reason}</span>
+                </div>
+            </div>
+            
+            <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: auto; padding-top: 1rem; border-top: 1px solid #e5e7eb;">
+                ${actions}
+            </div>
         </div>
     `;
 }
@@ -263,15 +279,18 @@ function generateAppointmentHTML(apt) {
  */
 function getActionButtons(status, appointmentId, patientId, patientName) {
     if (status === 'COMPLETED') {
-        return '<span style="padding: 0.5rem 1rem; font-size: 0.875rem; color: #10b981; font-weight: 600;"><i class="fas fa-check-circle"></i> Consulta realizada</span>';
+        return '<span style="padding: 0.5rem 1rem; font-size: 0.875rem; color: #10b981; font-weight: 600; text-align: center; display: block;"><i class="fas fa-check-circle"></i> Consulta realizada</span>';
+    }
+    if (status === 'NO_SHOW') {
+        return '<span style="padding: 0.5rem 1rem; font-size: 0.875rem; color: #6b7280; font-weight: 600; text-align: center; display: block;"><i class="fas fa-user-slash"></i> No asistió</span>';
     }
     if (status === 'SCHEDULED' || status === 'CONFIRMED') {
-        return `<button class="btn btn-primary btn-sm attend-appointment-btn" data-appointment-id="${appointmentId}" data-patient-id="${patientId}" data-patient-name="${patientName}" style="padding: 0.5rem 1rem; font-size: 0.875rem;"><i class="fas fa-video"></i> Atender</button>`;
+        return `<button class="btn btn-primary btn-sm attend-appointment-btn" data-appointment-id="${appointmentId}" data-patient-id="${patientId}" data-patient-name="${patientName}" style="padding: 0.625rem 1rem; font-size: 0.875rem; width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem;"><i class="fas fa-video"></i> Atender</button>`;
     }
     if (status === 'IN_PROGRESS') {
         return `
-            <button class="btn btn-success btn-sm complete-appointment-btn" data-appointment-id="${appointmentId}" data-patient-id="${patientId}" data-patient-name="${patientName}" style="padding: 0.5rem 1rem; font-size: 0.875rem; margin-right: 0.5rem;"><i class="fas fa-check"></i> Completar</button>
-            <button class="btn btn-warning btn-sm no-show-appointment-btn" data-appointment-id="${appointmentId}" style="padding: 0.5rem 1rem; font-size: 0.875rem;"><i class="fas fa-times"></i> No asistió</button>
+            <button class="btn btn-success btn-sm complete-appointment-btn" data-appointment-id="${appointmentId}" data-patient-id="${patientId}" data-patient-name="${patientName}" style="padding: 0.625rem 1rem; font-size: 0.875rem; width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem;"><i class="fas fa-check"></i> Completar</button>
+            <button class="btn btn-warning btn-sm no-show-appointment-btn" data-appointment-id="${appointmentId}" style="padding: 0.625rem 1rem; font-size: 0.875rem; width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem;"><i class="fas fa-times"></i> No asistió</button>
         `;
     }
     return '';

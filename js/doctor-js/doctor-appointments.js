@@ -2,10 +2,9 @@
 // DOCTOR APPOINTMENTS - Consultas y Turnos
 // ===================================
 
-import { doctorState, getId, formatTime } from './doctor-core.js';
+import { doctorState, getId, formatTime, getDoctorDisplayName } from './doctor-core.js';
 import { showNotification } from './doctor-ui.js';
-import { handleAppointmentChatCreation, addChatButtomToAppointment, openChatModal } from '../chat/ChatIntegration.js';
-import { doctorState, getDoctorDisplayName } from './doctor-core.js'; 
+// Chat se carga de forma lazy para no bloquear la carga inicial 
 
 // ===================================
 // UTILIDADES
@@ -87,7 +86,8 @@ const getActionButtons = (status, appointmentId, patientId, patientName) => {
     }
     
     // ——— Dropdown de opciones (Reprogramar / Cancelar) ———
-    if (status !== 'COMPLETED' && status !== 'IN_PROGRESS') {
+    // No mostrar dropdown para estados finales (COMPLETED, NO_SHOW, CANCELLED) ni para IN_PROGRESS
+    if (status !== 'COMPLETED' && status !== 'IN_PROGRESS' && status !== 'NO_SHOW' && status !== 'CANCELLED') {
         buttons += `
             <div class="appointment-action-menu">
                 <button class="appointment-action-toggle" type="button">
@@ -206,15 +206,34 @@ export function createConsultationItemElement(appointment) {
     const status = appointment.status || appointment.Status || 'SCHEDULED';
     const statusInfo = getStatusInfo(status);
     
+    // Formatear fecha
+    const dateStr = startTime.toLocaleDateString('es-AR', { 
+        weekday: 'long', 
+        day: 'numeric', 
+        month: 'long', 
+        year: 'numeric' 
+    });
+    const dateFormatted = dateStr.charAt(0).toUpperCase() + dateStr.slice(1);
+    
     item.innerHTML = `
-        <div class="consultation-icon"><i class="fas fa-clock"></i></div>
-        <div class="consultation-info">
-            <h4>${appointment.patientName || 'Paciente Desconocido'}</h4>
-            <p>${appointment.reason || appointment.Reason || 'Sin motivo'}</p>
-            <span>${formatTime(startTime)} - ${formatTime(endTime)}</span>
-        </div>
-        <div class="consultation-actions" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+        <div class="consultation-header">
+            <div class="consultation-icon"><i class="fas fa-user-md"></i></div>
+            <div class="consultation-info">
+                <h4 class="consultation-patient">${appointment.patientName || 'Paciente Desconocido'}</h4>
+                <div class="consultation-meta">
+                    <span class="consultation-date"><i class="fas fa-calendar"></i> ${dateFormatted}</span>
+                    <span class="consultation-time"><i class="fas fa-clock"></i> ${formatTime(startTime)} - ${formatTime(endTime)}</span>
+                </div>
+            </div>
             <span class="status ${statusInfo.class}">${statusInfo.text}</span>
+        </div>
+        <div class="consultation-body">
+            <p class="consultation-reason">
+                <i class="fas fa-stethoscope"></i>
+                <strong>Motivo:</strong> ${appointment.reason || appointment.Reason || 'Sin motivo especificado'}
+            </p>
+        </div>
+        <div class="consultation-actions">
             ${getActionButtons(status, appointment.appointmentId || appointment.AppointmentId, appointment.patientId || appointment.PatientId, appointment.patientName)}
         </div>
     `;
@@ -303,6 +322,16 @@ export async function updateAppointmentStatus(appointmentId, newStatus, reason =
         
         if (!currentAppointment) throw new Error('No se encontró el appointment');
         
+        // Prevenir cambios cuando el estado es final (COMPLETED o NO_SHOW)
+        const currentStatus = currentAppointment.status || currentAppointment.Status;
+        if (currentStatus === 'COMPLETED' || currentStatus === 'NO_SHOW') {
+            const statusText = currentStatus === 'COMPLETED' ? 'Completado' : 'No asistió';
+            if (!silent) {
+                showNotification(`No se puede cambiar el estado de un turno ${statusText.toLowerCase()}`, 'warning');
+            }
+            throw new Error(`El turno ya está ${statusText.toLowerCase()} y no puede modificarse`);
+        }
+        
         await ApiScheduling.patch(`v1/Appointments/${appointmentId}/status`, {
             Status: newStatus,
             Reason: reason || currentAppointment.reason || currentAppointment.Reason || null
@@ -353,7 +382,7 @@ async function reloadAppointmentViews() {
 
 async function handlerDoctorChatOpen(appointmentId, patientId, patientName){
     try{
-        console.log('Abriendo chat: ', {AppointmentId, patientId, patientName})
+        console.log('Abriendo chat: ', {appointmentId, patientId, patientName})
 
         const {ApiScheduling} = await import('../api.js')
 
@@ -364,22 +393,78 @@ async function handlerDoctorChatOpen(appointmentId, patientId, patientName){
             showNotification('No se encontró el turno', 'error')
             return
         }
+        
+        console.log('🔍 Appointment obtenido del backend:', appoinment);
+        console.log('🔍 AppointmentId en el objeto:', appoinment.appointmentId || appoinment.AppointmentId);
 
         // Verificar que este confirmado
-        const status = appoinment.status || appoinment.Status
+        const status = (appoinment.status || appoinment.Status || '').toUpperCase()
         if(status !== 'CONFIRMED' && status !== 'IN_PROGRESS'){
-            showNotification('El chat solo esta disponible para turnos confirmados')
+            showNotification('El chat solo esta disponible para turnos confirmados', 'warning')
             return
         }
 
         // Crear o recuperar sala del chat
+        // Cargar módulo de chat de forma lazy
+        const { handleAppointmentChatCreation, openChatModal } = await import('../chat/ChatIntegration.js');
+        
+        // Obtener userId con múltiples fallbacks
+        const userId = doctorState.currentUser?.userId || 
+                      doctorState.currentUser?.UserId || 
+                      doctorState.currentUser?.id ||
+                      doctorState.currentUser?.Id ||
+                      doctorState.currentUser?.user?.userId ||
+                      doctorState.currentUser?.user?.UserId;
+        
+        if (!userId) {
+            console.error('❌ No se pudo obtener el userId para crear la sala de chat');
+            showNotification('Error: No se pudo identificar al usuario. Por favor, recarga la página.', 'error');
+            return;
+        }
+        
+        // Asegurar que appointmentId esté presente
+        const finalAppointmentId = appoinment.appointmentId || 
+                                   appoinment.AppointmentId || 
+                                   appoinment.id ||
+                                   appoinment.Id ||
+                                   appointmentId;
+        
+        console.log('🔍 Intentando obtener AppointmentId:', {
+            'appoinment.appointmentId': appoinment.appointmentId,
+            'appoinment.AppointmentId': appoinment.AppointmentId,
+            'appoinment.id': appoinment.id,
+            'appoinment.Id': appoinment.Id,
+            'appointmentId (parámetro)': appointmentId,
+            'finalAppointmentId': finalAppointmentId
+        });
+        
+        if (!finalAppointmentId) {
+            console.error('❌ No se pudo obtener appointmentId del appointment:', appoinment);
+            console.error('❌ Todas las claves del objeto:', Object.keys(appoinment));
+            showNotification('Error: No se pudo identificar el ID del turno. Por favor, recarga la página.', 'error');
+            return;
+        }
+        
+        const finalAppointmentIdNum = Number(finalAppointmentId);
+        if (isNaN(finalAppointmentIdNum) || finalAppointmentIdNum <= 0) {
+            console.error('❌ AppointmentId no es un número válido:', finalAppointmentId);
+            showNotification('Error: El ID del turno no es válido. Por favor, recarga la página.', 'error');
+            return;
+        }
+        
+        console.log('✅ AppointmentId final para crear sala:', finalAppointmentIdNum);
+        
         const chatRoom = await handleAppointmentChatCreation({
             ...appoinment,
-            currentUserId: doctorState.currentUser.UserId
+            appointmentId: finalAppointmentIdNum, // Usar el número validado
+            doctorId: appoinment.doctorId || appoinment.DoctorId,
+            patientId: appoinment.patientId || appoinment.PatientId || patientId,
+            status: appoinment.status || appoinment.Status,
+            currentUserId: userId
         })
 
         if(!chatRoom){
-            showNotification('No se pudo iniciar el chat. Verifica la conexion.', 'error')
+            showNotification('No se pudo iniciar el chat. El servicio de chat no está disponible.', 'error')
             return
         }
 
@@ -387,9 +472,21 @@ async function handlerDoctorChatOpen(appointmentId, patientId, patientName){
         const { getDoctorDisplayName } = await import('./doctor-core.js')
         const doctorName = getDoctorDisplayName()
 
+        // Obtener el doctorId de la sala o del appointment
+        const doctorId = chatRoom.DoctorId || chatRoom.doctorId || chatRoom.DoctorID || 
+                        appoinment.doctorId || appoinment.DoctorId;
+        
+        console.log('🔍 DoctorId para el chat:', { 
+            chatRoom, 
+            appoinment, 
+            doctorId,
+            userId 
+        });
+
         // Abrir modal del chat
         openChatModal(chatRoom, {
-            currentUserId: doctorState.currentUser.UserId,
+            currentUserId: userId, // userId original para referencia
+            senderId: doctorId || userId, // doctorId para enviar mensajes
             currentUserName: doctorName,
             otherUserName: patientName || 'Paciente',
             userType: 'doctor'
@@ -398,7 +495,12 @@ async function handlerDoctorChatOpen(appointmentId, patientId, patientName){
         showNotification('Chat iniciado', 'success')
     } catch(error){
         console.error('Error al abrir chat: ', error)
-        showNotification('Ocurrio un error al intentar abrir el chat', 'error')
+        const errorMessage = error.message || 'Error desconocido';
+        if (errorMessage.includes('no está disponible') || errorMessage.includes('ERR_CONNECTION_REFUSED')) {
+            showNotification('El servicio de chat no está disponible. Por favor, verifica que el servicio esté corriendo.', 'error')
+        } else {
+            showNotification(`Error al abrir el chat: ${errorMessage}`, 'error')
+        }
     }
 }
 
@@ -581,11 +683,22 @@ export function initializeStatusSelects() {
     console.log('Inicializando selectores de estado');
     
     document.querySelectorAll('.appointment-status-select').forEach(select => {
+        // Verificar si el selector está deshabilitado (no debería aparecer para estados finales)
+        const appointmentId = select.getAttribute('data-appointment-id');
+        if (!appointmentId) return;
+        
         replaceEventListener(select, 'change', async function() {
             const appointmentId = this.getAttribute('data-appointment-id');
             const newStatus = this.value;
             
             if (appointmentId && newStatus) {
+                // Prevenir cambios a estados finales desde el selector
+                if (newStatus === 'COMPLETED' || newStatus === 'NO_SHOW') {
+                    showNotification('No se puede cambiar el estado a "Completado" o "No asistió" desde aquí. Use los botones de acción.', 'warning');
+                    await reloadAppointmentViews();
+                    return;
+                }
+                
                 const currentStatus = this.options[this.selectedIndex].text;
                 
                 if (confirm(`¿Cambiar el estado del turno a "${currentStatus}"?`)) {
@@ -647,10 +760,34 @@ export function initializeConsultationDateFilter() {
     dateFilter.addEventListener('change', async function(e) {
         const selectedDate = e.target.value;
         if (selectedDate) {
-            console.log('ðŸ“† Fecha seleccionada:', selectedDate);
+            console.log('ðŸ"† Fecha seleccionada:', selectedDate);
             await loadTodayConsultations(selectedDate);
         }
     });
+
+    // Botones de navegación de fecha
+    const prevDayBtn = document.getElementById('prev-day-btn');
+    const nextDayBtn = document.getElementById('next-day-btn');
+
+    if (prevDayBtn) {
+        prevDayBtn.addEventListener('click', () => {
+            const currentDate = new Date(dateFilter.value || todayStr);
+            currentDate.setDate(currentDate.getDate() - 1);
+            const newDateStr = currentDate.toISOString().split('T')[0];
+            dateFilter.value = newDateStr;
+            dateFilter.dispatchEvent(new Event('change'));
+        });
+    }
+
+    if (nextDayBtn) {
+        nextDayBtn.addEventListener('click', () => {
+            const currentDate = new Date(dateFilter.value || todayStr);
+            currentDate.setDate(currentDate.getDate() + 1);
+            const newDateStr = currentDate.toISOString().split('T')[0];
+            dateFilter.value = newDateStr;
+            dateFilter.dispatchEvent(new Event('change'));
+        });
+    }
 }
 
 export async function loadTodayConsultationsView() {
@@ -674,8 +811,16 @@ export async function loadTodayConsultationsView() {
                 <label for="consultation-date-filter-view" style="margin-right: 0.5rem; color: #6b7280; font-size: 0.875rem;">
                     <i class="fas fa-calendar-alt"></i> Fecha:
                 </label>
-                <input type="date" id="consultation-date-filter-view" class="date-filter-input" value="${todayStr}"
-                       style="padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.375rem; font-size: 0.875rem;">
+                <div class="date-navigation">
+                    <button type="button" id="prev-day-btn-view" class="date-nav-btn" title="Día anterior">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <input type="date" id="consultation-date-filter-view" class="date-filter-input" value="${todayStr}"
+                           style="padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.375rem; font-size: 0.875rem;">
+                    <button type="button" id="next-day-btn-view" class="date-nav-btn" title="Día siguiente">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
             </div>
         </div>
         <div id="consultas-hoy-list" class="consultations-list">
@@ -692,6 +837,30 @@ export async function loadTodayConsultationsView() {
             if (selectedDate) {
                 await loadTodayConsultationsForNav(selectedDate);
             }
+        });
+    }
+
+    // Botones de navegación de fecha para la vista dinámica
+    const prevDayBtnView = document.getElementById('prev-day-btn-view');
+    const nextDayBtnView = document.getElementById('next-day-btn-view');
+
+    if (prevDayBtnView && dateFilterView) {
+        prevDayBtnView.addEventListener('click', () => {
+            const currentDate = new Date(dateFilterView.value || todayStr);
+            currentDate.setDate(currentDate.getDate() - 1);
+            const newDateStr = currentDate.toISOString().split('T')[0];
+            dateFilterView.value = newDateStr;
+            dateFilterView.dispatchEvent(new Event('change'));
+        });
+    }
+
+    if (nextDayBtnView && dateFilterView) {
+        nextDayBtnView.addEventListener('click', () => {
+            const currentDate = new Date(dateFilterView.value || todayStr);
+            currentDate.setDate(currentDate.getDate() + 1);
+            const newDateStr = currentDate.toISOString().split('T')[0];
+            dateFilterView.value = newDateStr;
+            dateFilterView.dispatchEvent(new Event('change'));
         });
     }
 

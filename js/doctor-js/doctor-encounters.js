@@ -11,75 +11,83 @@ import { updateAppointmentStatus } from './doctor-appointments.js';
 // ===================================
 
 const createEncounterForm = (appointmentId, patientId, patientName) => `
-    <div class="modal-content" style="max-width: 900px;">
+    <div class="modal-content encounter-modal-content" style="max-width: 1400px; width: 95vw;">
         <div class="modal-header">
             <h3>Consulta con ${patientName}</h3>
             <button class="close-modal">&times;</button>
         </div>
-        <div class="modal-body">
-            <form id="encounter-form">
+        <div class="modal-body encounter-modal-body">
+            <form id="encounter-form" class="encounter-form-layout">
                 <input type="hidden" id="encounter-appointment-id" value="${appointmentId}">
                 <input type="hidden" id="encounter-patient-id" value="${patientId}">
                 
-                <div id="video-call-section" style="margin-bottom: 1.5rem; padding: 1rem; background: #f0f9ff; border-radius: 0.5rem; border: 1px solid #bae6fd;">
-                    <h4 style="margin-bottom: 0.5rem; color: #0369a1; display: flex; align-items: center; gap: 0.5rem;">
-                        <i class="fas fa-video"></i> Videollamada
-                    </h4>
-                    <div id="video-call-container" style="min-height: 200px; background: #000; border-radius: 0.5rem; position: relative; display: flex; align-items: center; justify-content: center; color: #fff;">
-                        <p id="video-loading" style="text-align: center;">Cargando videollamada...</p>
+                <!-- Columna izquierda: Formulario -->
+                <div class="encounter-form-column">
+                    <div class="encounter-form-scrollable">
+                        <div class="form-group">
+                            <label for="encounter-reasons">Motivo de consulta: *</label>
+                            <textarea id="encounter-reasons" rows="2" required placeholder="Ej: Dolor de cabeza intenso desde hace 3 días"></textarea>
+                        </div>
+                        
+                        <div class="soap-section" style="background: #f9fafb; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
+                            <h4 style="margin-bottom: 1rem; color: #1f2937; display: flex; align-items: center; gap: 0.5rem;">
+                                <i class="fas fa-notes-medical"></i> Notas SOAP
+                            </h4>
+                            ${['subjective', 'objective', 'assessment', 'plan'].map((field, i) => {
+                                const labels = ['Subjetivo (Síntomas del paciente)', 'Objetivo (Hallazgos físicos)', 'Assessment (Diagnóstico)', 'Plan (Tratamiento)'];
+                                const helps = ['¿Qué dice el paciente?', '¿Qué observas tú?', '¿Cuál es tu diagnóstico?', '¿Qué vas a hacer?'];
+                                return `
+                                    <div class="form-group">
+                                        <label for="encounter-${field}"><strong>${field[0].toUpperCase()}</strong>${labels[i].slice(field[0].length)}: *</label>
+                                        <textarea id="encounter-${field}" rows="3" required placeholder="..."></textarea>
+                                        <small style="color: #6b7280;">${helps[i]}</small>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="encounter-notes">Notas adicionales:</label>
+                            <textarea id="encounter-notes" rows="2" placeholder="Información complementaria (opcional)"></textarea>
+                        </div>
                     </div>
-                    <div id="video-controls" style="margin-top: 0.5rem; display: flex; gap: 0.5rem; justify-content: center;">
-                        <button type="button" id="toggle-mic" class="btn btn-secondary" style="padding: 0.5rem 1rem;">
-                            <i class="fas fa-microphone"></i> Micrófono
+                    
+                    <div class="form-actions encounter-form-actions" style="display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; padding-top: 1rem; border-top: 1px solid #e5e7eb; margin-top: auto; background: #ffffff;">
+                        <button type="button" class="btn btn-secondary" id="cancel-encounter"><i class="fas fa-times"></i> Cancelar</button>
+                        <button type="button" class="btn btn-success" id="download-hl7-summary-btn" data-appointment-id="${appointmentId}" data-patient-id="${patientId}" 
+                                style="background-color: #28a745; border-color: #28a745; color: white;">
+                            <i class="fas fa-file-download"></i> Descargar HL7
                         </button>
-                        <button type="button" id="toggle-camera" class="btn btn-secondary" style="padding: 0.5rem 1rem;">
-                            <i class="fas fa-video"></i> Cámara
+                        <button type="button" class="btn btn-info" id="prescribe-btn" data-patient-id="${patientId}" 
+                                data-patient-name="${patientName}" data-appointment-id="${appointmentId}" 
+                                style="background-color: #17a2b8; border-color: #17a2b8; color: white;">
+                            <i class="fas fa-prescription"></i> Recetar
                         </button>
-                        <button type="button" id="end-call" class="btn btn-danger" style="padding: 0.5rem 1rem;">
-                            <i class="fas fa-phone-slash"></i> Finalizar
-                        </button>
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Guardar Consulta</button>
                     </div>
                 </div>
                 
-                <div class="form-group">
-                    <label for="encounter-reasons">Motivo de consulta: *</label>
-                    <textarea id="encounter-reasons" rows="2" required placeholder="Ej: Dolor de cabeza intenso desde hace 3 días"></textarea>
-                </div>
-                
-                <div class="soap-section" style="background: #f9fafb; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
-                    <h4 style="margin-bottom: 1rem; color: #1f2937; display: flex; align-items: center; gap: 0.5rem;">
-                        <i class="fas fa-notes-medical"></i> Notas SOAP
-                    </h4>
-                    ${['subjective', 'objective', 'assessment', 'plan'].map((field, i) => {
-                        const labels = ['Subjetivo (Síntomas del paciente)', 'Objetivo (Hallazgos físicos)', 'Assessment (Diagnóstico)', 'Plan (Tratamiento)'];
-                        const helps = ['¿Qué dice el paciente?', '¿Qué observas tú?', '¿Cuál es tu diagnóstico?', '¿Qué vas a hacer?'];
-                        return `
-                            <div class="form-group">
-                                <label for="encounter-${field}"><strong>${field[0].toUpperCase()}</strong>${labels[i].slice(field[0].length)}: *</label>
-                                <textarea id="encounter-${field}" rows="3" required placeholder="..."></textarea>
-                                <small style="color: #6b7280;">${helps[i]}</small>
-                            </div>
-                        `;
-                    }).join('')}
-                </div>
-                
-                <div class="form-group">
-                    <label for="encounter-notes">Notas adicionales:</label>
-                    <textarea id="encounter-notes" rows="2" placeholder="Información complementaria (opcional)"></textarea>
-                </div>
-                
-                <div class="form-actions" style="display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end;">
-                    <button type="button" class="btn btn-secondary" id="cancel-encounter"><i class="fas fa-times"></i> Cancelar</button>
-                    <button type="button" class="btn btn-success" id="download-hl7-summary-btn" data-appointment-id="${appointmentId}" data-patient-id="${patientId}" 
-                            style="background-color: #28a745; border-color: #28a745; color: white;">
-                        <i class="fas fa-file-download"></i> Descargar HL7
-                    </button>
-                    <button type="button" class="btn btn-info" id="prescribe-btn" data-patient-id="${patientId}" 
-                            data-patient-name="${patientName}" data-appointment-id="${appointmentId}" 
-                            style="background-color: #17a2b8; border-color: #17a2b8; color: white;">
-                        <i class="fas fa-prescription"></i> Recetar
-                    </button>
-                    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Guardar Consulta</button>
+                <!-- Columna derecha: Videollamada -->
+                <div class="encounter-video-column">
+                    <div id="video-call-section" style="padding: 1rem; background: #f0f9ff; border-radius: 0.5rem; border: 1px solid #bae6fd; height: 100%; display: flex; flex-direction: column;">
+                        <h4 style="margin-bottom: 0.5rem; color: #0369a1; display: flex; align-items: center; gap: 0.5rem;">
+                            <i class="fas fa-video"></i> Videollamada
+                        </h4>
+                        <div id="video-call-container" style="flex: 1; min-height: 400px; background: #000; border-radius: 0.5rem; position: relative; display: flex; align-items: center; justify-content: center; color: #fff; margin-bottom: 0.5rem;">
+                            <p id="video-loading" style="text-align: center;">Cargando videollamada...</p>
+                        </div>
+                        <div id="video-controls" style="display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;">
+                            <button type="button" id="toggle-mic" class="btn btn-secondary" style="padding: 0.5rem 1rem;">
+                                <i class="fas fa-microphone"></i> Micrófono
+                            </button>
+                            <button type="button" id="toggle-camera" class="btn btn-secondary" style="padding: 0.5rem 1rem;">
+                                <i class="fas fa-video"></i> Cámara
+                            </button>
+                            <button type="button" id="end-call" class="btn btn-danger" style="padding: 0.5rem 1rem;">
+                                <i class="fas fa-phone-slash"></i> Finalizar
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </form>
         </div>

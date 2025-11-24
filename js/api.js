@@ -1,34 +1,66 @@
+// ============================================
+// CONFIGURACIÓN DE URLs - Puedes cambiar esto para usar ngrok
+// ============================================
+// Para usar ngrok, descomenta y modifica las líneas de abajo:
+// const USE_NGROK = true;
+// const NGROK_DIRECTORY = 'https://abc123.ngrok.io';
+// const NGROK_AUTH = 'https://def456.ngrok.io';
+// const NGROK_SCHEDULING = 'https://ghi789.ngrok.io';
+// const NGROK_CLINICAL = 'https://jkl012.ngrok.io';
+
+const USE_NGROK = false; // Cambia a true para usar ngrok
+const NGROK_DIRECTORY = '';
+const NGROK_AUTH = '';
+const NGROK_SCHEDULING = '';
+const NGROK_CLINICAL = '';
+
 const defaultHostnames = [window.location.hostname || "localhost", "localhost", "127.0.0.1"];
 
 // DirectoryMS: puertos Docker (8081) e IIS Express (5112)
-const DIRECTORY_API_BASE_URLS = [
-  ...defaultHostnames.flatMap(host => [`http://${host}:8081/api`, `http://${host}:5112/api`])
-].filter((value, index, self) => self.indexOf(value) === index);
+const DIRECTORY_API_BASE_URLS = USE_NGROK && NGROK_DIRECTORY
+  ? [`${NGROK_DIRECTORY}/api`]
+  : [
+      ...defaultHostnames.flatMap(host => [`http://${host}:8081/api`, `http://${host}:5112/api`])
+    ].filter((value, index, self) => self.indexOf(value) === index);
 
 // AuthMS: puertos Docker (8082) e IIS Express (5093)
-// ⚠️ IMPORTANTE: Verifica que tu API use /api o /api/v1
-// Si solo usas Docker, comenta la línea de IIS Express
-const AUTH_API_BASE_URLS = [
-  ...defaultHostnames.flatMap(host => [
-    `http://${host}:8082/api/v1`,  // Docker con /v1
-    // `http://${host}:5093/api/v1`   // IIS Express con /v1 - COMENTADO si no lo usas
-  ])
-].filter((value, index, self) => self.indexOf(value) === index);
+const AUTH_API_BASE_URLS = USE_NGROK && NGROK_AUTH
+  ? [`${NGROK_AUTH}/api/v1`]
+  : [
+      ...defaultHostnames.flatMap(host => [
+        `http://${host}:8082/api/v1`,  // Docker con /v1
+        // `http://${host}:5093/api/v1`   // IIS Express con /v1 - COMENTADO si no lo usas
+      ])
+    ].filter((value, index, self) => self.indexOf(value) === index);
 
 // SchedulingMS: puertos Docker (8083) e IIS Express (34372), Development (5140)
-const SCHEDULING_API_BASE_URLS = [
-  ...defaultHostnames.flatMap(host => [`http://${host}:8083/api`, `http://${host}:34372/api`, `http://${host}:5140/api`])
-].filter((value, index, self) => self.indexOf(value) === index);
+const SCHEDULING_API_BASE_URLS = USE_NGROK && NGROK_SCHEDULING
+  ? [`${NGROK_SCHEDULING}/api`]
+  : [
+      ...defaultHostnames.flatMap(host => [`http://${host}:8083/api`, `http://${host}:34372/api`, `http://${host}:5140/api`])
+    ].filter((value, index, self) => self.indexOf(value) === index);
 
 // ClinicalMS: puertos Docker (8084) e IIS Express (27124), Development (5073)
-const CLINICAL_API_BASE_URLS = [
-  ...defaultHostnames.flatMap(host => [`http://${host}:8084/api`, `http://${host}:27124/api`, `http://${host}:5073/api`])
-].filter((value, index, self) => self.indexOf(value) === index);
+const CLINICAL_API_BASE_URLS = USE_NGROK && NGROK_CLINICAL
+  ? [`${NGROK_CLINICAL}/api`]
+  : [
+      ...defaultHostnames.flatMap(host => [`http://${host}:8084/api`, `http://${host}:27124/api`, `http://${host}:5073/api`])
+    ].filter((value, index, self) => self.indexOf(value) === index);
 
 // Hl7Gateway: puerto 5000 (API REST)
 const HL7GATEWAY_API_BASE_URLS = [
   ...defaultHostnames.flatMap(host => [`http://${host}:5000/api`])
 ].filter((value, index, self) => self.indexOf(value) === index);
+
+// Log de configuración
+if (USE_NGROK) {
+  console.log('🌐 Modo NGROK activado:', {
+    DirectoryMS: DIRECTORY_API_BASE_URLS[0],
+    AuthMS: AUTH_API_BASE_URLS[0],
+    SchedulingMS: SCHEDULING_API_BASE_URLS[0],
+    ClinicalMS: CLINICAL_API_BASE_URLS[0]
+  });
+}
 
 // Flag para evitar múltiples intentos de refresh simultáneos
 let isRefreshing = false;
@@ -343,6 +375,7 @@ export const Api = {
   post: (endpoint, data) => apiRequestFirstOk(DIRECTORY_API_BASE_URLS, endpoint, "POST", data, "DirectoryMS"),
   put: (endpoint, data) => apiRequestFirstOk(DIRECTORY_API_BASE_URLS, endpoint, "PUT", data, "DirectoryMS"),
   patch: (endpoint, data) => apiRequestFirstOk(DIRECTORY_API_BASE_URLS, endpoint, "PATCH", data, "DirectoryMS"),
+  delete: (endpoint) => apiRequestFirstOk(DIRECTORY_API_BASE_URLS, endpoint, "DELETE", null, "DirectoryMS"),
 };
 
 export const ApiAuth = {

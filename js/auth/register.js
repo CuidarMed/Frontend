@@ -1,6 +1,8 @@
 import { registerUser } from "../apis/authms.js";
 import { Api } from "../api.js";
 
+const SPECIALTIES_STORAGE_KEY = "adminSpecialties";
+
 document.addEventListener("DOMContentLoaded", () => {
     const form = document.getElementById("registerForm");
     if (!form) return;
@@ -18,10 +20,70 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById("patientMembershipNumber"),
     ];
 
+    const specialtySelect = document.getElementById("doctorSpecialty");
+
     const doctorRequiredInputs = [
         document.getElementById("doctorLicense"),
-        document.getElementById("doctorSpecialty"),
+        specialtySelect,
     ];
+
+    function loadSpecialtiesFromStorage() {
+        try {
+            const raw = localStorage.getItem(SPECIALTIES_STORAGE_KEY);
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : null;
+        } catch (error) {
+            console.warn("No se pudieron cargar especialidades del storage:", error);
+            return null;
+        }
+    }
+
+    function getFallbackSpecialties() {
+        return [
+            { name: "Cardiología", color: "#dc2626" },
+            { name: "Pediatría", color: "#16a34a" },
+            { name: "Neurología", color: "#7c3aed" },
+            { name: "Dermatología", color: "#f97316" },
+        ];
+    }
+
+    async function populateSpecialties() {
+        if (!specialtySelect) return;
+        
+        try {
+            const { Api } = await import('../api.js');
+            const specialties = await Api.get('v1/Specialty');
+            
+            if (Array.isArray(specialties) && specialties.length > 0) {
+                specialtySelect.innerHTML = '<option value="">Seleccionar especialidad</option>';
+                specialties.forEach((spec) => {
+                    const option = document.createElement("option");
+                    option.value = spec.name || spec.Name;
+                    option.textContent = spec.name || spec.Name;
+                    option.style.color = spec.color || spec.Color || "#0f172a";
+                    specialtySelect.appendChild(option);
+                });
+                specialtySelect.disabled = false;
+                return;
+            }
+        } catch (error) {
+            console.warn('Error al cargar especialidades desde la API:', error);
+        }
+        
+        // Fallback a localStorage o valores por defecto
+        const stored = loadSpecialtiesFromStorage();
+        const specialties = stored?.length ? stored : getFallbackSpecialties();
+        specialtySelect.innerHTML = '<option value="">Seleccionar especialidad</option>';
+        specialties.forEach((spec) => {
+            const option = document.createElement("option");
+            option.value = spec.name;
+            option.textContent = spec.name;
+            option.style.color = spec.color || "#0f172a";
+            specialtySelect.appendChild(option);
+        });
+        specialtySelect.disabled = specialties.length === 0;
+    }
 
     function setRequired(inputs, enabled) {
         inputs.filter(Boolean).forEach((input) => {
@@ -68,6 +130,21 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     setRole(roleInput.value || roleCards[0]?.dataset.role || "Patient");
+    populateSpecialties();
+
+    // Escuchar cambios en localStorage para actualizar especialidades en tiempo real
+    window.addEventListener('storage', (e) => {
+        if (e.key === SPECIALTIES_STORAGE_KEY) {
+            console.log('🔄 Especialidades actualizadas, recargando...');
+            populateSpecialties();
+        }
+    });
+
+    // También escuchar eventos personalizados (para cambios en la misma ventana)
+    window.addEventListener('specialtiesUpdated', () => {
+        console.log('🔄 Especialidades actualizadas (evento personalizado), recargando...');
+        populateSpecialties();
+    });
 
     async function syncDirectoryProfile(userId, role, userData, patientExtras, doctorExtras) {
         if (!userId) {

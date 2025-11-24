@@ -22,6 +22,7 @@ import { initializeModals } from './patient-appointment-form.js';
 import { initializePrescriptionModal } from './patient-prescriptions.js';
 
 import { loadPatientPrescriptions } from './patient-prescriptions-list.js';
+import { initializeChatNotificationsPatient } from '../chat/ChatNotification.js';
 
 
 /**
@@ -57,11 +58,15 @@ async function initializePatientPanel() {
     await loadRecentPatientHistory();
     
     // Cargar recetas recientes (solo si el contenedor existe en el HTML)
-    const prescriptionsHomeContainer = document.getElementById('prescriptions-home-list');
-    if (prescriptionsHomeContainer) {
-        await renderPrescriptionsHome();
-    }
+    // TODO: Implementar renderPrescriptionsHome si es necesario
+    // const prescriptionsHomeContainer = document.getElementById('prescriptions-home-list');
+    // if (prescriptionsHomeContainer) {
+    //     await renderPrescriptionsHome();
+    // }
 
+    // Inicializar notificaciones de chat
+    await initializeChatNotificationsPatient();
+    
     // ✅ CAMBIO: Auto refresco cada 10 segundos (antes era 30)
     if (appState.autoRefreshInterval) {
         clearInterval(appState.autoRefreshInterval);
@@ -76,10 +81,11 @@ async function initializePatientPanel() {
         await loadRecentPatientHistory(); // ✅ Esto actualizará las 3 últimas consultas
         
         // Refrescar recetas en home si existe el contenedor
-        const prescriptionsHomeContainer = document.getElementById('prescriptions-home-list');
-        if (prescriptionsHomeContainer) {
-            await renderPrescriptionsHome();
-        }
+        // TODO: Implementar renderPrescriptionsHome si es necesario
+        // const prescriptionsHomeContainer = document.getElementById('prescriptions-home-list');
+        // if (prescriptionsHomeContainer) {
+        //     await renderPrescriptionsHome();
+        // }
         
         console.log('✅ Auto-refresh completado');
     }, 10000); // ✅ 10 segundos en lugar de 30

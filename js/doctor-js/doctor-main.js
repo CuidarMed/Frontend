@@ -34,6 +34,10 @@ import {
     initializePrescriptionModal 
 } from './doctor-prescriptions.js';
 
+import { 
+    initializeChatNotifications 
+} from '../chat/ChatNotification.js';
+
 /**
  * Inicializa el panel del doctor
  */
@@ -77,7 +81,10 @@ export async function initializeDoctorPanel() {
         await loadTodayConsultationsForDashboard();
         await loadWeeklySchedule();
         
-        // 11. Cargar datos periódicamente (cada 30 segundos)
+        // 11. Inicializar notificaciones de chat
+        await initializeChatNotifications();
+        
+        // 12. Cargar datos periódicamente (cada 30 segundos)
         setInterval(async () => {
             await loadDoctorData();
             await loadDoctorStats();
@@ -381,11 +388,30 @@ function initializeScheduleItemClickHandlers() {
             this.style.border = '2px solid #10b981';
             this.style.backgroundColor = '#f0fdf4';
             
-            // Actualizar el título del historial
+            // Actualizar el input de fecha
+            const dateFilter = document.getElementById('consultation-date-filter');
+            const dateFilterView = document.getElementById('consultation-date-filter-view');
+            
+            // Actualizar el título del historial primero
             updateConsultationsListTitle(dayName, dateStr);
             
-            // Cargar consultas de ese día
-            await loadConsultationsForDate(dateStr);
+            // Actualizar inputs de fecha y disparar eventos change
+            if (dateFilter) {
+                dateFilter.value = dateStr;
+                // Disparar evento change para que se actualicen las consultas
+                dateFilter.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            
+            if (dateFilterView) {
+                dateFilterView.value = dateStr;
+                // Disparar evento change para que se actualicen las consultas
+                dateFilterView.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            
+            // Si no hay inputs de fecha, cargar directamente
+            if (!dateFilter && !dateFilterView) {
+                await loadConsultationsForDate(dateStr);
+            }
         });
     });
 }

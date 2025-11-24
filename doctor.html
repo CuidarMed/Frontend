@@ -14,6 +14,11 @@
             <span>CuidarMed+</span>
         </div>
         <div class="actions">
+            <!-- Botón de chat con notificación -->
+            <button class="chat-notification-btn" id="chatNotificationBtn" title="Chat">
+                <i class="fas fa-comments"></i>
+                <span class="chat-badge" id="chatBadge" style="display: none;">0</span>
+            </button>
             <div class="user-menu" id="userMenu">
                 <button class="user-btn" id="userBtn">
                     <span id="userMenuName">Mi cuenta</span>
@@ -129,10 +134,18 @@
                             <label for="consultation-date-filter" style="margin-right: 0.5rem; color: #6b7280; font-size: 0.875rem;">
                                 <i class="fas fa-calendar-alt"></i> Fecha:
                             </label>
-                            <input type="date" 
-                                   id="consultation-date-filter" 
-                                   class="date-filter-input"
-                                   style="padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.375rem; font-size: 0.875rem;">
+                            <div class="date-navigation">
+                                <button type="button" id="prev-day-btn" class="date-nav-btn" title="Día anterior">
+                                    <i class="fas fa-chevron-left"></i>
+                                </button>
+                                <input type="date" 
+                                       id="consultation-date-filter" 
+                                       class="date-filter-input"
+                                       style="padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.375rem; font-size: 0.875rem;">
+                                <button type="button" id="next-day-btn" class="date-nav-btn" title="Día siguiente">
+                                    <i class="fas fa-chevron-right"></i>
+                                </button>
+                            </div>
                         </div>
                     </div>
                     <div class="consultations-list" id="consultations-list">
