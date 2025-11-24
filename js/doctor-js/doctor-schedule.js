@@ -806,8 +806,8 @@ function openAddAvailabilityForm(modal) {
                         <small style="color: #6b7280;">Entre 15 y 480 minutos</small>
                     </div>
                     <div class="form-actions">
-                        <button type="button" class="btn btn-secondary close-modal">Cancelar</button>
-                        <button type="submit" class="btn btn-primary">Guardar Horario</button>
+                        <button type="button" class="btn btn-secondary close-modal" style="width:auto;">Cancelar</button>
+                        <button type="submit" class="btn btn-primary" style="width:auto;">Guardar Horario</button>
                     </div>
                 </form>
             </div>
