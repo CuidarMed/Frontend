@@ -562,9 +562,39 @@ async function openAvailabilityForm(parentModal, doctorId, availabilityId = null
                     ${dayOptions}
                 </select>
             </div>
-            <div class="form-group">
-                <label>Hora de inicio:</label>
-                <input type="time" name="startTime" value="${startTime}" required>
+            <div class="modal-body">
+                <form id="add-availability-form">
+                    <div class="form-group">
+                        <label for="av-day">Día de la semana:</label>
+                        <select id="av-day" name="dayOfWeek" required>
+                            <option value="">Seleccionar día</option>
+                            <option value="1">Lunes</option>
+                            <option value="2">Martes</option>
+                            <option value="3">Miércoles</option>
+                            <option value="4">Jueves</option>
+                            <option value="5">Viernes</option>
+                            <option value="6">Sábado</option>
+                            <option value="7">Domingo</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="av-start-time">Hora de inicio:</label>
+                        <input type="time" id="av-start-time" name="startTime" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="av-end-time">Hora de fin:</label>
+                        <input type="time" id="av-end-time" name="endTime" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="av-duration">Duración de cada turno (minutos):</label>
+                        <input type="number" id="av-duration" name="durationMinutes" min="15" max="480" value="30" required>
+                        <small style="color: #6b7280;">Entre 15 y 480 minutos</small>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary close-modal" style="width:auto;">Cancelar</button>
+                        <button type="submit" class="btn btn-primary" style="width:auto;">Guardar Horario</button>
+                    </div>
+                </form>
             </div>
             <div class="form-group">
                 <label>Hora de fin:</label>
