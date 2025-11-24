@@ -104,7 +104,7 @@ export function renderAppointmentsFull(appointments) {
         const canCancel = status === "confirmed" || status === "scheduled" || status === "rescheduled";
 
         // Verificarmos si el chat esta disponible(turno confirmado o en progreso)
-        const chatAvailable = status === 'confirmed' || status === 'in-progress'
+        const chatAvailable = status === 'confirmed' || status === 'in_progress'
 
         return `
             <div class="appointment-clean-card">
@@ -130,7 +130,7 @@ export function renderAppointmentsFull(appointments) {
                 <div class="appointment-clean-actions">
                     ${chatAvailable && appointmentId && doctorId && doctorName ? `
                             <button class="btn-clean-chat"
-                                data-appoinment-id="${appointmentId}"
+                                data-appointment-id="${appointmentId}"
                                 data-doctor-id="${apt.doctorId || apt.DoctorId}"
                                 data-doctor-name=${doctorName}
                                 title="Chat con el doctor"
@@ -150,7 +150,6 @@ export function renderAppointmentsFull(appointments) {
 }
 
 // Funcion Handle del chat para pasiente
-
 async function handlePatientChatOpen(appointmentId, doctorId, doctorName){
     try{
         console.log('Abriendo chat: ', {appointmentId, doctorId, doctorName})
@@ -206,7 +205,7 @@ async function handlePatientChatOpen(appointmentId, doctorId, doctorName){
         const chatRoom = await handleAppointmentChatCreation(
             {
                 ...appoinment,
-                currentUSerId: currentUserId
+                currentUserId: currentUserId
             }
         )
 
@@ -221,9 +220,12 @@ async function handlePatientChatOpen(appointmentId, doctorId, doctorName){
 
         const patientName = `${patientFirstName} ${patientLastName}`.trim() || 'Paciente'
 
+        const patientIdForChat = chatRoom.patientId || chatRoom.PatientId
+        console.log('patientId: ', patientIdForChat)
+
         // abrir modal del chat 
         openChatModal(chatRoom, {
-            currentUSerId: appState.currentUser.UserId,
+            currentUserId: patientIdForChat,
             currentUserName: patientName,
             otherUserName: doctorName || 'Doctor',
             userType: 'patient'

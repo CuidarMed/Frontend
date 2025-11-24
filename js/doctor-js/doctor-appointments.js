@@ -438,9 +438,12 @@ async function handleDoctorChatOpen(appointmentId, patientId, patientName){
         const { getDoctorDisplayName } = await import('./doctor-core.js')
         const doctorName = getDoctorDisplayName()
 
+        const doctorIdforChat = chatRoom.doctorId || chatRoom.DoctorId
+        console.log('DoctorID: ', doctorIdforChat)
+
         // ✅ ANTES de llamar a openChatModal
         const configParaChat = {
-            currentUserId: currentUserId,
+            currentUserId: doctorIdforChat,
             currentUserName: getDoctorDisplayName(),
             otherUserName: patientName || 'Paciente',
             userType: 'doctor'
@@ -451,7 +454,7 @@ async function handleDoctorChatOpen(appointmentId, patientId, patientName){
 
         // Abrir modal del chat
         openChatModal(chatRoom, {
-            currentUserId: currentUserId,
+            currentUserId: doctorState.currentDoctorData.doctorId,
             currentUserName: doctorName,
             otherUserName: patientName || 'Paciente',
             userType: 'doctor'

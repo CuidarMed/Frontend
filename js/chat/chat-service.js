@@ -127,14 +127,16 @@ export async function getChatMessages(chatRoomId, userId, pageNumber = 1, pageSi
     console.log('💬 Obteniendo mensajes:', { chatRoomId, userId, pageNumber, pageSize });
     
     try {
+        const skip = (pageNumber - 1) * pageSize
+
         const response = await tryFetch(`/Chat/rooms/${chatRoomId}/messages`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 ChatRoomId: chatRoomId,
                 UserId: userId,
-                PageNumber: pageNumber,
-                PageSize: pageSize
+                Skip: pageNumber,
+                Take: pageSize
             })
         });
 
