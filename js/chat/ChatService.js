@@ -77,7 +77,7 @@ export async function createChatRoom(doctorId, patientId, appointmentId, token) 
         AppointmentId: typeof requestBody.AppointmentId
     });
     
-    const response = await tryFetch('/Chat/create/room', {
+    const response = await tryFetch('/Chat/rooms/create', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
