@@ -2,9 +2,11 @@
 // DOCTOR APPOINTMENTS - Consultas y Turnos
 // ===================================
 
-import { doctorState, getId, formatTime } from './doctor-core.js';
+import { doctorState, getId,getDoctorDisplayName, formatTime } from './doctor-core.js';
 import { showNotification } from './doctor-ui.js';
 import { handleAppointmentChatCreation, openChatModal } from '../chat/chat-integration.js';
+//import { handleAppointmentChatCreation, addChatButtomToAppointment, openChatModal } from '../chat/ChatIntegration.js';
+
 
 // ===================================
 // UTILIDADES
