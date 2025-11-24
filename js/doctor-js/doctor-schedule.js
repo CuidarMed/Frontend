@@ -575,8 +575,8 @@ async function openAvailabilityForm(parentModal, doctorId, availabilityId = null
                 <input type="number" name="durationMinutes" min="15" max="480" value="${duration}" required>
             </div>
             <div class="form-actions" style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid #e5e7eb; flex-wrap: wrap;">
-                <button type="button" class="btn btn-secondary close-modal" style="padding: 0.75rem 1.5rem; min-width: 120px; white-space: nowrap;">Cancelar</button>
-                <button type="submit" class="btn btn-primary" style="padding: 0.75rem 1.5rem; min-width: 120px; white-space: nowrap;">Guardar</button>
+                <button type="button" class="btn btn-secondary close-modal" style="width:auto;">Cancelar</button>
+                <button type="submit" class="btn btn-primary" style="width:auto; display:flex; align-items:center; justify-content:center;">Guardar</button>
             </div>
         </form>
         `,
