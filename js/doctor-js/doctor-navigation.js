@@ -135,7 +135,9 @@ async function showMainDashboard(mainDashboard, profileSection) {
     console.log('🏠 Mostrando dashboard principal');
     
     if (mainDashboard) {
-        mainDashboard.style.display = '';
+        mainDashboard.style.display = 'block';
+        mainDashboard.classList.remove('hidden');
+        console.log('✅ mainDashboard.style.display =', mainDashboard.style.display);
     }
     if (profileSection) {
         profileSection.style.display = 'none';

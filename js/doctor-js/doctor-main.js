@@ -4,7 +4,10 @@
 import { 
     doctorState,
     loadDoctorContext, 
-    loadDoctorData 
+    loadDoctorData,
+    getId,
+    getValue,
+    formatTime
 } from './doctor-core.js';
 
 import { 
@@ -19,7 +22,8 @@ import {
 import { 
     initializeConsultationDateFilter,
     loadTodayConsultations,
-    loadTodayFullHistory
+    loadTodayFullHistory,
+    createConsultationItemElement
 } from './doctor-appointments.js';
 
 import { 
@@ -68,14 +72,18 @@ export async function initializeDoctorPanel() {
         // 9. Inicializar filtro de fecha para historial de consultas
         initializeConsultationDateFilter();
         
-        // 10. Cargar datos periódicamente (cada 30 segundos)
+        // 10. Cargar estadísticas y datos del dashboard inicial
+        await loadDoctorStats();
+        await loadTodayConsultationsForDashboard();
+        await loadWeeklySchedule();
+        
+        // 11. Cargar datos periódicamente (cada 30 segundos)
         setInterval(async () => {
             await loadDoctorData();
             await loadDoctorStats();
+            await loadTodayConsultationsForDashboard();
+            await loadWeeklySchedule();
         }, 30000);
-        
-        // 11. Cargar estadísticas iniciales
-        await loadDoctorStats();
         
         console.log('✅ Panel del doctor inicializado correctamente');
         
@@ -157,6 +165,431 @@ export async function loadDoctorStats() {
     } catch (error) {
         console.error('Error al cargar estadísticas:', error);
     }
+}
+
+/**
+ * Carga las consultas del día para el dashboard principal
+ */
+async function loadTodayConsultationsForDashboard() {
+    const consultationsList = document.getElementById('consultations-list');
+    if (!consultationsList) return;
+    
+    try {
+        const doctorId = getId(doctorState.currentDoctorData, 'doctorId');
+        if (!doctorId) {
+            consultationsList.innerHTML = '<p style="color: #6b7280; padding: 2rem; text-align: center;">No se pudo identificar al médico</p>';
+            return;
+        }
+        
+        const { ApiScheduling } = await import('../api.js');
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        
+        console.log('📅 Cargando consultas del día para dashboard');
+        
+        const appointments = await ApiScheduling.get(
+            `v1/Appointments?doctorId=${doctorId}&startTime=${today.toISOString()}&endTime=${tomorrow.toISOString()}`
+        );
+        
+        // Filtrar consultas completadas, canceladas y no show
+        const allAppointments = Array.isArray(appointments) 
+            ? appointments.filter(apt => {
+                const status = apt.status || apt.Status;
+                return status !== 'COMPLETED' && status !== 'CANCELLED' && status !== 'NO_SHOW';
+            })
+            : [];
+        
+        console.log('✅ Consultas activas encontradas:', allAppointments.length);
+        
+        // Cargar nombres de pacientes
+        const { Api } = await import('../api.js');
+        for (const apt of allAppointments) {
+            // Si ya viene el nombre desde el backend → lo usamos tal cual
+            if (apt.patientName && apt.patientName.trim() !== '') {
+                continue;
+            }
+
+            const patientId = apt.patientId || apt.PatientId;
+            if (!patientId) {
+                apt.patientName = 'Paciente sin ID';
+                continue;
+            }
+
+            // Como fallback, recién ahí pedimos el patient
+            try {
+                const patient = await Api.get(`v1/Patient/${patientId}`);
+                apt.patientName = `${patient.Name || patient.name || ''} ${patient.lastName || patient.LastName || ''}`.trim() || 'Paciente sin nombre';
+            } catch (err) {
+                console.warn('Error al cargar paciente:', err);
+                apt.patientName = 'Paciente desconocido';
+            }
+        }
+        
+        // Renderizar lista
+        consultationsList.innerHTML = '';
+        
+        if (allAppointments && allAppointments.length > 0) {
+            allAppointments.forEach(apt => {
+                const consultationItem = createConsultationItemElement(apt);
+                consultationsList.appendChild(consultationItem);
+            });
+        } else {
+            const today = new Date();
+            const dateStr = today.toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' });
+            consultationsList.innerHTML = `
+                <div style="text-align: center; padding: 3rem; color: #6b7280;">
+                    <i class="fas fa-check-circle" style="font-size: 3rem; margin-bottom: 1rem; color: #10b981; opacity: 0.5;"></i>
+                    <h4 style="margin-bottom: 0.5rem; color: #111827;">¡Todo listo!</h4>
+                    <p>No hay consultas pendientes para el ${dateStr}</p>
+                </div>
+            `;
+        }
+        
+    } catch (error) {
+        console.error('❌ Error al cargar consultas:', error);
+        consultationsList.innerHTML = '<p style="color: #6b7280; padding: 2rem; text-align: center;">No se pudieron cargar las consultas del día</p>';
+    }
+    
+    // Reinicializar botones de atención
+    setTimeout(async () => {
+        const { initializeAttendButtons } = await import('./doctor-appointments.js');
+        initializeAttendButtons();
+    }, 100);
+}
+
+/**
+ * Carga la agenda semanal para el dashboard principal
+ */
+async function loadWeeklySchedule() {
+    const weeklySchedule = document.getElementById('weekly-schedule');
+    if (!weeklySchedule) return;
+    
+    try {
+        const doctorId = getId(doctorState.currentDoctorData, 'doctorId');
+        if (!doctorId) {
+            console.warn('No hay doctorId disponible para cargar agenda');
+            weeklySchedule.innerHTML = '<p style="color: #6b7280; padding: 2rem; text-align: center;">No se pudo identificar al médico</p>';
+            return;
+        }
+
+        const { ApiScheduling } = await import('../api.js');
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const nextWeek = new Date(today);
+        nextWeek.setDate(nextWeek.getDate() + 7);
+        
+        const appointments = await ApiScheduling.get(
+            `v1/Appointments?doctorId=${doctorId}&startTime=${today.toISOString()}&endTime=${nextWeek.toISOString()}`
+        );
+        
+        weeklySchedule.innerHTML = '';
+        
+        if (appointments && appointments.length > 0) {
+            // Agrupar por día de la semana
+            const daysOfWeek = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+            const appointmentsByDay = {};
+            
+            appointments.forEach(apt => {
+                const date = new Date(apt.startTime || apt.StartTime);
+                const dayOfWeek = date.getDay();
+                const dayKey = daysOfWeek[dayOfWeek];
+                
+                // Crear clave única con la fecha completa
+                const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                
+                if (!appointmentsByDay[dateKey]) {
+                    appointmentsByDay[dateKey] = {
+                        abbreviation: dayKey,
+                        dayNumber: date.getDate().toString(),
+                        count: 0,
+                        date: date,
+                        dateStr: dateKey
+                    };
+                }
+                appointmentsByDay[dateKey].count++;
+            });
+            
+            // Mostrar los próximos 5 días
+            const scheduleItems = [];
+            for (let i = 0; i < 5; i++) {
+                const date = new Date(today);
+                date.setDate(date.getDate() + i);
+                const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                const dayKey = daysOfWeek[date.getDay()];
+                
+                const dayData = appointmentsByDay[dateKey] || {
+                    abbreviation: dayKey,
+                    dayNumber: date.getDate().toString(),
+                    count: 0,
+                    date: date,
+                    dateStr: dateKey
+                };
+                scheduleItems.push(dayData);
+            }
+            
+            scheduleItems.forEach(day => {
+                const scheduleItem = createScheduleItemElement(day);
+                weeklySchedule.appendChild(scheduleItem);
+            });
+            
+            // Agregar event listeners a los items de la agenda
+            initializeScheduleItemClickHandlers();
+        } else {
+            weeklySchedule.innerHTML = '<p style="color: #6b7280; padding: 2rem; text-align: center;">No hay agenda disponible</p>';
+        }
+        
+    } catch (error) {
+        console.error('Error al cargar agenda:', error);
+        weeklySchedule.innerHTML = '<p style="color: #6b7280; padding: 2rem; text-align: center;">No se pudo cargar la agenda</p>';
+    }
+}
+function initializeScheduleItemClickHandlers() {
+    const scheduleItems = document.querySelectorAll('.schedule-item[data-date]');
+    
+    scheduleItems.forEach(item => {
+        // Remover listeners previos
+        const newItem = item.cloneNode(true);
+        item.parentNode.replaceChild(newItem, item);
+        
+        // Mantener los event listeners de hover
+        newItem.addEventListener('mouseenter', function() {
+            this.style.backgroundColor = '#f0fdf4';
+            this.style.transform = 'translateY(-2px)';
+            this.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
+        });
+        
+        newItem.addEventListener('mouseleave', function() {
+            this.style.backgroundColor = '';
+            this.style.transform = '';
+            this.style.boxShadow = '';
+        });
+        
+        // Agregar evento de click
+        newItem.addEventListener('click', async function() {
+            const dateStr = this.getAttribute('data-date');
+            const dayName = this.getAttribute('data-day-name');
+            
+            console.log('📅 Cargando consultas para:', dayName, dateStr);
+            
+            // Resaltar el día seleccionado
+            document.querySelectorAll('.schedule-item').forEach(si => {
+                si.style.border = '';
+                si.style.backgroundColor = '';
+            });
+            this.style.border = '2px solid #10b981';
+            this.style.backgroundColor = '#f0fdf4';
+            
+            // Actualizar el título del historial
+            updateConsultationsListTitle(dayName, dateStr);
+            
+            // Cargar consultas de ese día
+            await loadConsultationsForDate(dateStr);
+        });
+    });
+}
+/**
+ * Carga las consultas para una fecha específica
+ */
+async function loadConsultationsForDate(dateStr) {
+    const consultationsList = document.getElementById('consultations-list');
+    if (!consultationsList) return;
+    
+    try {
+        const doctorId = getId(doctorState.currentDoctorData, 'doctorId');
+        if (!doctorId) {
+            consultationsList.innerHTML = '<p style="color: #6b7280; padding: 2rem; text-align: center;">No se pudo identificar al médico</p>';
+            return;
+        }
+        
+        // Mostrar loading
+        consultationsList.innerHTML = `
+            <div style="text-align: center; padding: 2rem; color: #6b7280;">
+                <i class="fas fa-spinner fa-spin" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+                <p>Cargando consultas...</p>
+            </div>
+        `;
+        
+        const { ApiScheduling } = await import('../api.js');
+        
+        // Parsear la fecha
+        const [year, month, day] = dateStr.split('-').map(Number);
+        const selectedDate = new Date(year, month - 1, day);
+        selectedDate.setHours(0, 0, 0, 0);
+        
+        const nextDay = new Date(selectedDate);
+        nextDay.setDate(nextDay.getDate() + 1);
+        
+        console.log('📅 Buscando consultas entre:', selectedDate.toISOString(), 'y', nextDay.toISOString());
+        
+        const appointments = await ApiScheduling.get(
+            `v1/Appointments?doctorId=${doctorId}&startTime=${selectedDate.toISOString()}&endTime=${nextDay.toISOString()}`
+        );
+        
+        // Filtrar consultas completadas, canceladas y no show
+        const allAppointments = Array.isArray(appointments) 
+            ? appointments.filter(apt => {
+                const status = apt.status || apt.Status;
+                return status !== 'COMPLETED' && status !== 'CANCELLED' && status !== 'NO_SHOW';
+            })
+            : [];
+        
+        console.log('✅ Consultas activas encontradas:', allAppointments.length);
+        
+        // Cargar nombres de pacientes
+        const { Api } = await import('../api.js');
+        for (const apt of allAppointments) {
+            // Si ya viene el nombre desde el backend → lo usamos tal cual
+            if (apt.patientName && apt.patientName.trim() !== '') {
+                continue;
+            }
+
+            const patientId = apt.patientId || apt.PatientId;
+            if (!patientId) {
+                apt.patientName = 'Paciente sin ID';
+                continue;
+            }
+
+            // Como fallback, recién ahí pedimos el patient
+            try {
+                const patient = await Api.get(`v1/Patient/${patientId}`);
+                apt.patientName = `${patient.Name || patient.name || ''} ${patient.lastName || patient.LastName || ''}`.trim() || 'Paciente sin nombre';
+            } catch (err) {
+                console.warn('Error al cargar paciente:', err);
+                apt.patientName = 'Paciente desconocido';
+            }
+        }
+        
+        // Renderizar lista
+        consultationsList.innerHTML = '';
+        
+        if (allAppointments && allAppointments.length > 0) {
+            allAppointments.forEach(apt => {
+                const consultationItem = createConsultationItemElement(apt);
+                consultationsList.appendChild(consultationItem);
+            });
+        } else {
+            const formattedDate = selectedDate.toLocaleDateString('es-AR', { 
+                day: 'numeric', 
+                month: 'long', 
+                year: 'numeric' 
+            });
+            consultationsList.innerHTML = `
+                <div style="text-align: center; padding: 3rem; color: #6b7280;">
+                    <i class="fas fa-check-circle" style="font-size: 3rem; margin-bottom: 1rem; color: #10b981; opacity: 0.5;"></i>
+                    <h4 style="margin-bottom: 0.5rem; color: #111827;">¡Todo listo!</h4>
+                    <p>No hay consultas pendientes para el ${formattedDate}</p>
+                </div>
+            `;
+        }
+        
+    } catch (error) {
+        console.error('❌ Error al cargar consultas:', error);
+        consultationsList.innerHTML = `
+            <div style="text-align: center; padding: 2rem; color: #ef4444;">
+                <i class="fas fa-exclamation-circle" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+                <p>Error al cargar las consultas</p>
+            </div>
+        `;
+    }
+    
+    // Reinicializar botones de atención
+    setTimeout(async () => {
+        const { initializeAttendButtons } = await import('./doctor-appointments.js');
+        initializeAttendButtons();
+    }, 100);
+}
+function updateConsultationsListTitle(dayName, dateStr) {
+    // Buscar el título de la sección de consultas
+    const consultationsSection = document.querySelector('#consultations-list')?.closest('.dashboard-section');
+    if (!consultationsSection) return;
+    
+    const header = consultationsSection.querySelector('.section-header h3');
+    if (header) {
+        // Parsear la fecha correctamente usando componentes locales
+        const [year, month, day] = dateStr.split('-').map(Number);
+        const date = new Date(year, month - 1, day);
+        
+        // Formatear la fecha en zona horaria local
+        const formattedDate = date.toLocaleDateString('es-AR', { 
+            weekday: 'long', 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+        });
+        
+        // Capitalizar primera letra
+        const capitalizedDate = formattedDate.charAt(0).toUpperCase() + formattedDate.slice(1);
+        
+        header.innerHTML = `
+            <span style="display: flex; align-items: center; gap: 0.5rem;">
+                <i class="fas fa-calendar-day" style="color: #10b981;"></i>
+                Consultas del ${capitalizedDate}
+            </span>
+        `;
+        
+        // Agregar botón para volver a hoy
+        let backButton = consultationsSection.querySelector('.back-to-today-btn');
+        if (!backButton) {
+            backButton = document.createElement('button');
+            backButton.className = 'btn btn-secondary btn-sm back-to-today-btn';
+            backButton.innerHTML = '<i class="fas fa-arrow-left"></i> Hoy';
+            backButton.style.marginLeft = '1rem';
+            
+            backButton.addEventListener('click', async () => {
+                // Remover selección de la agenda
+                document.querySelectorAll('.schedule-item').forEach(si => {
+                    si.style.border = '';
+                    si.style.backgroundColor = '';
+                });
+                
+                // Restaurar título original
+                header.innerHTML = 'Consultas de Hoy';
+                backButton.remove();
+                
+                // Cargar consultas de hoy
+                await loadTodayConsultationsForDashboard();
+            });
+            
+            header.parentElement.appendChild(backButton);
+        }
+    }
+}
+/**
+ * Crea el elemento HTML para un día de la agenda
+ */
+function createScheduleItemElement(day) {
+    const item = document.createElement('div');
+    item.className = 'schedule-item';
+    item.style.cursor = 'pointer';
+    item.style.transition = 'all 0.2s ease';
+    item.setAttribute('data-date', day.dateStr);
+    item.setAttribute('data-day-name', `${day.abbreviation} ${day.dayNumber}`);
+    
+    // Añadir efecto hover
+    item.addEventListener('mouseenter', function() {
+        this.style.backgroundColor = '#f0fdf4';
+        this.style.transform = 'translateY(-2px)';
+        this.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
+    });
+    
+    item.addEventListener('mouseleave', function() {
+        this.style.backgroundColor = '';
+        this.style.transform = '';
+        this.style.boxShadow = '';
+    });
+    
+    item.innerHTML = `
+        <div class="schedule-day-badge">
+            <span class="day-abbr">${day.abbreviation || ''}</span>
+            <span class="day-num">${day.dayNumber || ''}</span>
+        </div>
+        <span>${day.count || 0} consultas</span>
+        <div class="schedule-count-badge">${day.count || 0}</div>
+    `;
+    
+    return item;
 }
 
 // Exportar doctorState
