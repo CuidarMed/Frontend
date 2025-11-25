@@ -325,6 +325,8 @@ body {
 .btn-primary {
     background: #10b981;
     color: white;
+    align-items: center;
+    justify-content: center;
 }
 
 .btn-primary:hover {
@@ -336,6 +338,8 @@ body {
     background: #f3f4f6;
     color: #374151;
     border: 1px solid #d1d5db;
+    align-items: center;
+    justify-content: center;
 }
 
 .btn-secondary:hover {
@@ -1628,6 +1632,9 @@ body {
     background: #ffffff;
     border: 2px solid #e5e7eb;
     color: #374151;
+    align-items: center;
+    justify-content: center;
+    width: auto;
 }
 
 .profile-actions .btn-secondary:hover {
