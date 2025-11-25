@@ -390,29 +390,147 @@ export async function cancelAppointment(appointmentId) {
     }
 
     try {
-        // RUTA CORREGIDA: api.js está en js/
-        const { ApiScheduling } = await import('../api.js');
-        
-        await ApiScheduling.patch(`v1/Appointments/${appointmentId}/cancel`, {
-            reason: 'Cancelado por el paciente'
-        });
-        
+        const { ApiScheduling, ApiAuth, Api } = await import('../api.js');
+
+        // =====================================================
+        // 1) Cancelar en SchedulingMS
+        // =====================================================
+        const appointment = await ApiScheduling.patch(
+            `v1/Appointments/${appointmentId}/cancel`,
+            { reason: 'Cancelado por el paciente' }
+        );
+
+        console.log("Turno cancelado:", appointment);
+
         showNotification('Turno cancelado exitosamente', 'success');
-        
+
+        const doctorId = appointment.doctorId;
+        const patientId = appointment.patientId;
+
+        // =====================================================
+        // 2) Obtener UserId REAL del doctor desde DirectoryMS
+        // =====================================================
+        let doctor = null;
+        try {
+            doctor = await Api.get(`v1/Doctor/${doctorId}`);
+        } catch (err) {
+            console.error("❌ Error obteniendo doctor:", err);
+        }
+
+        if (!doctor || !doctor.userId) {
+            console.error("❌ No se pudo obtener doctor.userId, abortando envío de notificaciones");
+            return;
+        }
+
+        const doctorUserId = doctor.userId;
+        const doctorName = `${doctor.firstName} ${doctor.lastName}`;
+        const specialty = doctor.specialty || "Especialidad";
+
+        // =====================================================
+        // 3) Obtener UserId REAL del paciente desde DirectoryMS
+        // =====================================================
+        let patient = null;
+        try {
+            patient = await Api.get(`v1/Patient/${patientId}`);
+        } catch (err) {
+            console.error("❌ Error obteniendo paciente:", err);
+        }
+
+        if (!patient || !patient.userId) {
+            console.error("❌ No se pudo obtener patient.userId, abortando notificación al paciente.");
+        }
+
+        const patientUserId = patient?.userId;
+        const patientName = `${patient?.firstName || ''} ${patient?.lastName || ''}`.trim();
+
+        // =====================================================
+        // 4) Convertir appointmentId numérico -> GUID determinístico
+        // =====================================================
+        let apptGuid = appointment.appointmentId;
+        if (typeof apptGuid === "number") {
+            apptGuid = numberToDeterministicGuid(apptGuid);
+        }
+
+        // =====================================================
+        // 5) Preparar payload base (doctor y paciente)
+        // =====================================================
+        const appointmentDate = appointment.startTime.split(" ")[0];
+        const appointmentTime = appointment.startTime.split(" ")[1];
+
+        const basePayload = {
+            appointmentId: apptGuid,
+            patientName: patientName,
+            doctorName: doctorName,
+            specialty: specialty,
+            appointmentDate: `${appointmentDate}T00:00:00`,
+            appointmentTime: appointmentTime,
+            appointmentType: "Presencial",
+            notes: appointment.reason,
+            status: appointment.status
+        };
+
+
+        // =====================================================
+        // 6) Notificación → DOCTOR
+        // =====================================================
+        const notifyDoctorRequest = {
+            userId: doctorUserId,
+            eventType: "AppointmentCancelledByPatientDoctor",
+            payload: basePayload
+        };
+
+        console.log("📨 Notificación -> DOCTOR:", notifyDoctorRequest);
+
+        await ApiAuth.post("notifications/events", notifyDoctorRequest);
+
+
+        // =====================================================
+        // 7) Notificación → PACIENTE
+        // =====================================================
+        if (patientUserId) {
+            const notifyPatientRequest = {
+                userId: patientUserId,
+                eventType: "AppointmentCancelledByPatient",
+                payload: basePayload
+            };
+
+            console.log("📨 Notificación -> PACIENTE:", notifyPatientRequest);
+
+            await ApiAuth.post("notifications/events", notifyPatientRequest);
+        } else {
+            console.warn("⚠ No se envió notificación al paciente porque no se obtuvo patient.userId");
+        }
+
+
+        // =====================================================
+        // 8) Refrescar UI
+        // =====================================================
         await loadPatientAppointments();
-        
+
         const { loadPatientStats } = await import('./patient-dashboard.js');
         await loadPatientStats();
+
+
     } catch (error) {
-        console.error('Error al cancelar turno:', error);
+        console.error('❌ Error al cancelar turno:', error);
         const errorMessage = error.message || error.toString();
-        if (errorMessage.includes('Failed to fetch') || errorMessage.includes('ERR_CONNECTION')) {
-            showNotification('No se pudo conectar con el servidor. Verifica que SchedulingMS esté corriendo.', 'error');
-        } else {
-            showNotification(`No se pudo cancelar el turno: ${errorMessage}`, 'error');
-        }
+        showNotification(`No se pudo cancelar el turno: ${errorMessage}`, 'error');
     }
 }
 
+
+// =====================================================
+// Utilidad: convertir número -> GUID determinístico
+// =====================================================
+function numberToDeterministicGuid(num) {
+    const hex = num.toString(16).padStart(32, "0");
+    return [
+        hex.substring(0, 8),
+        hex.substring(8, 12),
+        hex.substring(12, 16),
+        hex.substring(16, 20),
+        hex.substring(20)
+    ].join("-");
+}
 // Exportar para uso global
 window.cancelAppointment = cancelAppointment;
