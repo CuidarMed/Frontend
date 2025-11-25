@@ -72,7 +72,7 @@ const getActionButtons = (status, appointmentId, patientId, patientName) => {
                 <i class="fas fa-video"></i> Atender
             </button>
             <!-- Boton del chat -->
-            <button class="btn btn-chat-doctor btn-sm open-chat-btn" ${dataAttrs} style="background: #10b981; color: white; border: none;>
+            <button class="btn btn-chat-doctor btn-sm open-chat-btn" ${dataAttrs} style="background: #10b981; color: white; border: none;">
                 <i class="fas fa-comments"></i> Chat
             </button>
         `;
@@ -85,7 +85,7 @@ const getActionButtons = (status, appointmentId, patientId, patientName) => {
                 <i class="fas fa-user-slash"></i> No asistió
             </button>
             <!-- Boton del chat -->
-            <button class="btn btn-chat-doctor btn-sm open-chat-btn" ${dataAttrs} style="background: #10b981; color: white; border: none;>
+            <button class="btn btn-chat-doctor btn-sm open-chat-btn" ${dataAttrs} style="background: #10b981; color: white; border: none;">
                 <i class="fas fa-comments"></i> Chat
             </button>
         `;
@@ -116,6 +116,8 @@ const getActionButtons = (status, appointmentId, patientId, patientName) => {
 
     return buttons;
 };
+
+
 document.addEventListener("click", (e) => {
     const toggle = e.target.closest(".appointment-action-toggle");
 

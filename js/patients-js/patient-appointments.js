@@ -250,7 +250,7 @@ async function handlePatientChatOpen(appointmentId, doctorId, doctorName){
 
         // abrir modal del chat 
         openChatModal(chatRoom, {
-            currentUserId: patientIdForChat,
+            currentUserId: chatRoom.patientId || chatRoom.PatientId,
             currentUserName: patientName,
             otherUserName: doctorName || 'Doctor',
             userType: 'patient'

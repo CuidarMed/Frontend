@@ -530,9 +530,16 @@ updateConnectionStatus(text, color) {
   }
 
   //Agrega un mensaje al chat
-  addMessage(message, append = true) {
+addMessage(message, append = true) {
     const messagesContainer = document.getElementById("chat-messages");
-    const isOwn = message.senderId === this.currentUserId;
+    
+    const senderRole = message.senderRole || message.SenderRole;
+    
+    // ✅ Comparar por ROLE en vez de por ID
+    const myRole = this.theme === "doctor" ? "Doctor" : "Patient";
+    const isOwn = senderRole === myRole;
+    
+    console.log("🎨 [UI] Mensaje:", { senderRole, myRole, isOwn, message: message.message });
 
     const themeColor = this.theme === "doctor" ? "#10b981" : "#3b82f6";
     const bgColor = isOwn ? themeColor : "#f3f4f6";
@@ -541,49 +548,48 @@ updateConnectionStatus(text, color) {
 
     const messageTime = new Date(message.sentAt || message.SentAt);
     const timeString = messageTime.toLocaleTimeString("es-AR", {
-      hour: "2-digit",
-      minute: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
     });
 
     const messageEl = document.createElement("div");
     messageEl.style.cssText = `
-            display: flex;
-            justify-content: ${alignment};
-            animation: slideIn 0.3s ease-out;
-        `;
+        display: flex;
+        justify-content: ${alignment};
+        animation: slideIn 0.3s ease-out;
+    `;
 
     messageEl.innerHTML = `
-            <div style="
-                max-width: 70%;
-                background: ${bgColor};
-                color: ${textColor};
-                padding: 0.75rem 1rem;
-                border-radius: ${
-                  isOwn ? "18px 18px 4px 18px" : "18px 18px 18px 4px"
-                };
-                box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-                word-wrap: break-word;
+        <div style="
+            max-width: 70%;
+            background: ${bgColor};
+            color: ${textColor};
+            padding: 0.75rem 1rem;
+            border-radius: ${isOwn ? "18px 18px 4px 18px" : "18px 18px 18px 4px"};
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            word-wrap: break-word;
+        ">
+            <p style="margin: 0; font-size: 0.9375rem; line-height: 1.5;">
+                ${message.message || message.Message}
+            </p>
+            <p style="
+                margin: 0.25rem 0 0 0;
+                font-size: 0.75rem;
+                opacity: ${isOwn ? "0.8" : "0.6"};
+                text-align: right;
             ">
-                <p style="margin: 0; font-size: 0.9375rem; line-height: 1.5;">
-                    ${message.message || message.Message}
-                </p>
-                <p style="
-                    margin: 0.25rem 0 0 0;
-                    font-size: 0.75rem;
-                    opacity: ${isOwn ? "0.8" : "0.6"};
-                    text-align: right;
-                ">
-                    ${timeString}
-                </p>
-            </div>
-        `;
+                ${timeString}
+            </p>
+        </div>
+    `;
 
     if (append) {
-      messagesContainer.appendChild(messageEl);
+        messagesContainer.appendChild(messageEl);
+        this.scrollToBottom();
     } else {
-      messagesContainer.insertBefore(messageEl, messagesContainer.firstChild);
+        messagesContainer.insertBefore(messageEl, messagesContainer.firstChild);
     }
-  }
+}
 
   // Adjuntar event listeners
   attachEventListeners() {
@@ -662,7 +668,6 @@ updateConnectionStatus(text, color) {
 
 async sendMessage() {
     try {
-        // ✅ Obtener el input CORRECTO (chat-message-input, no message-input)
         const input = document.getElementById('chat-message-input');
         
         if (!input) {
@@ -672,23 +677,8 @@ async sendMessage() {
 
         const content = input.value?.trim();
         
-        console.log("📤 [Mensaje] Intentando enviar:", content);
-        console.log("🔗 [Mensaje] Estado de conexión:", this.connection?.state);
+        if (!content) return;
 
-        // Validar conexión
-        if (!this.connection || this.connection.state !== signalR.HubConnectionState.Connected) {
-            console.error("❌ [Mensaje] SignalR no está conectado. Estado:", this.connection?.state);
-            alert("El chat no está conectado. Por favor, recarga la página.");
-            return;
-        }
-
-        // Validar contenido
-        if (!content) {
-            console.warn("⚠️ [Mensaje] Mensaje vacío, ignorando");
-            return;
-        }
-
-        // Construir el request
         const messageRequest = {
             ChatRoomId: this.chatRoomId,
             SenderId: this.currentUserId,
@@ -696,31 +686,21 @@ async sendMessage() {
             SenderInfo: {
                 Id: this.currentUserId,
                 Name: this.currentUserName,
-                Role: this.theme === "doctor" ? "Doctor" : "Patient"
+                Role: this.theme === "doctor" ? "Doctor" : "Patient"  // ✅ Esto ya lo tenías
             }
         };
 
         console.log("📦 [Mensaje] Request a enviar:", messageRequest);
 
-        // Enviar mensaje via SignalR
         await this.connection.invoke("SendMessage", messageRequest);
         
-        console.log("✅ [Mensaje] Enviado exitosamente");
-        
-        // Limpiar input
         input.value = '';
-        input.style.height = 'auto'; // Reset altura del textarea
+        input.style.height = 'auto';
         input.focus();
 
     } catch (error) {
         console.error("❌ Error al enviar mensaje:", error);
-        console.error("❌ Detalles del error:", {
-            name: error.name,
-            message: error.message,
-            stack: error.stack
-        });
-        
-        alert("No se pudo enviar el mensaje. Verifica tu conexión.");
+        alert("No se pudo enviar el mensaje.");
     }
 }
 
