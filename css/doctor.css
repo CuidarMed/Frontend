@@ -1766,3 +1766,228 @@ body {
         margin: 1rem;
     }
 }
+
+/* =============================== */
+/* MODAL — Reprogramación de turno */
+/* =============================== */
+#reschedule-modal.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 2000;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    overflow-y: auto;
+}
+
+#reschedule-modal.modal:not(.hidden) {
+    display: flex;
+}
+
+/* Contenido */
+#reschedule-modal .modal-content {
+    background: white;
+    border-radius: 16px;
+    width: 100%;
+    max-width: 600px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+}
+
+/* Header */
+#reschedule-modal .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+#reschedule-modal .modal-header h3 {
+    margin: 0;
+    color: #047857;                /* verde médico */
+    font-size: 1.4rem;
+    font-weight: 700;
+}
+
+/* Botón cerrar */
+#reschedule-modal .close-modal {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: #6b7280;
+    cursor: pointer;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+#reschedule-modal .close-modal:hover {
+    background: #f3f4f6;
+    color: #dc2626;
+}
+
+/* Body */
+#reschedule-modal .modal-body {
+    padding: 1.5rem;
+}
+
+/* Inputs */
+#reschedule-modal .form-group label {
+    color: #374151;
+    font-weight: 600;
+}
+
+#reschedule-modal .form-group input,
+#reschedule-modal .form-group select,
+#reschedule-modal .form-group textarea {
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+}
+
+#reschedule-modal .form-group input:focus,
+#reschedule-modal .form-group select:focus,
+#reschedule-modal .form-group textarea:focus {
+    border-color: #10b981;
+    box-shadow: 0 0 0 3px rgba(16,185,129,0.2);
+}
+
+/* Footer */
+#reschedule-modal .modal-footer,
+#reschedule-modal .form-actions {
+    padding: 1.5rem;
+    border-top: 1px solid #e5e7eb;
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
+}
+
+.custom-calendar {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 1rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.custom-calendar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.calendar-nav-btn {
+    background: #f3f4f6;
+    border: none;
+    border-radius: 8px;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: #374151;
+}
+
+.calendar-nav-btn:hover {
+    background: #e5e7eb;
+    color: #2563eb;
+}
+
+.calendar-month-year {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.custom-calendar-weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.calendar-weekday {
+    text-align: center;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #6b7280;
+    padding: 0.5rem 0;
+}
+
+.custom-calendar-days {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 0.5rem;
+}
+
+.calendar-day {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: #374151;
+    min-height: 40px;
+}
+
+.calendar-day-other {
+    color: #d1d5db;
+    cursor: default;
+}
+
+.calendar-day-available {
+    background: #eff6ff;
+    color: #2563eb;
+    border: 1px solid #bfdbfe;
+}
+
+.calendar-day-available:hover {
+    background: #dbeafe;
+    border-color: #2563eb;
+    transform: scale(1.05);
+}
+
+.calendar-day-unavailable {
+    background: #f9fafb;
+    color: #9ca3af;
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.calendar-day-today {
+    background: #dbeafe;
+    color: #1e40af;
+    font-weight: 700;
+    border: 2px solid #2563eb;
+}
+
+.calendar-day-selected {
+    background: #2563eb;
+    color: white;
+    font-weight: 700;
+    border: 2px solid #1e40af;
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+}
+
+.calendar-day-selected:hover {
+    background: #1e40af;
+}

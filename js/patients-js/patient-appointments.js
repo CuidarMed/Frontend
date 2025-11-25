@@ -457,7 +457,7 @@ export async function cancelAppointment(appointmentId) {
 
         console.log("📨 Notificación -> DOCTOR:", notifyDoctorRequest);
 
-        await ApiAuth.post("v1/notifications/events", notifyDoctorRequest);
+        await ApiAuth.post("notifications/events", notifyDoctorRequest);
 
 
         // =====================================================
@@ -472,7 +472,7 @@ export async function cancelAppointment(appointmentId) {
 
             console.log("📨 Notificación -> PACIENTE:", notifyPatientRequest);
 
-            await ApiAuth.post("v1/notifications/events", notifyPatientRequest);
+            await ApiAuth.post("notifications/events", notifyPatientRequest);
         } else {
             console.warn("⚠ No se envió notificación al paciente porque no se obtuvo patient.userId");
         }
