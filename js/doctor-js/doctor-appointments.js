@@ -350,7 +350,7 @@ async function reloadAppointmentViews() {
 // EVENT HANDLERS
 // ===================================
 
-async function handleDoctorChatOpen(appointmentId, patientId, patientName){
+export async function handleDoctorChatOpen(appointmentId, patientId, patientName){
     try{
         console.log('Abriendo chat: ', {appointmentId, patientId, patientName})
 

@@ -266,8 +266,25 @@ function getActionButtons(status, appointmentId, patientId, patientName) {
         return '<span style="padding: 0.5rem 1rem; font-size: 0.875rem; color: #10b981; font-weight: 600;"><i class="fas fa-check-circle"></i> Consulta realizada</span>';
     }
     if (status === 'SCHEDULED' || status === 'CONFIRMED') {
-        return `<button class="btn btn-primary btn-sm attend-appointment-btn" data-appointment-id="${appointmentId}" data-patient-id="${patientId}" data-patient-name="${patientName}" style="padding: 0.5rem 1rem; font-size: 0.875rem;"><i class="fas fa-video"></i> Atender</button>`;
-    }
+    return `
+        <button class="btn btn-primary btn-sm attend-appointment-btn"
+                data-appointment-id="${appointmentId}"
+                data-patient-id="${patientId}"
+                data-patient-name="${patientName}"
+                style="padding: 0.5rem 1rem; font-size: 0.875rem;">
+            <i class="fas fa-video"></i> Atender
+        </button>
+
+        <button class="btn btn-chat-doctor btn-sm open-chat-btn"
+                data-appointment-id="${appointmentId}"
+                data-patient-id="${patientId}"
+                data-patient-name="${patientName}"
+                title="Chatear con el paciente"
+                style="background: #10b981; color: #fff; border: none; padding: 0.5rem 1rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 0.4rem;">
+            <i class="fas fa-comments"></i> Chat
+        </button>
+    `;
+}
     if (status === 'IN_PROGRESS') {
         return `
             <button class="btn btn-success btn-sm complete-appointment-btn" data-appointment-id="${appointmentId}" data-patient-id="${patientId}" data-patient-name="${patientName}" style="padding: 0.5rem 1rem; font-size: 0.875rem; margin-right: 0.5rem;"><i class="fas fa-check"></i> Completar</button>
@@ -281,7 +298,7 @@ function getActionButtons(status, appointmentId, patientId, patientName) {
  * Inicializa todos los event handlers
  */
 function initializeEventHandlers() {
-    import('./doctor-appointments.js').then(({ attendConsultation, updateAppointmentStatus }) => {
+    import('./doctor-appointments.js').then(({ attendConsultation, updateAppointmentStatus,handleDoctorChatOpen  }) => {
         // Botones de atender
         attachEventListeners('.attend-appointment-btn', async function() {
             const { appointmentId, patientId, patientName } = this.dataset;
@@ -306,6 +323,7 @@ function initializeEventHandlers() {
             }
         });
         
+        
         // Selectores de estado
         attachEventListeners('.appointment-status-select', async function() {
             const appointmentId = this.dataset.appointmentId;
@@ -317,6 +335,15 @@ function initializeEventHandlers() {
                 if (agendaSection) await renderAgendaContent(agendaSection);
             }
         }, 'change');
+        
+        // Botones de chat
+        attachEventListeners('.open-chat-btn', async function() {
+            const { appointmentId, patientId, patientName } = this.dataset;
+            console.log('Click en boton de chat:', { appointmentId, patientId, patientName });
+            if (appointmentId && patientId && patientName) {
+                await handleDoctorChatOpen(appointmentId, patientId, patientName);  // ✅ Nombre correcto
+            }
+        });
     });
 }
 
