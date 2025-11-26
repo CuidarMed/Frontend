@@ -324,17 +324,50 @@ function initializeEventHandlers() {
         });
         
         
-        // Selectores de estado
-        attachEventListeners('.appointment-status-select', async function() {
+        // Selectores de estado (Agenda)
+        attachEventListeners('.appointment-status-select', async function () {
             const appointmentId = this.dataset.appointmentId;
             const newStatus = this.value;
-            if (appointmentId && confirm(`¿Cambiar el estado del turno a "${this.options[this.selectedIndex].text}"?`)) {
+
+            // Guardamos el estado anterior por si cancelan
+            const previousStatus = [...this.options].find(o => o.defaultSelected)?.value || this.value;
+
+            // 🔄 Si eligió REPROGRAMADO → abrir modal en lugar de cambiar estado
+            if (newStatus === "RESCHEDULED") {
+                try {
+                    const { ApiScheduling } = await import("../api.js");
+                    const { openDoctorRescheduleModal } = await import("./doctor-appointments.js");
+
+                    const appointment = await ApiScheduling.get(`v1/Appointments/${appointmentId}`);
+
+                    // Abrimos modal de reprogramación
+                    await openDoctorRescheduleModal(appointment);
+
+                    // Volvemos el select a su estado original (la reprogramación se hará desde el modal)
+                    this.value = previousStatus;
+
+                    return; // aca NO ejecutamos updateAppointmentStatus
+                } catch (err) {
+                    console.error("❌ Error abriendo modal de reprogramación desde agenda:", err);
+                    showNotification("No se pudo abrir la ventana de reprogramación", "error");
+                }
+            }
+
+            // 🔁 Si NO es reprogramado → flujo normal
+            if (
+                appointmentId &&
+                confirm(`¿Cambiar el estado del turno a "${this.options[this.selectedIndex].text}"?`)
+            ) {
                 await updateAppointmentStatus(appointmentId, newStatus);
             } else {
-                const agendaSection = document.querySelector('.agenda-section');
+                // Restaurar estado si canceló
+                this.value = previousStatus;
+
+                const agendaSection = document.querySelector(".agenda-section");
                 if (agendaSection) await renderAgendaContent(agendaSection);
             }
-        }, 'change');
+        }, "change");
+
         
         // Botones de chat
         attachEventListeners('.open-chat-btn', async function() {
