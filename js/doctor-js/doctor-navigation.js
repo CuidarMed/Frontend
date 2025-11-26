@@ -100,12 +100,21 @@ export async function handleSectionNavigation(section) {
                 console.warn('⚠️ Sección desconocida:', section);
                 await showMainDashboard(mainDashboard, profileSection);
         }
-        
+        try {
+            const { initializeAttendButtons, initializeDoctorRescheduleModal } = 
+                await import('./doctor-appointments.js');
+
+            initializeAttendButtons();
+            initializeDoctorRescheduleModal();
+        } catch (e) {
+            console.warn("⚠ No se pudieron inicializar botones de reprogramación:", e);
+        }
         console.log('✅ Navegación completada a:', section);
     } catch (error) {
         console.error('❌ Error al navegar a', section, ':', error);
         showNotificationError(`Error al cargar la sección: ${error.message}`);
     }
+
 }
 
 /**

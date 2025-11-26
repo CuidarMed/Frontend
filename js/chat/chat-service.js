@@ -3,8 +3,8 @@
 // ============================================
 
 const CHATMS_BASE_URLS = [
-    "http://localhost:5046/api",
-    "http://127.0.0.1:5046/api"
+    "http://localhost:8085/api",
+    "http://127.0.0.1:8085/api"
 ];
 
 /**
@@ -125,9 +125,9 @@ export async function getChatRoom(chatRoomId, userId) {
  */
 export async function getChatMessages(chatRoomId, userId, pageNumber = 1, pageSize = 50) {
     console.log('💬 Obteniendo mensajes:', { chatRoomId, userId, pageNumber, pageSize });
-    
+
     try {
-        const skip = (pageNumber - 1) * pageSize
+        const skip = (pageNumber - 1) * pageSize;
 
         const response = await tryFetch(`/Chat/rooms/${chatRoomId}/messages`, {
             method: 'POST',
@@ -135,49 +135,34 @@ export async function getChatMessages(chatRoomId, userId, pageNumber = 1, pageSi
             body: JSON.stringify({
                 ChatRoomId: chatRoomId,
                 UserId: userId,
-                Skip: pageNumber,
+                Skip: skip,
                 Take: pageSize
             })
         });
 
-        console.log('📡 Response status:', response.status);
-
         if (!response.ok) {
-            const errorText = await response.text();
-            console.error('❌ Error response:', errorText);
-            
-            let error;
-            try {
-                error = JSON.parse(errorText);
-            } catch {
-                error = { message: errorText || 'Error al obtener mensajes' };
-            }
-            
-            throw new Error(error.message || error.Message || 'Error al obtener mensajes');
+            const txt = await response.text();
+            throw new Error(txt || "Error al obtener mensajes");
         }
 
         const result = await response.json();
-        console.log('✅ Mensajes obtenidos:', result);
-        
-        // ✅ Asegurar que siempre devuelva la estructura correcta
-        return {
-            items: result.items || result.Items || [],
-            totalCount: result.totalCount || result.TotalCount || 0,
-            pageNumber: result.pageNumber || result.PageNumber || pageNumber,
-            pageSize: result.pageSize || result.PageSize || pageSize
-        };
-        
+
+        console.log("📨 Mensajes obtenidos:", result);
+
+        // 🔥 Si el backend devuelve un array → lo devolvemos limpio
+        if (Array.isArray(result)) {
+            return result;
+        }
+
+        // 🔥 Si devuelve paginado, igual devolvemos el array de items
+        return result.items || result.Items || [];
+
     } catch (error) {
-        console.error('❌ Error en getChatMessages:', error);
-        // ✅ Devolver estructura vacía en lugar de lanzar error
-        return {
-            items: [],
-            totalCount: 0,
-            pageNumber: pageNumber,
-            pageSize: pageSize
-        };
+        console.error("❌ Error en getChatMessages:", error);
+        return []; // evitar romper el frontend
     }
 }
+
 
 /**
  * Marca mensajes como leídos
@@ -200,3 +185,8 @@ export async function markMessagesAsRead(chatRoomId, userId) {
 
     return await response.json();
 }
+export const CHAT_HUB_URL = "http://localhost:8085/chatHub";
+
+console.log('🔧 Chat Service configurado:', {
+    hubUrl: CHAT_HUB_URL
+});

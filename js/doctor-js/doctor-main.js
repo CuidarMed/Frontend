@@ -23,7 +23,8 @@ import {
     initializeConsultationDateFilter,
     loadTodayConsultations,
     loadTodayFullHistory,
-    createConsultationItemElement
+    createConsultationItemElement,
+    initializeDoctorRescheduleModal
 } from './doctor-appointments.js';
 
 import { 
@@ -68,16 +69,20 @@ export async function initializeDoctorPanel() {
         
         // 8. Inicializar funcionalidad de editar perfil
         initializeProfileEditing();
+
+        // 9. Inicializar modal de reagendamiento de cita
+        initializeDoctorRescheduleModal();
         
-        // 9. Inicializar filtro de fecha para historial de consultas
+        // 10. Inicializar filtro de fecha para historial de consultas
         initializeConsultationDateFilter();
         
-        // 10. Cargar estadísticas y datos del dashboard inicial
+        // 11. Cargar estadísticas y datos del dashboard inicial
         await loadDoctorStats();
         await loadTodayConsultationsForDashboard();
         await loadWeeklySchedule();
-        
-        // 11. Cargar datos periódicamente (cada 30 segundos)
+        initializeDoctorRescheduleModal();
+
+        // 12. Cargar datos periódicamente (cada 30 segundos)
         setInterval(async () => {
             await loadDoctorData();
             await loadDoctorStats();

@@ -37,6 +37,18 @@ export function renderAppointmentsHome(appointments) {
             rescheduled: "Reprogramado"
         };
 
+        const appointmentId = 
+            apt.appointmentId || 
+            apt.AppointmentId || 
+            apt.id || 
+            apt.Id || 
+            apt.appointmentID ||
+            apt.AppointmentID;
+        const doctorId = apt.doctorId || apt.DoctorId;
+
+        // Chat disponible si está confirmado o en progreso
+        const chatAvailable = status === 'confirmed' || status === 'in_progress';
+
         return `
             <div class="appointment-home-card">
                 <div class="appointment-home-icon">
@@ -50,8 +62,20 @@ export function renderAppointmentsHome(appointments) {
                         <span>${dateStr}</span>
                     </div>
                 </div>
-                <div class="appointment-clean-status status-${status}">
-                    ${statusMap[status] || status}
+                <div class="appointment-home-actions" style="display: flex; align-items: center; gap: 0.75rem;">
+                    ${chatAvailable && appointmentId && doctorId && doctorName ? `
+                        <button class="btn-clean-chat"
+                            data-appointment-id="${appointmentId}"
+                            data-doctor-id="${doctorId}"
+                            data-doctor-name="${doctorName}"
+                            title="Chat con el doctor"
+                            style="background: #3b82f6; color: white; border: none; padding: 0.4rem 0.75rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem;">
+                            <i class="fas fa-comments"></i> Chat
+                        </button>
+                    ` : ""}
+                    <div class="appointment-clean-status status-${status}">
+                        ${statusMap[status] || status}
+                    </div>
                 </div>
             </div>
         `;
@@ -63,7 +87,6 @@ export function renderAppointmentsHome(appointments) {
  */
 export function renderAppointmentsFull(appointments) {
     return appointments.map(apt => {
-        // ✅ DEBUG: Ver TODO el objeto
         console.log('📋 APPOINTMENT COMPLETO:', JSON.stringify(apt, null, 2));
 
         const aptStart = new Date(apt.startTime || apt.StartTime);
@@ -100,11 +123,10 @@ export function renderAppointmentsFull(appointments) {
             apt.Id || 
             apt.appointmentID ||
             apt.AppointmentID;
-        const doctorId = apt.doctorId || apt.DoctorId
+        const doctorId = apt.doctorId || apt.DoctorId;
         const canCancel = status === "confirmed" || status === "scheduled" || status === "rescheduled";
 
-        // Verificarmos si el chat esta disponible(turno confirmado o en progreso)
-        const chatAvailable = status === 'confirmed' || status === 'in_progress'
+        const chatAvailable = status === 'confirmed' || status === 'in_progress';
 
         return `
             <div class="appointment-clean-card">
@@ -127,23 +149,26 @@ export function renderAppointmentsFull(appointments) {
                         <strong>Motivo:</strong> ${reason}
                     </div>
                 </div>
-                <div class="appointment-clean-actions">
+                <div class="appointment-clean-actions" style="display: flex; flex-direction: row; gap: 0.75rem; align-items: center;">
                     ${chatAvailable && appointmentId && doctorId && doctorName ? `
-                            <button class="btn-clean-chat"
-                                data-appointment-id="${appointmentId}"
-                                data-doctor-id="${apt.doctorId || apt.DoctorId}"
-                                data-doctor-name=${doctorName}
-                                title="Chat con el doctor"
-                                style="background: #3b82f6; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.5rem;">
-                                <i class="fas fa-comments"></i> Chat
-                            </button>
-                        ` : ""}
+                        <button class="btn-clean-chat"
+                            data-appointment-id="${appointmentId}"
+                            data-doctor-id="${doctorId}"
+                            data-doctor-name="${doctorName}"
+                            title="Chat con el doctor"
+                            style="background: #3b82f6; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem;">
+                            <i class="fas fa-comments"></i> Chat
+                        </button>
+                    ` : ""}
                     ${canCancel ? `
-                    <button class="btn-clean-cancel" onclick="cancelAppointment(${appointmentId})" title="Cancelar turno">
-                        <i class="fas fa-times"></i>
-                        Cancelar
-                    </button>
-                </div>` : ""}
+                        <button class="btn-clean-cancel" 
+                            onclick="cancelAppointment(${appointmentId})" 
+                            title="Cancelar turno"
+                            style="background: #dc2626; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem;">
+                            <i class="fas fa-times"></i> Cancelar
+                        </button>
+                    ` : ""}
+                </div>
             </div>
         `;
     }).join('');
@@ -225,7 +250,7 @@ async function handlePatientChatOpen(appointmentId, doctorId, doctorName){
 
         // abrir modal del chat 
         openChatModal(chatRoom, {
-            currentUserId: patientIdForChat,
+            currentUserId: chatRoom.patientId || chatRoom.PatientId,
             currentUserName: patientName,
             otherUserName: doctorName || 'Doctor',
             userType: 'patient'
@@ -282,7 +307,6 @@ export async function loadPatientAppointments() {
             return;
         }
 
-        // RUTA CORREGIDA: api.js está en js/
         const { ApiScheduling, Api } = await import('../api.js');
         const appointmentsResponse = await ApiScheduling.get(`v1/Appointments?patientId=${appState.currentPatient.patientId}`);
 
@@ -336,12 +360,12 @@ export async function loadPatientAppointments() {
         }
         else if (activeSection === "turnos") {
             appointmentsList.innerHTML = renderAppointmentsFull(appointments);
-
-            // Inicializamos botones de chat despues de renderizar
-            setTimeout(() => {
-                initializeChatButtons();
-            }, 100)
         }
+
+        // ✅ Inicializar botones de chat SIEMPRE después de renderizar (en ambas secciones)
+        setTimeout(() => {
+            initializeChatButtons();
+        }, 100);
 
     } catch (error) {
         console.error('Error al cargar turnos:', error);
@@ -366,29 +390,147 @@ export async function cancelAppointment(appointmentId) {
     }
 
     try {
-        // RUTA CORREGIDA: api.js está en js/
-        const { ApiScheduling } = await import('../api.js');
-        
-        await ApiScheduling.patch(`v1/Appointments/${appointmentId}/cancel`, {
-            reason: 'Cancelado por el paciente'
-        });
-        
+        const { ApiScheduling, ApiAuth, Api } = await import('../api.js');
+
+        // =====================================================
+        // 1) Cancelar en SchedulingMS
+        // =====================================================
+        const appointment = await ApiScheduling.patch(
+            `v1/Appointments/${appointmentId}/cancel`,
+            { reason: 'Cancelado por el paciente' }
+        );
+
+        console.log("Turno cancelado:", appointment);
+
         showNotification('Turno cancelado exitosamente', 'success');
-        
+
+        const doctorId = appointment.doctorId;
+        const patientId = appointment.patientId;
+
+        // =====================================================
+        // 2) Obtener UserId REAL del doctor desde DirectoryMS
+        // =====================================================
+        let doctor = null;
+        try {
+            doctor = await Api.get(`v1/Doctor/${doctorId}`);
+        } catch (err) {
+            console.error("❌ Error obteniendo doctor:", err);
+        }
+
+        if (!doctor || !doctor.userId) {
+            console.error("❌ No se pudo obtener doctor.userId, abortando envío de notificaciones");
+            return;
+        }
+
+        const doctorUserId = doctor.userId;
+        const doctorName = `${doctor.firstName} ${doctor.lastName}`;
+        const specialty = doctor.specialty || "Especialidad";
+
+        // =====================================================
+        // 3) Obtener UserId REAL del paciente desde DirectoryMS
+        // =====================================================
+        let patient = null;
+        try {
+            patient = await Api.get(`v1/Patient/${patientId}`);
+        } catch (err) {
+            console.error("❌ Error obteniendo paciente:", err);
+        }
+
+        if (!patient || !patient.userId) {
+            console.error("❌ No se pudo obtener patient.userId, abortando notificación al paciente.");
+        }
+
+        const patientUserId = patient?.userId;
+        const patientName = `${patient?.firstName || ''} ${patient?.lastName || ''}`.trim();
+
+        // =====================================================
+        // 4) Convertir appointmentId numérico -> GUID determinístico
+        // =====================================================
+        let apptGuid = appointment.appointmentId;
+        if (typeof apptGuid === "number") {
+            apptGuid = numberToDeterministicGuid(apptGuid);
+        }
+
+        // =====================================================
+        // 5) Preparar payload base (doctor y paciente)
+        // =====================================================
+        const appointmentDate = appointment.startTime.split(" ")[0];
+        const appointmentTime = appointment.startTime.split(" ")[1];
+
+        const basePayload = {
+            appointmentId: apptGuid,
+            patientName: patientName,
+            doctorName: doctorName,
+            specialty: specialty,
+            appointmentDate: `${appointmentDate}T00:00:00`,
+            appointmentTime: appointmentTime,
+            appointmentType: "Presencial",
+            notes: appointment.reason,
+            status: appointment.status
+        };
+
+
+        // =====================================================
+        // 6) Notificación → DOCTOR
+        // =====================================================
+        const notifyDoctorRequest = {
+            userId: doctorUserId,
+            eventType: "AppointmentCancelledByPatientDoctor",
+            payload: basePayload
+        };
+
+        console.log("📨 Notificación -> DOCTOR:", notifyDoctorRequest);
+
+        await ApiAuth.post("notifications/events", notifyDoctorRequest);
+
+
+        // =====================================================
+        // 7) Notificación → PACIENTE
+        // =====================================================
+        if (patientUserId) {
+            const notifyPatientRequest = {
+                userId: patientUserId,
+                eventType: "AppointmentCancelledByPatient",
+                payload: basePayload
+            };
+
+            console.log("📨 Notificación -> PACIENTE:", notifyPatientRequest);
+
+            await ApiAuth.post("notifications/events", notifyPatientRequest);
+        } else {
+            console.warn("⚠ No se envió notificación al paciente porque no se obtuvo patient.userId");
+        }
+
+
+        // =====================================================
+        // 8) Refrescar UI
+        // =====================================================
         await loadPatientAppointments();
-        
+
         const { loadPatientStats } = await import('./patient-dashboard.js');
         await loadPatientStats();
+
+
     } catch (error) {
-        console.error('Error al cancelar turno:', error);
+        console.error('❌ Error al cancelar turno:', error);
         const errorMessage = error.message || error.toString();
-        if (errorMessage.includes('Failed to fetch') || errorMessage.includes('ERR_CONNECTION')) {
-            showNotification('No se pudo conectar con el servidor. Verifica que SchedulingMS esté corriendo.', 'error');
-        } else {
-            showNotification(`No se pudo cancelar el turno: ${errorMessage}`, 'error');
-        }
+        showNotification(`No se pudo cancelar el turno: ${errorMessage}`, 'error');
     }
 }
 
+
+// =====================================================
+// Utilidad: convertir número -> GUID determinístico
+// =====================================================
+function numberToDeterministicGuid(num) {
+    const hex = num.toString(16).padStart(32, "0");
+    return [
+        hex.substring(0, 8),
+        hex.substring(8, 12),
+        hex.substring(12, 16),
+        hex.substring(16, 20),
+        hex.substring(20)
+    ].join("-");
+}
 // Exportar para uso global
 window.cancelAppointment = cancelAppointment;

@@ -266,8 +266,25 @@ function getActionButtons(status, appointmentId, patientId, patientName) {
         return '<span style="padding: 0.5rem 1rem; font-size: 0.875rem; color: #10b981; font-weight: 600;"><i class="fas fa-check-circle"></i> Consulta realizada</span>';
     }
     if (status === 'SCHEDULED' || status === 'CONFIRMED') {
-        return `<button class="btn btn-primary btn-sm attend-appointment-btn" data-appointment-id="${appointmentId}" data-patient-id="${patientId}" data-patient-name="${patientName}" style="padding: 0.5rem 1rem; font-size: 0.875rem;"><i class="fas fa-video"></i> Atender</button>`;
-    }
+    return `
+        <button class="btn btn-primary btn-sm attend-appointment-btn"
+                data-appointment-id="${appointmentId}"
+                data-patient-id="${patientId}"
+                data-patient-name="${patientName}"
+                style="padding: 0.5rem 1rem; font-size: 0.875rem;">
+            <i class="fas fa-video"></i> Atender
+        </button>
+
+        <button class="btn btn-chat-doctor btn-sm open-chat-btn"
+                data-appointment-id="${appointmentId}"
+                data-patient-id="${patientId}"
+                data-patient-name="${patientName}"
+                title="Chatear con el paciente"
+                style="background: #10b981; color: #fff; border: none; padding: 0.5rem 1rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 0.4rem;">
+            <i class="fas fa-comments"></i> Chat
+        </button>
+    `;
+}
     if (status === 'IN_PROGRESS') {
         return `
             <button class="btn btn-success btn-sm complete-appointment-btn" data-appointment-id="${appointmentId}" data-patient-id="${patientId}" data-patient-name="${patientName}" style="padding: 0.5rem 1rem; font-size: 0.875rem; margin-right: 0.5rem;"><i class="fas fa-check"></i> Completar</button>
@@ -281,7 +298,7 @@ function getActionButtons(status, appointmentId, patientId, patientName) {
  * Inicializa todos los event handlers
  */
 function initializeEventHandlers() {
-    import('./doctor-appointments.js').then(({ attendConsultation, updateAppointmentStatus }) => {
+    import('./doctor-appointments.js').then(({ attendConsultation, updateAppointmentStatus,handleDoctorChatOpen  }) => {
         // Botones de atender
         attachEventListeners('.attend-appointment-btn', async function() {
             const { appointmentId, patientId, patientName } = this.dataset;
@@ -306,17 +323,60 @@ function initializeEventHandlers() {
             }
         });
         
-        // Selectores de estado
-        attachEventListeners('.appointment-status-select', async function() {
+        
+        // Selectores de estado (Agenda)
+        attachEventListeners('.appointment-status-select', async function () {
             const appointmentId = this.dataset.appointmentId;
             const newStatus = this.value;
-            if (appointmentId && confirm(`¿Cambiar el estado del turno a "${this.options[this.selectedIndex].text}"?`)) {
+
+            // Guardamos el estado anterior por si cancelan
+            const previousStatus = [...this.options].find(o => o.defaultSelected)?.value || this.value;
+
+            // 🔄 Si eligió REPROGRAMADO → abrir modal en lugar de cambiar estado
+            if (newStatus === "RESCHEDULED") {
+                try {
+                    const { ApiScheduling } = await import("../api.js");
+                    const { openDoctorRescheduleModal } = await import("./doctor-appointments.js");
+
+                    const appointment = await ApiScheduling.get(`v1/Appointments/${appointmentId}`);
+
+                    // Abrimos modal de reprogramación
+                    await openDoctorRescheduleModal(appointment);
+
+                    // Volvemos el select a su estado original (la reprogramación se hará desde el modal)
+                    this.value = previousStatus;
+
+                    return; // aca NO ejecutamos updateAppointmentStatus
+                } catch (err) {
+                    console.error("❌ Error abriendo modal de reprogramación desde agenda:", err);
+                    showNotification("No se pudo abrir la ventana de reprogramación", "error");
+                }
+            }
+
+            // 🔁 Si NO es reprogramado → flujo normal
+            if (
+                appointmentId &&
+                confirm(`¿Cambiar el estado del turno a "${this.options[this.selectedIndex].text}"?`)
+            ) {
                 await updateAppointmentStatus(appointmentId, newStatus);
             } else {
-                const agendaSection = document.querySelector('.agenda-section');
+                // Restaurar estado si canceló
+                this.value = previousStatus;
+
+                const agendaSection = document.querySelector(".agenda-section");
                 if (agendaSection) await renderAgendaContent(agendaSection);
             }
-        }, 'change');
+        }, "change");
+
+        
+        // Botones de chat
+        attachEventListeners('.open-chat-btn', async function() {
+            const { appointmentId, patientId, patientName } = this.dataset;
+            console.log('Click en boton de chat:', { appointmentId, patientId, patientName });
+            if (appointmentId && patientId && patientName) {
+                await handleDoctorChatOpen(appointmentId, patientId, patientName);  // ✅ Nombre correcto
+            }
+        });
     });
 }
 
@@ -562,39 +622,9 @@ async function openAvailabilityForm(parentModal, doctorId, availabilityId = null
                     ${dayOptions}
                 </select>
             </div>
-            <div class="modal-body">
-                <form id="add-availability-form">
-                    <div class="form-group">
-                        <label for="av-day">Día de la semana:</label>
-                        <select id="av-day" name="dayOfWeek" required>
-                            <option value="">Seleccionar día</option>
-                            <option value="1">Lunes</option>
-                            <option value="2">Martes</option>
-                            <option value="3">Miércoles</option>
-                            <option value="4">Jueves</option>
-                            <option value="5">Viernes</option>
-                            <option value="6">Sábado</option>
-                            <option value="7">Domingo</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="av-start-time">Hora de inicio:</label>
-                        <input type="time" id="av-start-time" name="startTime" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="av-end-time">Hora de fin:</label>
-                        <input type="time" id="av-end-time" name="endTime" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="av-duration">Duración de cada turno (minutos):</label>
-                        <input type="number" id="av-duration" name="durationMinutes" min="15" max="480" value="30" required>
-                        <small style="color: #6b7280;">Entre 15 y 480 minutos</small>
-                    </div>
-                    <div class="form-actions">
-                        <button type="button" class="btn btn-secondary close-modal" style="width:auto;">Cancelar</button>
-                        <button type="submit" class="btn btn-primary" style="width:auto;">Guardar Horario</button>
-                    </div>
-                </form>
+            <div class="form-group">
+                <label>Hora de inicio:</label>
+                <input type="time" name="startTime" value="${startTime}" required>
             </div>
             <div class="form-group">
                 <label>Hora de fin:</label>

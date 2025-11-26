@@ -2,13 +2,19 @@
 // DOCTOR APPOINTMENTS - Consultas y Turnos
 // ===================================
 
-import { doctorState, getId, formatTime } from './doctor-core.js';
+import { doctorState, getId,getDoctorDisplayName, formatTime } from './doctor-core.js';
 import { showNotification } from './doctor-ui.js';
 import { handleAppointmentChatCreation, openChatModal } from '../chat/chat-integration.js';
+//import { handleAppointmentChatCreation, addChatButtomToAppointment, openChatModal } from '../chat/ChatIntegration.js';
+
 
 // ===================================
 // UTILIDADES
 // ===================================
+
+
+let currentRescheduleContext = null;
+let doctorRescheduleModalInitialized = false;
 
 const STATUS_CONFIG = {
     SCHEDULED: { class: 'pending', text: 'Programado' },
@@ -66,7 +72,7 @@ const getActionButtons = (status, appointmentId, patientId, patientName) => {
                 <i class="fas fa-video"></i> Atender
             </button>
             <!-- Boton del chat -->
-            <button class="btn btn-chat-doctor btn-sm open-chat-btn" ${dataAttrs} style="background: #10b981; color: white; border: none;>
+            <button class="btn btn-chat-doctor btn-sm open-chat-btn" ${dataAttrs} style="background: #10b981; color: white; border: none;">
                 <i class="fas fa-comments"></i> Chat
             </button>
         `;
@@ -79,7 +85,7 @@ const getActionButtons = (status, appointmentId, patientId, patientName) => {
                 <i class="fas fa-user-slash"></i> No asistió
             </button>
             <!-- Boton del chat -->
-            <button class="btn btn-chat-doctor btn-sm open-chat-btn" ${dataAttrs} style="background: #10b981; color: white; border: none;>
+            <button class="btn btn-chat-doctor btn-sm open-chat-btn" ${dataAttrs} style="background: #10b981; color: white; border: none;">
                 <i class="fas fa-comments"></i> Chat
             </button>
         `;
@@ -110,6 +116,8 @@ const getActionButtons = (status, appointmentId, patientId, patientName) => {
 
     return buttons;
 };
+
+
 document.addEventListener("click", (e) => {
     const toggle = e.target.closest(".appointment-action-toggle");
 
@@ -289,48 +297,187 @@ export async function loadTodayFullHistory() {
     }
 }
 
+
 // ===================================
-// GESTIÓN DE ESTADOS
+// GESTIÓN DE ESTADOS (con notificaciones)
 // ===================================
 
 export async function updateAppointmentStatus(appointmentId, newStatus, reason = null, silent = false) {
     try {
-        console.log('Actualizando estado del turno:', appointmentId, 'a', newStatus);
-        
-        const { ApiScheduling } = await import('../api.js');
+        console.log("🔵 [DOCTOR ACTION] Cambiando estado del turno");
+        console.log("   ➤ appointmentId:", appointmentId);
+        console.log("   ➤ newStatus:", newStatus);
+        console.log("   ➤ reason:", reason);
+
+        const { ApiScheduling, Api, ApiAuth } = await import('../api.js');
+
+        // ================================
+        // 1) Obtener turno antes del patch
+        // ================================
+        console.log("📡 [GET] Obteniendo turno antes de actualizar...");
         const currentAppointment = await ApiScheduling.get(`v1/Appointments/${appointmentId}`);
-        
-        if (!currentAppointment) throw new Error('No se encontró el appointment');
-        
-        await ApiScheduling.patch(`v1/Appointments/${appointmentId}/status`, {
-            Status: newStatus,
-            Reason: reason || currentAppointment.reason || currentAppointment.Reason || null
+
+        console.log("📥 Respuesta GET inicial (antes del PATCH):");
+        console.log(JSON.stringify(currentAppointment, null, 2));
+
+        if (!currentAppointment)
+            throw new Error("No se encontró el appointment");
+
+        // ================================
+        // 2) Ejecutar PATCH en SchedulingMS
+        // ================================
+        console.log("📡 [PATCH] Enviando actualización de estado a SchedulingMS...");
+        console.log("Payload enviado:", { Status: newStatus, Reason: reason });
+
+        const updatedAppointment = await ApiScheduling.patch(
+            `v1/Appointments/${appointmentId}/status`,
+            {
+                Status: newStatus,
+                Reason: reason || currentAppointment.reason
+            }
+        );
+
+        console.log("📥 Respuesta PATCH SchedulingMS:");
+        console.log(JSON.stringify(updatedAppointment, null, 2));
+
+        if (!silent) showNotification("Estado del turno actualizado", "success");
+
+        // ============================================================================
+        // 3) ARMADO GENERAL PARA NOTIFICACIONES (siempre lo usará CANCEL/CONFIRM)
+        // ============================================================================
+        const doctorId = updatedAppointment.doctorId;
+        const patientId = updatedAppointment.patientId;
+
+        // Obtener doctor
+        const doctor = await Api.get(`v1/Doctor/${doctorId}`).catch(e => {
+            console.error("❌ Error obteniendo Doctor:", e);
+            return null;
         });
-        
-        if (!silent) {
-            showNotification('Estado del turno actualizado', 'success');
+
+        const doctorUserId = doctor?.userId;
+        const doctorName = `${doctor?.firstName || ""} ${doctor?.lastName || ""}`.trim();
+        const specialty = doctor?.specialty || "Especialidad";
+
+        // Obtener paciente
+        const patient = await Api.get(`v1/Patient/${patientId}`).catch(e => {
+            console.error("❌ Error obteniendo Paciente:", e);
+            return null;
+        });
+
+        const patientUserId = patient?.userId;
+        const patientName = `${patient?.firstName || ""} ${patient?.lastName || ""}`.trim();
+
+        // GUID determinístico
+        let apptGuid = updatedAppointment.appointmentId;
+        if (typeof apptGuid === "number") {
+            const hex = apptGuid.toString(16).padStart(32, "0");
+            apptGuid = [
+                hex.substring(0, 8),
+                hex.substring(8, 12),
+                hex.substring(12, 16),
+                hex.substring(16, 20),
+                hex.substring(20)
+            ].join("-");
         }
-        
-        console.log('Estado actualizado exitosamente');
-        
+
+        // Fecha - hora
+        const appointmentDate = updatedAppointment.startTime.split(" ")[0];
+        const appointmentTime = updatedAppointment.startTime.split(" ")[1];
+
+        const basePayload = {
+            appointmentId: apptGuid,
+            patientName,
+            doctorName,
+            specialty,
+            appointmentDate: `${appointmentDate}T00:00:00`,
+            appointmentTime,
+            appointmentType: "Presencial",
+            notes: updatedAppointment.reason,
+            status: updatedAppointment.status
+        };
+
+        // ============================================================================
+        // 4) NOTIFICACIONES POR CONFIRMACIÓN DEL DOCTOR
+        // ============================================================================
+        if (newStatus === "CONFIRMED") {
+            console.log("📨 Iniciando notificaciones por CONFIRMACIÓN del DOCTOR…");
+
+            if (patientUserId) {
+                const notifyPatient = {
+                    userId: patientUserId,
+                    eventType: "AppointmentConfirmed",
+                    payload: basePayload
+                };
+
+                console.log("📨 Enviando notificación al PACIENTE por confirmación:", notifyPatient);
+                await ApiAuth.post("notifications/events", notifyPatient);
+            }
+
+            if (doctorUserId) {
+                const notifyDoctor = {
+                    userId: doctorUserId,
+                    eventType: "AppointmentConfirmedDoctor",
+                    payload: basePayload
+                };
+
+                console.log("📨 Enviando notificación al DOCTOR por confirmación:", notifyDoctor);
+                await ApiAuth.post("notifications/events", notifyDoctor);
+            }
+        }
+
+        // ============================================================================
+        // 5) NOTIFICACIONES POR CANCELACIÓN DEL DOCTOR
+        // ============================================================================
+        if (newStatus === "CANCELLED") {
+            console.log("📨 Iniciando notificaciones por CANCELACIÓN del DOCTOR…");
+
+            // ------------------------------ PACIENTE
+            if (patientUserId) {
+                const notifyPatient = {
+                    userId: patientUserId,
+                    eventType: "AppointmentCancelledByDoctor",
+                    payload: basePayload
+                };
+
+                console.log("📨 Enviando notificación al PACIENTE:", notifyPatient);
+                await ApiAuth.post("notifications/events", notifyPatient);
+            }
+
+            // ------------------------------ DOCTOR
+            if (doctorUserId) {
+                const notifyDoctor = {
+                    userId: doctorUserId,
+                    eventType: "AppointmentCancelledByDoctorDoctor",
+                    payload: basePayload
+                };
+
+                console.log("📨 Enviando notificación al DOCTOR:", notifyDoctor);
+                await ApiAuth.post("notifications/events", notifyDoctor);
+            }
+        }
+
+        // ================================
+        // 6) Refrescar la UI del médico
+        // ================================
         await reloadAppointmentViews();
-        
+
         const { loadDoctorStats } = await import('./doctor-main.js');
         if (loadDoctorStats) await loadDoctorStats();
-        
+
         setTimeout(() => {
             initializeAttendButtons();
             initializeStatusSelects();
         }, 300);
-        
+
     } catch (error) {
-        console.error('Error al actualizar estado del turno:', error);
-        if (!silent) {
-            showNotification(`Error al actualizar estado: ${error.message || 'Error desconocido'}`, 'error');
-        }
+        console.error("❌ Error al actualizar estado del turno:", error);
+        if (!silent) showNotification(`Error al actualizar estado: ${error.message}`, "error");
         throw error;
     }
 }
+
+
+
 
 async function reloadAppointmentViews() {
     const agendaSection = document.querySelector('.agenda-section');
@@ -346,11 +493,286 @@ async function reloadAppointmentViews() {
     }
 }
 
+// =======================================================
+// REPROGRAMAR TURNO (DOCTOR) - MODAL + PATCH RESCHEDULE
+// =======================================================
+export async function openDoctorRescheduleModal(appointment) {
+    console.log("📅 Reprogramando turno (abrir modal):", appointment);
+
+    const modal = document.getElementById("reschedule-modal");
+    const patientInput = document.getElementById("reschedulePatient");
+    const doctorInput = document.getElementById("rescheduleDoctor");
+    const dateInput = document.getElementById("date");
+    const timeSelect = document.getElementById("time");
+
+    if (!modal || !patientInput || !doctorInput || !dateInput || !timeSelect) {
+        console.error("❌ Faltan elementos del modal de reprogramación en el DOM");
+        return;
+    }
+
+    currentRescheduleContext = appointment;
+
+    const { Api } = await import("../api.js");
+    // 🔹 usamos el wrapper que llama al calendario de paciente
+    const { loadDoctorAvailableDates } = await import("./doctor-calendar.js");
+
+    // ========== 1) Datos Paciente ==========
+    try {
+        const p = await Api.get(`v1/Patient/${appointment.patientId}`);
+        const firstName =
+            p.firstName || p.FirstName || p.name || p.Name || "";
+        const lastName =
+            p.lastName || p.LastName || "";
+        const fullName = `${firstName} ${lastName}`.trim();
+        patientInput.value = fullName || "Paciente";
+    } catch (e) {
+        console.warn("⚠ No se pudo cargar paciente:", e);
+        patientInput.value = "Paciente";
+    }
+
+    // ========== 2) Datos Doctor ==========
+    try {
+        const d = await Api.get(`v1/Doctor/${appointment.doctorId}`);
+        const df = d.firstName || d.FirstName || "";
+        const dl = d.lastName || d.LastName || "";
+        doctorInput.value = `Dr. ${df} ${dl}`.trim();
+    } catch (e) {
+        console.warn("⚠ No se pudo cargar doctor:", e);
+        doctorInput.value = "Doctor";
+    }
+
+    // Reset fecha y horario
+    dateInput.value = "";
+    timeSelect.innerHTML = "<option value=''>Seleccionar hora</option>";
+
+    // ========== 3) Cargar disponibilidad REAL del doctor ==========
+    await loadDoctorAvailableDates(appointment.doctorId);
+
+    // Mostrar el modal
+    modal.classList.remove("hidden");
+}
+
+export function initializeDoctorRescheduleModal() {
+    if (doctorRescheduleModalInitialized) return;
+    doctorRescheduleModalInitialized = true;
+
+    const modal = document.getElementById("reschedule-modal");
+    const closeBtns = modal?.querySelectorAll(".close-modal, #cancelReschedule");
+    const saveBtn = document.getElementById("saveReschedule");
+
+    if (!modal) {
+        console.error("❌ Modal de reprogramación no encontrado en el DOM");
+        return;
+    }
+
+    // Cerrar modal
+    const closeModal = () => {
+        modal.classList.add("hidden");
+        currentRescheduleContext = null;
+    };
+
+    closeBtns?.forEach(btn => btn.addEventListener("click", closeModal));
+
+
+    // Guardar reprogramación
+    saveBtn?.addEventListener("click", async () => {
+        const date = document.getElementById("date")?.value;
+        const timeValue = document.getElementById("time")?.value;
+        const reason =
+            document.getElementById("rescheduleReason")?.value ||
+            "Reprogramado por el médico";
+
+        if (!currentRescheduleContext) {
+            showNotification("No se encontró el turno a reprogramar", "error");
+            return;
+        }
+
+        if (!date || !timeValue) {
+            showNotification("Seleccioná fecha y horario para reprogramar", "error");
+            return;
+        }
+
+        try {
+            const { ApiScheduling } = await import("../api.js");
+
+            const appointmentId =
+                currentRescheduleContext.appointmentId ||
+                currentRescheduleContext.AppointmentId;
+
+            const doctorId =
+                currentRescheduleContext.doctorId ||
+                currentRescheduleContext.DoctorId;
+
+            // ==============================
+            // 1) Parsear hora desde el value
+            //    (JSON que dejó patient-calendar)
+            // ==============================
+            let hours, minutes;
+
+            try {
+                const parsed = JSON.parse(timeValue);
+                hours = Number(parsed.localHours);
+                minutes = Number(parsed.localMinutes);
+            } catch {
+                // fallback por si alguna vez viene "HH:mm"
+                const [h, m] = timeValue.split(":").map(Number);
+                hours = h;
+                minutes = m;
+            }
+
+            const [year, month, day] = date.split("-").map(Number);
+            const startDate = new Date(year, month - 1, day, hours, minutes, 0);
+            const seconds = "00";
+
+            // ==============================
+            // 2) Offset local (igual que antes)
+            // ==============================
+            const tz = -startDate.getTimezoneOffset();
+            const sign = tz >= 0 ? "+" : "-";
+            const oh = String(Math.floor(Math.abs(tz) / 60)).padStart(2, "0");
+            const om = String(Math.abs(tz) % 60).padStart(2, "0");
+
+            const offsetStr = `${sign}${oh}:${om}`;
+
+            const newStartTime =
+                `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}` +
+                `T${String(hours).padStart(2, "0")}:` +
+                `${String(minutes).padStart(2, "0")}:` +
+                `${seconds}${offsetStr}`;
+
+            // ==============================
+            // 3) Duración del turno
+            // ==============================
+            const availabilities = await ApiScheduling.get(
+                `v1/DoctorAvailability/search?doctorId=${doctorId}`
+            );
+            const durationMinutes =
+                availabilities?.[0]?.durationMinutes ||
+                availabilities?.[0]?.DurationMinutes ||
+                30;
+
+            const endDate = new Date(
+                startDate.getTime() + durationMinutes * 60000
+            );
+
+            const newEndTime =
+                `${endDate.getFullYear()}-` +
+                `${String(endDate.getMonth() + 1).padStart(2, "0")}-` +
+                `${String(endDate.getDate()).padStart(2, "0")}T` +
+                `${String(endDate.getHours()).padStart(2, "0")}:` +
+                `${String(endDate.getMinutes()).padStart(2, "0")}:` +
+                `${seconds}${offsetStr}`;
+
+            // ==============================
+            // 4) Enviar PATCH de reschedule
+            // ==============================
+            const result = await ApiScheduling.patch(
+                `v1/Appointments/${appointmentId}/reschedule`,
+                {
+                    newStartTime,
+                    newEndTime,
+                    reason
+                }
+            );
+
+            console.log("📥 Respuesta RESCHEDULE:", result);
+            showNotification("Turno reprogramado exitosamente", "success");
+
+            // ===============================
+            // 5) NOTIFICACIONES POR REAGENDAMIENTO
+            // ===============================
+            try {
+                const { Api, ApiAuth } = await import("../api.js");
+
+                const doctor = await Api.get(`v1/Doctor/${doctorId}`).catch(() => null);
+                const patient = await Api.get(`v1/Patient/${currentRescheduleContext.patientId}`).catch(() => null);
+
+                const doctorUserId = doctor?.userId;
+                const patientUserId = patient?.userId;
+
+                const doctorName = `${doctor?.firstName || ""} ${doctor?.lastName || ""}`.trim();
+                const patientName = `${patient?.firstName || ""} ${patient?.lastName || ""}`.trim();
+                const specialty = doctor?.specialty || "Especialidad";
+
+                // Formatear nueva fecha y hora
+                const newStart = new Date(newStartTime);
+                const formattedDate = newStart.toLocaleDateString("es-AR", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+                const formattedTime =String(hours).padStart(2, "0") + ":" + String(minutes).padStart(2, "0");
+                // =========================
+                // Normalizar appointmentId a GUID
+                // =========================
+                let fixedAppointmentId = appointmentId;
+
+                // Si el ID viene como número, lo convertimos a GUID de 32 chars (igual que BE)
+                if (typeof appointmentId === "number") {
+                    const hex = appointmentId.toString(16).padStart(32, "0");
+                    fixedAppointmentId =
+                        hex.substring(0, 8) + "-" +
+                        hex.substring(8, 12) + "-" +
+                        hex.substring(12, 16) + "-" +
+                        hex.substring(16, 20) + "-" +
+                        hex.substring(20);
+                }
+
+                const payload = {
+                    appointmentId: fixedAppointmentId,
+                    doctorName,
+                    patientName,
+                    specialty,
+                    appointmentDate: `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T00:00:00`,
+                    appointmentTime: formattedTime,
+                    appointmentType: "Presencial",
+                    notes: reason,
+                    status: "Reprogramado"
+                };
+
+                // Notificación para PACIENTE
+                if (patientUserId) {
+                    await ApiAuth.post("notifications/events", {
+                        userId: patientUserId,
+                        eventType: "AppointmentRescheduled",
+                        payload
+                    });
+                }
+
+                // Notificación para DOCTOR
+                if (doctorUserId) {
+                    await ApiAuth.post("notifications/events", {
+                        userId: doctorUserId,
+                        eventType: "AppointmentRescheduledDoctor",
+                        payload
+                    });
+                }
+
+                console.log("📨 Notificaciones enviadas por reprogramación");
+
+            } catch (err) {
+                console.error("⚠ Error enviando notificaciones de reschedule:", err);
+            }
+
+
+            closeModal();
+
+            await reloadAppointmentViews();
+            const { loadDoctorStats } = await import("./doctor-main.js");
+            if (loadDoctorStats) await loadDoctorStats();
+        } catch (err) {
+            console.error("❌ Error al reprogramar turno:", err);
+            showNotification("No se pudo reprogramar el turno", "error");
+        }
+    });
+
+
+    console.log("✅ Modal de reprogramación inicializado");
+}
+
+
+
 // ===================================
 // EVENT HANDLERS
 // ===================================
 
-async function handleDoctorChatOpen(appointmentId, patientId, patientName){
+export async function handleDoctorChatOpen(appointmentId, patientId, patientName){
     try{
         console.log('Abriendo chat: ', {appointmentId, patientId, patientName})
 
@@ -554,22 +976,19 @@ export function initializeAttendButtons() {
     });
     
     // Botón Reprogramar
-    document.querySelectorAll('.reschedule-appointment-btn').forEach(button => {
-        replaceEventListener(button, 'click', async function() {
-            const appointmentId = this.getAttribute('data-appointment-id');
-            
-            if (appointmentId) {
-                console.log('📅 Reprogramando turno:', appointmentId);
-                
-                // Pedir motivo de reprogramación
-                const reason = prompt('Motivo de la reprogramación (opcional):');
-                
-                if (reason !== null) { // null si cancela el prompt
-                    await updateAppointmentStatus(appointmentId, 'RESCHEDULED', reason || 'Reprogramado por el médico');
-                    showNotification('Turno marcado como reprogramado. Contacta al paciente para agendar uno nuevo.', 'info');
-                    await reloadAppointmentViews();
-                }
-            }
+    document.querySelectorAll(".reschedule-appointment-btn").forEach(button => {
+        replaceEventListener(button, "click", async function () {
+            const appointmentId = this.getAttribute("data-appointment-id");
+
+            if (!appointmentId) return;
+
+            console.log("📅 Reprogramando turno:", appointmentId);
+
+            const { ApiScheduling } = await import("../api.js");
+            const appointment = await ApiScheduling.get(`v1/Appointments/${appointmentId}`);
+
+            // Guardamos y abrimos modal
+            openDoctorRescheduleModal(appointment);
         });
     });
 
@@ -788,7 +1207,7 @@ async function loadTodayConsultationsForNav(selectedDate = null) {
         console.error('Error cargando consultas', e);
         list.innerHTML = `<p>Error cargando consultas</p>`;
     }
-}
+}   
 
 export async function loadPatientsView() {
     console.log('Cargando vista de pacientes...');
