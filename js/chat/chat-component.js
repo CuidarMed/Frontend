@@ -2,7 +2,7 @@
 import { getChatMessages, markMessagesAsRead,CHAT_HUB_URL } from "./chat-service.js";
 
 
-const SIGNALR_URL = "http://localhost:5046/chathub";
+const SIGNALR_URL = "http://localhost:8085/chathub";
 
 export class ChatComponent {
   constructor(config) {

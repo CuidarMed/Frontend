@@ -3,8 +3,8 @@
 // ============================================
 
 const CHATMS_BASE_URLS = [
-    "http://localhost:5046/api",
-    "http://127.0.0.1:5046/api"
+    "http://localhost:8085/api",
+    "http://127.0.0.1:8085/api"
 ];
 
 /**
@@ -185,7 +185,7 @@ export async function markMessagesAsRead(chatRoomId, userId) {
 
     return await response.json();
 }
-export const CHAT_HUB_URL = "http://localhost:5046/chatHub";
+export const CHAT_HUB_URL = "http://localhost:8085/chatHub";
 
 console.log('🔧 Chat Service configurado:', {
     hubUrl: CHAT_HUB_URL
