@@ -666,17 +666,22 @@ export function initializeDoctorRescheduleModal() {
             // ==============================
             // 4) Enviar PATCH de reschedule
             // ==============================
-            const result = await ApiScheduling.patch(
-                `v1/Appointments/${appointmentId}/reschedule`,
-                {
-                    newStartTime,
-                    newEndTime,
-                    reason
-                }
-            );
+            await ApiScheduling.patch(`v1/Appointments/${appointmentId}/reschedule`, {
+                newStartTime,
+                newEndTime,
+                reason
+            });
 
-            console.log("📥 Respuesta RESCHEDULE:", result);
+            console.log("📥 Respuesta RESCHEDULE:");
+            try {
+                await updateAppointmentStatus(appointmentId, "CONFIRMED", reason, true);
+                console.log("Estado actualizado a CONFIRMED tras reprogramación");
+            } catch (err) {
+                console.error("❌ Error actualizando estado tras reprogramar:", err);
+            }
             showNotification("Turno reprogramado exitosamente", "success");
+            
+            
 
             // ===============================
             // 5) NOTIFICACIONES POR REAGENDAMIENTO

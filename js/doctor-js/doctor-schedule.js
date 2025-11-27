@@ -4,6 +4,7 @@
 import { isFinalState } from './appointment-state-machine.js';
 import { showNotification } from './doctor-ui.js';
 import { getId } from './doctor-core.js';
+import { getAllowedTransitionsFrom } from './appointment-state-machine.js';
 
 const DAYS_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 const MONTHS_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -235,9 +236,22 @@ function generateAppointmentHTML(apt) {
     const appointmentId = apt.appointmentId || apt.AppointmentId;
     const patientId = apt.patientId || apt.PatientId;
     
-    const statusOptions = Object.entries(STATUS_CONFIG).map(([key, val]) => 
-        `<option value="${key}" ${status === key ? 'selected' : ''}>${val.label}</option>`
-    ).join('');
+    const allowed = getAllowedTransitionsFrom(status);
+
+    // Siempre incluimos el estado actual (por si no está en allowed)
+    const availableStates = [status, ...allowed];
+
+    // Eliminar duplicados
+    const uniqueStates = [...new Set(availableStates)];
+
+    const statusOptions = uniqueStates
+    
+    .map(key => {
+        const val = STATUS_CONFIG[key];
+        if (!val) return "";
+        return `<option value="${key}" ${status === key ? 'selected' : ''}>${val.label}</option>`;
+    })
+    .join('');
     
     let statusElement;
 

@@ -11,7 +11,7 @@ export function isFinalState(state) {
     return FINAL_STATES.includes(state.toUpperCase());
 }
 
-// Estados permitidos para el DOCTOR según el estado actual
+// Transiciones válidas para el DOCTOR
 export function getAllowedTransitionsFrom(state) {
     state = (state || "").toUpperCase();
 
@@ -28,7 +28,7 @@ export function getAllowedTransitionsFrom(state) {
         case "COMPLETED":
         case "CANCELLED":
         case "NO_SHOW":
-            return []; // Finales → sin opciones
+            return []; // Final → no transiciones
 
         default:
             return [];
