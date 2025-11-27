@@ -1,6 +1,7 @@
 // doctor-schedule.js
 // Módulo para gestión de agenda y disponibilidad del doctor
 
+import { isFinalState } from './appointment-state-machine.js';
 import { showNotification } from './doctor-ui.js';
 import { getId } from './doctor-core.js';
 
@@ -229,7 +230,7 @@ function generateAppointmentHTML(apt) {
     const end = new Date(apt.endTime || apt.EndTime);
     const timeStr = `${String(start.getHours()).padStart(2, '0')}:${String(start.getMinutes()).padStart(2, '0')} - ${String(end.getHours()).padStart(2, '0')}:${String(end.getMinutes()).padStart(2, '0')}`;
     const status = apt.status || apt.Status || 'SCHEDULED';
-    const config = STATUS_CONFIG[status] || { color: '#6b7280' };
+    const config = STATUS_CONFIG[status] || { color: '#6b7280', label: status };
     const reason = (apt.reason || apt.Reason || apt.reasonText || apt.ReasonText || '').trim() || 'Sin motivo especificado';
     const appointmentId = apt.appointmentId || apt.AppointmentId;
     const patientId = apt.patientId || apt.PatientId;
@@ -238,22 +239,82 @@ function generateAppointmentHTML(apt) {
         `<option value="${key}" ${status === key ? 'selected' : ''}>${val.label}</option>`
     ).join('');
     
+    let statusElement;
+
+    if (isFinalState(status)) {
+        // 🔒 Estado final → no editable → solo texto
+        statusElement = `
+            <span class="appointment-status-final"
+                  style="padding: 0.25rem 0.5rem; 
+                         font-size: 0.75rem; 
+                         font-weight: 600; 
+                         color: ${config.color};">
+                ${config.label}
+            </span>
+        `;
+    } else {
+        // ✏️ Estado editable → select normal
+        statusElement = `
+            <select class="appointment-status-select"
+                    data-appointment-id="${appointmentId}"
+                    style="padding: 0.25rem 0.5rem; 
+                           border: 1px solid #e5e7eb; 
+                           border-radius: 4px; 
+                           font-size: 0.75rem; 
+                           background: white; 
+                           color: ${config.color}; 
+                           font-weight: 600; 
+                           cursor: pointer;">
+                ${statusOptions}
+            </select>
+        `;
+    }
+
+    //
+    // ============================
+    // 3) Botones de acción (solo si aplica)
+    // ============================
+    //
     const actions = getActionButtons(status, appointmentId, patientId, apt.patientName);
-    
+
+    //
+    // ============================
+    // 4) HTML final del turno
+    // ============================
+    //
     return `
-        <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; margin-bottom: 0.75rem; background: #f9fafb; border-radius: 6px; border-left: 4px solid ${config.color};">
+        <div style="display: flex; justify-content: space-between; align-items: center; 
+                    padding: 1rem; margin-bottom: 0.75rem; 
+                    background: #f9fafb; border-radius: 6px; 
+                    border-left: 4px solid ${config.color};">
+            
             <div style="flex: 1;">
+                
                 <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem;">
-                    <div style="font-weight: 600; color: #1f2937; font-size: 1.1rem;">${apt.patientName}</div>
-                    <select class="appointment-status-select" data-appointment-id="${appointmentId}" style="padding: 0.25rem 0.5rem; border: 1px solid #e5e7eb; border-radius: 4px; font-size: 0.75rem; background: white; color: ${config.color}; font-weight: 600; cursor: pointer;">
-                        ${statusOptions}
-                    </select>
+                    <div style="font-weight: 600; color: #1f2937; font-size: 1.1rem;">
+                        ${apt.patientName}
+                    </div>
+
+                    <!-- El elemento dinámico de estado -->
+                    ${statusElement}
                 </div>
-                <div style="color: #6b7280; font-size: 0.875rem;"><i class="fas fa-clock" style="margin-right: 0.5rem;"></i>${timeStr}</div>
-                <div style="color: #6b7280; font-size: 0.875rem;"><i class="fas fa-user" style="margin-right: 0.5rem;"></i>DNI: ${apt.patientDni}</div>
-                <div style="color: #6b7280; font-size: 0.875rem;"><i class="fas fa-stethoscope" style="margin-right: 0.5rem;"></i>${reason}</div>
+
+                <div style="color: #6b7280; font-size: 0.875rem;">
+                    <i class="fas fa-clock" style="margin-right: 0.5rem;"></i>${timeStr}
+                </div>
+
+                <div style="color: #6b7280; font-size: 0.875rem;">
+                    <i class="fas fa-user" style="margin-right: 0.5rem;"></i>DNI: ${apt.patientDni}
+                </div>
+
+                <div style="color: #6b7280; font-size: 0.875rem;">
+                    <i class="fas fa-stethoscope" style="margin-right: 0.5rem;"></i>${reason}
+                </div>
             </div>
-            <div style="display: flex; gap: 0.5rem; margin-left: 1rem;">${actions}</div>
+
+            <div style="display: flex; gap: 0.5rem; margin-left: 1rem;">
+                ${actions}
+            </div>
         </div>
     `;
 }
