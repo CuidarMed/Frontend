@@ -31,6 +31,8 @@ export async function handleSectionNavigation(section) {
     // Limpiar vistas previas
     const fullHistory = dashboardContent.querySelectorAll('.history-full-section');
     fullHistory.forEach(h => h.remove());
+    const fullPrescriptions = dashboardContent.querySelectorAll('.prescriptions-full-section');
+     fullPrescriptions.forEach(h => h.remove());
     
     const allSections = dashboardContent.querySelectorAll('.dashboard-section, .welcome-section, .summary-cards');
     allSections.forEach(sec => {
@@ -111,10 +113,7 @@ export async function handleSectionNavigation(section) {
             const { loadPatientHistoryFull } = await import('./patient-history.js');
             await loadPatientHistoryFull();
             break;
-            
-        case 'pagos':
-            showComingSoonSection('pagos');
-            break;
+
         case 'recetas':
             // Ocultar todas las secciones excepto la de recetas
             allSections.forEach(sec => {
@@ -178,67 +177,4 @@ export async function handleSectionNavigation(section) {
                 }
             });
     }
-}
-
-/**
- * Muestra sección "En construcción"
- */
-export function showComingSoonSection(section) {
-    const dashboardContent = document.querySelector('.dashboard-content');
-    if (!dashboardContent) return;
-    
-    const existingComingSoon = dashboardContent.querySelector('.coming-soon-section');
-    if (existingComingSoon) {
-        existingComingSoon.remove();
-    }
-    
-    const comingSoonSection = document.createElement('div');
-    comingSoonSection.className = 'coming-soon-section';
-    
-    const sectionConfig = {
-        'pagos': {
-            name: 'Pagos',
-            icon: 'fas fa-credit-card',
-            message: 'Esta funcionalidad se implementará a futuro',
-            description: 'Estamos trabajando para brindarte la mejor experiencia. Pronto podrás gestionar tus pagos desde esta sección.'
-        }
-    };
-    
-    const config = sectionConfig[section] || {
-        name: section,
-        icon: 'fas fa-clock',
-        message: 'Esta funcionalidad se implementará a futuro',
-        description: 'Estamos trabajando para brindarte la mejor experiencia.'
-    };
-    
-    comingSoonSection.innerHTML = `
-        <div class="dashboard-section">
-            <div class="coming-soon-content">
-                <div class="coming-soon-icon">
-                    <i class="${config.icon}"></i>
-                </div>
-                <h2>${config.name}</h2>
-                <p class="coming-soon-message">${config.message}</p>
-                <p class="coming-soon-description">${config.description}</p>
-                <button class="btn btn-primary" id="comingSoonBackBtn">
-                    <i class="fas fa-home"></i>
-                    Volver al Inicio
-                </button>
-            </div>
-        </div>
-    `;
-    
-    dashboardContent.appendChild(comingSoonSection);
-    
-    setTimeout(() => {
-        const backBtn = document.getElementById('comingSoonBackBtn');
-        if (backBtn) {
-            backBtn.addEventListener('click', function() {
-                const inicioBtn = document.querySelector('[data-section="inicio"]');
-                if (inicioBtn) {
-                    inicioBtn.click();
-                }
-            });
-        }
-    }, 100);
 }
