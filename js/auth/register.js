@@ -132,7 +132,6 @@ document.addEventListener("DOMContentLoaded", () => {
             dni,
             password,
             role: selectedRole,
-            imageUrl: null,   // Tu backend usa valor por defecto
         };
 
         if (selectedRole === "Patient") {

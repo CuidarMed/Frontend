@@ -308,6 +308,40 @@ body {
    ======================================== */
 
 /* Botones */
+
+/* Badge de mensajes no leídos */
+.unread-badge {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: #ef4444;
+    color: white;
+    font-size: 11px;
+    font-weight: 600;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 5px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    animation: pulse-badge 2s infinite;
+}
+
+@keyframes pulse-badge {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+}
+
+/* Asegurar que el botón tenga position relative */
+.open-chat-btn {
+    position: relative !important;
+}
 .btn {
     padding: 0.75rem 1.5rem;
     border: none;
@@ -1997,4 +2031,28 @@ body {
 
 .calendar-day-selected:hover {
     background: #1e40af;
+}
+
+
+
+
+.btn-prescription {
+    background-color: #17a2b8;
+    border-color: #17a2b8;
+    color: white;
+}
+
+.btn-prescription:hover {
+    background-color: #138496;
+    border-color: #117a8b;
+}
+
+.btn-prescription:active,
+.btn-prescription:focus {
+    background-color: #117a8b;
+    border-color: #10707f;
+}
+
+.hidden {
+    display: none;
 }

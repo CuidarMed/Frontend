@@ -3383,3 +3383,68 @@ ease;
 .btn-prescription-view:hover {
     background-color: #138496;
 }
+
+
+
+/* --- SELECT DE ESTADO --- */
+#status-filter {
+    padding: 8px 14px;
+    font-size: 0.9rem;
+    border-radius: 8px;
+    border: 1px solid #d1d5db;
+    background-color: #ffffff;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: #333;
+    min-width: 180px;
+}
+
+/* Hover */
+#status-filter:hover {
+    border-color: #3b82f6;
+}
+
+/* Focus */
+#status-filter:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
+    outline: none;
+}
+
+/* Option */
+#status-filter option {
+    padding: 6px;
+}
+
+/* ALIGN FIX PARA FLEX DE ACCIONES */
+.section-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+
+.btn-clean-chat {
+    background: #3b82f6;
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem; /* Tamaño moderado */
+    border-radius: 8px; /* Bordes redondeados */
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem; /* Espacio entre ícono y texto */
+    font-size: 1rem; /* Tamaño de fuente normal */
+    font-weight: 600; /* Peso de fuente más fuerte */
+    text-transform: uppercase; /* Texto en mayúsculas */
+    transition: all 0.3s ease; /* Transición suave */
+}
+
+.btn-clean-chat:hover {
+    background: #2563eb; /* Color más oscuro al pasar el mouse */
+    transform: scale(1.05); /* Efecto de aumento al pasar el mouse */
+}
+
+.btn-clean-chat i {
+    font-size: 1.25rem; /* Ícono de tamaño moderado */
+}

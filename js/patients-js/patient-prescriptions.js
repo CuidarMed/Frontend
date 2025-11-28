@@ -22,7 +22,7 @@ export async function viewPrescription(encounterId) {
         modal.classList.remove('hidden');
 
         // Llamada al endpoint correcto
-        const prescription = await ApiClinical.get(`/v1/Prescription/encounter/${encounterId}`);
+        const prescription = await ApiClinical.get(`v1/Prescription/encounter/${encounterId}`);
         if (!prescription) throw new Error('No se encontró la receta');
 
         // Cabecera CuidarMed+
