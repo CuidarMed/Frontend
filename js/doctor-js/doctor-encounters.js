@@ -335,17 +335,17 @@ async function saveEncounter(modal, appointmentId, patientId) {
             Status: 'Open',
             Date: new Date().toISOString()
         };
-        
-        if (!encounterData.Reasons || !encounterData.Subjective || !encounterData.Objetive || 
+
+        if (!encounterData.Reasons || !encounterData.Subjective || !encounterData.Objetive ||
             !encounterData.Assessment || !encounterData.Plan) {
             showNotification('Por favor completa todos los campos requeridos (S, O, A, P)', 'error');
             return;
         }
-        
+
         console.log('📤 Enviando encounter a ClinicalMS:', encounterData);
-        
+
         const { ApiClinical } = await import('../api.js');
-        
+
         try {
             await ApiClinical.post(`v1/Encounter?patientId=${patientId}`, encounterData);
             console.log('✅ Encounter creado');
@@ -358,11 +358,12 @@ async function saveEncounter(modal, appointmentId, patientId) {
             }
             throw error;
         }
-        
+
         showNotification('Consulta guardada exitosamente', 'success');
         modal.remove();
-        
+
         try {
+            // Aquí es donde actualizas el estado del turno
             await updateAppointmentStatus(appointmentId, 'COMPLETED', null, true);
             console.log('✅ Estado del appointment actualizado a COMPLETED');
         } catch (err) {
@@ -375,16 +376,17 @@ async function saveEncounter(modal, appointmentId, patientId) {
             });
             showNotification(`Consulta guardada, pero no se pudo actualizar el estado del turno: ${errorMessage}`, 'warning');
         }
-        
+
         updateCounter('active-consultation', -1);
         updateCounter('prescriptions-today', 1);
-        
+
     } catch (error) {
         console.error('❌ Error al guardar encounter:', error);
         showNotification(`Error al guardar la consulta: ${error.message || 'Error desconocido'}`, 'error');
         throw error;
     }
 }
+
 
 // ===================================
 // DESCARGA DE RESUMEN HL7
