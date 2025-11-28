@@ -6,7 +6,9 @@ import { appState } from './patient-state.js';
 import { getActiveSection } from './patient-utils.js';
 import { showNotification } from './patient-notifications.js';
 import { handleAppointmentChatCreation, openChatModal } from '../chat/chat-integration.js';
-
+import { getStatusFilter } from './patient-filters.js';
+// En la sección de imports
+import { forceStyleUpdate } from './patient-ui.js';
 /**
  * Renderiza turnos para la página de inicio (solo 3 próximos)
  */
@@ -80,8 +82,21 @@ export function renderAppointmentsHome(appointments) {
             </div>
         `;
     }).join('');
+     applyStylesAfterRender();
 }
-
+function applyStylesAfterRender() {
+    const statusElements = document.querySelectorAll('.appointment-card');
+    statusElements.forEach(element => {
+        const status = element.classList.contains('status-scheduled') ? 'scheduled' :
+                      element.classList.contains('status-confirmed') ? 'confirmed' :
+                      element.classList.contains('status-cancelled') ? 'cancelled' : '';
+        
+        // Aplica clases de estilo o fuerza el renderizado si es necesario
+        if (status) {
+            element.style.display = 'block'; // Asegúrate de que el contenido sea visible
+        }
+    });
+}
 /**
  * Renderiza lista completa de turnos (para sección Mis Turnos)
  */
@@ -308,7 +323,17 @@ export async function loadPatientAppointments() {
         }
 
         const { ApiScheduling, Api } = await import('../api.js');
-        const appointmentsResponse = await ApiScheduling.get(`v1/Appointments?patientId=${appState.currentPatient.patientId}`);
+        
+        // Obtener el estado filtrado
+        const status = getStatusFilter();
+
+        let url = `v1/Appointments?patientId=${appState.currentPatient.patientId}`;
+        
+        if (status) {
+            url += `&status=${status}`;
+        }
+
+        const appointmentsResponse = await ApiScheduling.get(url);
 
         const appointments = Array.isArray(appointmentsResponse)
             ? appointmentsResponse
@@ -327,8 +352,7 @@ export async function loadPatientAppointments() {
         }
 
         appointments.sort((a, b) =>
-            new Date(a.startTime || a.StartTime) -
-            new Date(b.startTime || b.StartTime)
+            new Date(a.startTime || a.StartTime) - new Date(b.startTime || b.StartTime)
         );
 
         // Obtener info del doctor
@@ -357,15 +381,21 @@ export async function loadPatientAppointments() {
         if (activeSection === "inicio") {
             const latestAppointments = appointments.slice(0, 3);
             appointmentsList.innerHTML = renderAppointmentsHome(latestAppointments);
-        }
-        else if (activeSection === "turnos") {
+        } else if (activeSection === "turnos") {
             appointmentsList.innerHTML = renderAppointmentsFull(appointments);
         }
 
-        // ✅ Inicializar botones de chat SIEMPRE después de renderizar (en ambas secciones)
+        // ✅ CRÍTICO: Inicializar botones de chat Y aplicar estilos
         setTimeout(() => {
             initializeChatButtons();
-        }, 100);
+            
+            // Aplicar estilos inmediatamente después de renderizar
+            if (typeof forceStyleUpdate === 'function') {
+                forceStyleUpdate();
+            } else if (typeof window.forceStyleUpdate === 'function') {
+                window.forceStyleUpdate();
+            }
+        }, 150);
 
     } catch (error) {
         console.error('Error al cargar turnos:', error);

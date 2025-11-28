@@ -74,7 +74,7 @@ const createEncounterForm = (appointmentId, patientId, patientName) => `
                             style="background-color: #28a745; border-color: #28a745; color: white;">
                         <i class="fas fa-file-download"></i> Descargar HL7
                     </button>
-                    <button type="button" class="btn btn-info" id="prescribe-btn" data-patient-id="${patientId}" 
+                    <button type="button" class="btn btn-prescription" id="generate-prescription-btn" data-patient-id="${patientId}" 
                             data-patient-name="${patientName}" data-appointment-id="${appointmentId}" 
                             style="background-color: #17a2b8; border-color: #17a2b8; color: white;">
                         <i class="fas fa-prescription"></i> Recetar
@@ -143,7 +143,7 @@ const setupDownloadHL7Button = (modal) => {
 
 const setupPrescribeButton = (modal) => {
     setTimeout(() => {
-        const btn = modal.querySelector('#prescribe-btn');
+        const btn = modal.querySelector('#generate-prescription-btn');
         if (btn) {
             const newBtn = btn.cloneNode(true);
             btn.parentNode.replaceChild(newBtn, btn);
@@ -155,24 +155,21 @@ const setupPrescribeButton = (modal) => {
                 const { appointmentId, patientId, patientName } = newBtn.dataset;
                 console.log('💊 Iniciando proceso de receta:', { patientName, patientId, appointmentId });
                 
-                // ✅ NUEVA LÓGICA: Primero intentar guardar el encounter
                 let encounterId = null;
                 
                 try {
                     const { ApiClinical } = await import('../api.js');
                     
-                    // Primero verificar si ya existe un encounter
+                    // Verificar si ya existe un encounter
                     const existingEncounters = await ApiClinical.get(`v1/Encounter?appointmentId=${appointmentId}`);
                     
                     if (existingEncounters?.length > 0) {
-                        // Ya existe un encounter guardado
                         encounterId = existingEncounters[0].encounterId || existingEncounters[0].EncounterId;
                         console.log('✅ Encounter existente encontrado:', encounterId);
                     } else {
-                        // No existe, intentar guardarlo primero
-                        console.log('ℹ️ No hay encounter guardado, intentando crear uno...');
+                        // No existe, validar que el formulario esté completo
+                        console.log('ℹ️ No hay encounter guardado, validando formulario...');
                         
-                        // Validar que el formulario tenga los datos mínimos
                         const reasonsField = modal.querySelector('#encounter-reasons');
                         const subjectiveField = modal.querySelector('#encounter-subjective');
                         const objectiveField = modal.querySelector('#encounter-objective');
@@ -190,7 +187,7 @@ const setupPrescribeButton = (modal) => {
                             return;
                         }
                         
-                        // Guardar el encounter primero
+                        // Formulario completo, crear encounter en progreso
                         const doctorId = modal.querySelector('#encounter-form').dataset.doctorId || 
                                        (await import('./doctor-core.js')).doctorState.currentDoctorData?.doctorId;
                         
@@ -210,25 +207,20 @@ const setupPrescribeButton = (modal) => {
                             Assessment: assessmentField.value.trim(),
                             Plan: planField.value.trim(),
                             Notes: modal.querySelector('#encounter-notes')?.value?.trim() || '',
-                            Status: 'IN_PROGRESS', // Aún en progreso, no completado
+                            Status: 'IN_PROGRESS',
                             Date: new Date().toISOString()
                         };
                         
-                        console.log('📤 Guardando encounter antes de emitir receta:', encounterData);
+                        console.log('📤 Creando encounter en progreso:', encounterData);
                         
                         try {
                             const savedEncounter = await ApiClinical.post(`v1/Encounter?patientId=${patientId}`, encounterData);
                             encounterId = savedEncounter.encounterId || savedEncounter.EncounterId;
-                            
-                            console.log('✅ Encounter guardado con ID:', encounterId);
-                            
-                            const { showNotification } = await import('./doctor-ui.js');
-                            showNotification('Consulta guardada. Ahora puedes emitir la receta.', 'success');
-                            
+                            console.log('✅ Encounter creado con ID:', encounterId);
                         } catch (saveError) {
                             console.error('❌ Error al guardar encounter:', saveError);
                             
-                            // Si ya existe (409), intentar obtenerlo de nuevo
+                            // Si ya existe (409), intentar obtenerlo
                             if (saveError.status === 409) {
                                 const retryEncounters = await ApiClinical.get(`v1/Encounter?appointmentId=${appointmentId}`);
                                 if (retryEncounters?.length > 0) {
@@ -248,11 +240,16 @@ const setupPrescribeButton = (modal) => {
                     return;
                 }
                 
-                // Ahora abrir el modal de receta con el encounterId válido
-                console.log('✅ Abriendo modal de receta con encounterId:', encounterId);
-                
-                const { openPrescriptionModal } = await import('./doctor-prescriptions.js');
-                openPrescriptionModal(patientName, patientId, encounterId, appointmentId);
+                // Abrir modal de receta con el encounterId válido
+                if (encounterId && encounterId > 0) {
+                    console.log('✅ Abriendo modal de receta con encounterId:', encounterId);
+                    
+                    const { openPrescriptionModal } = await import('./doctor-prescriptions.js');
+                    openPrescriptionModal(patientName, patientId, encounterId, appointmentId);
+                } else {
+                    const { showNotification } = await import('./doctor-ui.js');
+                    showNotification('No se pudo obtener el ID de la consulta', 'error');
+                }
             });
         }
     }, 100);
@@ -320,37 +317,82 @@ async function saveEncounter(modal, appointmentId, patientId) {
             return;
         }
 
-        console.log('💾 Guardando encounter...');
+        console.log('💾 Guardando consulta final...');
 
-        const encounterData = {
-            PatientId: parseInt(patientId),
-            DoctorId: doctorId,
-            AppointmentId: parseInt(appointmentId),
-            Reasons: document.getElementById('encounter-reasons').value.trim(),
-            Subjective: document.getElementById('encounter-subjective').value.trim(),
-            Objetive: document.getElementById('encounter-objective').value.trim(),
-            Assessment: document.getElementById('encounter-assessment').value.trim(),
-            Plan: document.getElementById('encounter-plan').value.trim(),
-            Notes: document.getElementById('encounter-notes').value.trim() || 'Sin notas adicionales',
-            Status: 'Open',
-            Date: new Date().toISOString()
-        };
+        // Datos completos para crear o actualizar
+        const reasons = document.getElementById('encounter-reasons').value.trim();
+        const subjective = document.getElementById('encounter-subjective').value.trim();
+        const objective = document.getElementById('encounter-objective').value.trim();
+        const assessment = document.getElementById('encounter-assessment').value.trim();
+        const plan = document.getElementById('encounter-plan').value.trim();
+        const notes = document.getElementById('encounter-notes').value.trim() || 'Sin notas adicionales';
         
-        if (!encounterData.Reasons || !encounterData.Subjective || !encounterData.Objetive || 
-            !encounterData.Assessment || !encounterData.Plan) {
+        if (!reasons || !subjective || !objective || !assessment || !plan) {
             showNotification('Por favor completa todos los campos requeridos (S, O, A, P)', 'error');
             return;
         }
         
-        console.log('📤 Enviando encounter a ClinicalMS:', encounterData);
-        
         const { ApiClinical } = await import('../api.js');
         
+        // ✅ Verificar si ya existe un encounter
+        let existingEncounter = null;
         try {
-            await ApiClinical.post(`v1/Encounter?patientId=${patientId}`, encounterData);
-            console.log('✅ Encounter creado');
+            const existingEncounters = await ApiClinical.get(`v1/Encounter?appointmentId=${appointmentId}`);
+            if (existingEncounters && existingEncounters.length > 0) {
+                existingEncounter = existingEncounters[0];
+                const encounterId = existingEncounter.encounterId || existingEncounter.EncounterId;
+                console.log('✅ Encounter existente encontrado:', encounterId);
+            }
+        } catch (err) {
+            console.warn('⚠️ Error al verificar encounter existente:', err);
+        }
+        
+        try {
+            if (existingEncounter) {
+                // ✅ ACTUALIZAR con PATCH
+                const encounterId = existingEncounter.encounterId || existingEncounter.EncounterId;
+                console.log('🔄 Actualizando encounter existente con PATCH:', encounterId);
+                
+                const patchData = {
+                    reasons: reasons,
+                    subjective: subjective,
+                    objetive: objective,
+                    assessment: assessment,
+                    plan: plan,
+                    notes: notes,
+                    status: 'COMPLETED' // ✅ Cambiar a COMPLETED
+                };
+                
+                console.log('📤 Datos PATCH:', patchData);
+                
+                await ApiClinical.patch(`v1/Encounter/${encounterId}`, patchData);
+                console.log('✅ Encounter actualizado a COMPLETED con PATCH');
+                
+            } else {
+                // ✅ CREAR nuevo encounter
+                console.log('➕ Creando nuevo encounter con estado COMPLETED');
+                
+                const encounterData = {
+                    PatientId: parseInt(patientId),
+                    DoctorId: doctorId,
+                    AppointmentId: parseInt(appointmentId),
+                    Reasons: reasons,
+                    Subjective: subjective,
+                    Objetive: objective,
+                    Assessment: assessment,
+                    Plan: plan,
+                    Notes: notes,
+                    Status: 'COMPLETED',
+                    Date: new Date().toISOString()
+                };
+                
+                console.log('📤 Datos POST:', encounterData);
+                
+                await ApiClinical.post(`v1/Encounter?patientId=${patientId}`, encounterData);
+                console.log('✅ Encounter creado con estado COMPLETED');
+            }
         } catch (error) {
-            if (error.status === 409 || error.message?.includes('Ya existe') || error.message?.includes('ya fue atendida')) {
+            if (error.status === 409) {
                 showNotification('Esta consulta ya fue atendida anteriormente.', 'warning');
                 modal.remove();
                 await updateAppointmentStatus(appointmentId, 'COMPLETED', null, true).catch(console.warn);
@@ -364,20 +406,13 @@ async function saveEncounter(modal, appointmentId, patientId) {
         
         try {
             await updateAppointmentStatus(appointmentId, 'COMPLETED', null, true);
-            console.log('✅ Estado del appointment actualizado a COMPLETED');
+            console.log('✅ Appointment actualizado a COMPLETED');
         } catch (err) {
-            console.error('❌ Error al actualizar estado:', err);
-            const errorMessage = err.message || 'Error desconocido';
-            console.error('❌ Detalles del error:', {
-                message: errorMessage,
-                status: err.status,
-                appointmentId: appointmentId
-            });
-            showNotification(`Consulta guardada, pero no se pudo actualizar el estado del turno: ${errorMessage}`, 'warning');
+            console.error('❌ Error al actualizar appointment:', err);
+            showNotification(`Consulta guardada, pero no se pudo actualizar el turno: ${err.message}`, 'warning');
         }
         
         updateCounter('active-consultation', -1);
-        updateCounter('prescriptions-today', 1);
         
     } catch (error) {
         console.error('❌ Error al guardar encounter:', error);

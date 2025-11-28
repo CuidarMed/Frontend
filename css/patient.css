@@ -3383,3 +3383,65 @@ ease;
 .btn-prescription-view:hover {
     background-color: #138496;
 }
+/* ============================================
+   ANIMACIONES DE ESTADO
+   ============================================ */
+
+/* Animación cuando cambia el estado */
+@keyframes statusChange {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.08);
+        opacity: 0.9;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.status-changed {
+    animation: statusChange 0.5s ease;
+}
+
+
+
+/* --- SELECT DE ESTADO --- */
+#status-filter {
+    padding: 8px 14px;
+    font-size: 0.9rem;
+    border-radius: 8px;
+    border: 1px solid #d1d5db;
+    background-color: #ffffff;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: #333;
+    min-width: 180px;
+}
+
+/* Hover */
+#status-filter:hover {
+    border-color: #3b82f6;
+}
+
+/* Focus */
+#status-filter:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
+    outline: none;
+}
+
+/* Option */
+#status-filter option {
+    padding: 6px;
+}
+
+/* ALIGN FIX PARA FLEX DE ACCIONES */
+.section-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}

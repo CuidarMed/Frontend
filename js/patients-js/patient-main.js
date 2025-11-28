@@ -20,9 +20,13 @@ import { initializeModals } from './patient-appointment-form.js';
 
 // Imports de módulos de prescripciones
 import { initializePrescriptionModal } from './patient-prescriptions.js';
-
 import { loadPatientPrescriptions } from './patient-prescriptions-list.js';
 
+// Imports de filtros
+import { initializeFilters } from './patient-filters.js';
+
+// ✅ NUEVO: Imports para estilos y notificaciones
+import { initializeUIObserver, forceStyleUpdate } from './patient-ui.js';
 
 /**
  * Carga el contexto del usuario
@@ -48,21 +52,32 @@ async function initializePatientPanel() {
     setupUserMenu();
     initializeSidebarNavigation();
     initializeModals();
-    initializePrescriptionModal();
+    
+    // ✅ NUEVO: Inicializar sistema de notificaciones de video
+
+    
+    // ✅ NUEVO: Inicializar observer de UI para estilos
+    initializeUIObserver();
 
     // Carga inicial
     await loadPatientData();
     await loadPatientStats();
     await loadPatientAppointments();
     await loadRecentPatientHistory();
+    await initializeFilters();
+    
+    // ✅ NUEVO: Forzar aplicación de estilos después de cargar
+    setTimeout(() => {
+        forceStyleUpdate();
+    }, 500);
     
     // Cargar recetas recientes (solo si el contenedor existe en el HTML)
     const prescriptionsHomeContainer = document.getElementById('prescriptions-home-list');
     if (prescriptionsHomeContainer) {
-        await renderPrescriptionsHome();
+        // await renderPrescriptionsHome(); // Si tienes esta función
     }
 
-    // ✅ CAMBIO: Auto refresco cada 10 segundos (antes era 30)
+    // Auto refresco cada 10 segundos
     if (appState.autoRefreshInterval) {
         clearInterval(appState.autoRefreshInterval);
     }
@@ -73,16 +88,21 @@ async function initializePatientPanel() {
         await loadPatientData();
         await loadPatientAppointments();
         await loadPatientStats();
-        await loadRecentPatientHistory(); // ✅ Esto actualizará las 3 últimas consultas
+        await loadRecentPatientHistory();
+        
+        // ✅ NUEVO: Re-aplicar estilos después del refresh
+        setTimeout(() => {
+            forceStyleUpdate();
+        }, 300);
         
         // Refrescar recetas en home si existe el contenedor
         const prescriptionsHomeContainer = document.getElementById('prescriptions-home-list');
         if (prescriptionsHomeContainer) {
-            await renderPrescriptionsHome();
+            // await renderPrescriptionsHome();
         }
         
         console.log('✅ Auto-refresh completado');
-    }, 10000); // ✅ 10 segundos en lugar de 30
+    }, 10000);
 }
 
 // Inicialización cuando el DOM esté listo
@@ -96,4 +116,5 @@ window.PatientPanel = {
     loadPatientStats,
     loadPatientAppointments,
     loadRecentPatientHistory,
+    initializeFilters
 };

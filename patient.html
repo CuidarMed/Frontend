@@ -113,10 +113,23 @@
                         <p>Tus consultas programadas</p>
                     </div>
                     <div class="section-header-actions">
+                        <!-- Botón para Agendar Turno -->
                         <button class="btn btn-primary" id="newAppointment">
                             <i class="fas fa-calendar-plus"></i>
                             Agendar Turno
                         </button>
+                        <!-- Menú Desplegable -->
+                        <select id="status-filter">
+                            <option value="">-- Filtrar por Estado --</option>
+                            <option value="SCHEDULED">Programado</option>
+                            <option value="CONFIRMED">Confirmado</option>
+                            <option value="CANCELLED">Cancelado</option>
+                            <option value="COMPLETED">Completado</option>
+                            <option value="IN_PROGRESS">En curso</option>
+                            <option value="NO_SHOW">Ausente</option>
+                            <option value="RESCHEDULED">Reprogramado</option>
+                        </select>
+
                     </div>
                 </div>
                 <div class="appointments-list" id="appointments-list">
@@ -126,6 +139,7 @@
                     </div>
                 </div>
             </div>
+
 
             <!-- Historial Médico Reciente -->
             <div class="dashboard-section">
