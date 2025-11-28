@@ -3383,3 +3383,36 @@ ease;
 .btn-prescription-view:hover {
     background-color: #138496;
 }
+
+/* Badge de mensajes no leídos */
+.unread-badge {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: #ef4444;
+    color: white;
+    font-size: 11px;
+    font-weight: 600;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 5px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    animation: pulse-badge 2s infinite;
+}
+
+@keyframes pulse-badge {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+}
+
+.btn-clean-chat {
+    position: relative !important;
+}

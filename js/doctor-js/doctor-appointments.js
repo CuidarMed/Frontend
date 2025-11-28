@@ -1005,7 +1005,9 @@ export async function handleDoctorChatOpen(appointmentId, patientId, patientName
             currentUserId: doctorIdforChat,
             currentUserName: getDoctorDisplayName(),
             otherUserName: patientName || 'Paciente',
-            userType: 'doctor'
+            userType: 'doctor',
+            doctorId: doctorIdforChat,  
+            patientId: patientId         
         };
         
         console.log('📞 Config que se pasa a openChatModal:', configParaChat);
@@ -1023,7 +1025,7 @@ export async function handleDoctorChatOpen(appointmentId, patientId, patientName
             const chatRoomId = chatRoom.id || chatRoom.Id;
             const visitorDoctorId = doctorState.currentDoctorData.doctorId;
             
-            await markMessagesAsRead(chatRoomId, visitorDoctorId);
+            await markMessagesAsRead(chatRoomId, visitorDoctorId, 'Doctor');
             console.log('✅ Mensajes marcados como leídos');
             
             // Actualizar el badge del botón a 0

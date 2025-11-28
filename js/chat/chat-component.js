@@ -13,6 +13,7 @@ export class ChatComponent {
     this.token = config.token;
     this.theme = config.theme || "doctor"; // 'doctor' o 'patient'
     this.container = config.container;
+    this.config = config;
 
     // ✅ Validar que los IDs existan
     console.log("🔧 ChatComponent config:", {
@@ -325,99 +326,87 @@ async loadMessages() {
         console.log("📥 [Mensajes] Chat Room ID:", this.chatRoomId);
         console.log("📥 [Mensajes] User ID:", this.currentUserId);
 
-        // Mostrar indicador en el contenedor de mensajes
         const messagesContainer = document.getElementById('chat-messages');
         if (messagesContainer) {
             messagesContainer.innerHTML = `
-                <div style="
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    justify-content: center;
-                    height: 100%;
-                    color: #6b7280;
-                ">
-                    <div class="spinner" style="
-                        width: 40px;
-                        height: 40px;
-                        border: 4px solid #e5e7eb;
-                        border-top-color: #3b82f6;
-                        border-radius: 50%;
-                        animation: spin 1s linear infinite;
-                    "></div>
+                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #6b7280;">
+                    <div class="spinner" style="width: 40px; height: 40px; border: 4px solid #e5e7eb; border-top-color: #3b82f6; border-radius: 50%; animation: spin 1s linear infinite;"></div>
                     <p style="margin-top: 1rem; font-size: 0.875rem;">Cargando mensajes...</p>
                 </div>
             `;
         }
 
-        // Obtener mensajes del servidor
         const messagesResult = await getChatMessages(this.chatRoomId, this.currentUserId);
         
         console.log("📦 [Mensajes] Resultado recibido:", messagesResult);
 
-        // ✅ Manejar diferentes estructuras de respuesta
         let messagesArray = [];
         
         if (Array.isArray(messagesResult)) {
-            // Si es un array directo
             messagesArray = messagesResult;
         } else if (messagesResult && messagesResult.items) {
-            // Si viene como { items: [...] }
             messagesArray = messagesResult.items;
         } else if (messagesResult && messagesResult.Items) {
-            // Si viene como { Items: [...] } (PascalCase)
             messagesArray = messagesResult.Items;
         }
 
         console.log("✅ [Mensajes] Mensajes procesados:", messagesArray.length);
         
-        // Guardar en la propiedad
         this.messages = messagesArray;
 
-        // Limpiar el contenedor antes de renderizar
         if (messagesContainer) {
             messagesContainer.innerHTML = '';
         }
 
-        // Renderizar los mensajes usando tu método existente
         if (this.messages.length === 0) {
             messagesContainer.innerHTML = `
-                <div style="
-                    text-align: center;
-                    color: #9ca3af;
-                    padding: 2rem;
-                    font-size: 0.875rem;
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    justify-content: center;
-                    height: 100%;
-                ">
+                <div style="text-align: center; color: #9ca3af; padding: 2rem; font-size: 0.875rem; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
                     <i class="fas fa-comments" style="font-size: 2rem; margin-bottom: 0.5rem; opacity: 0.3;"></i>
                     <p>No hay mensajes aún. ¡Inicia la conversación!</p>
                 </div>
             `;
         } else {
-            // Renderizar cada mensaje usando tu método addMessage
             this.messages.forEach((message) => {
                 console.log("🎨 [UI] Renderizando mensaje:", message);
                 this.addMessage(message, true);
             });
             
-            // Scroll al final
             this.scrollToBottom();
         }
         
-        // Marcar mensajes como leídos
+        // ✅ CORRECCIÓN CRÍTICA: Usar el ID correcto según el userType
         try {
             console.log("✓ Marcando mensajes como leídos:", {
                 chatRoomId: this.chatRoomId,
-                userId: this.currentUserId
+                currentUserId: this.currentUserId,
+                userType: this.config.userType
             });
-            await markMessagesAsRead(this.chatRoomId, this.currentUserId);
+            
+            // ✅ CLAVE: Determinar el ID correcto según el tipo de usuario
+            let userIdForRead;
+            let userRole;
+            
+            if (this.config.userType === 'doctor') {
+                // Para doctor: usar el doctorId del chatRoom o de config
+                userIdForRead = this.config.doctorId || this.currentUserId;
+                userRole = 'Doctor';
+            } else {
+                // Para paciente: usar el patientId del chatRoom o de config
+                userIdForRead = this.config.patientId || this.currentUserId;
+                userRole = 'Patient';
+            }
+            
+            console.log("✅ ID final para markAsRead:", {
+                userIdForRead,
+                userRole
+            });
+            
+            await markMessagesAsRead(this.chatRoomId, userIdForRead, userRole);
+            
             console.log("✅ Mensajes marcados como leídos");
         } catch (error) {
             console.warn("⚠️ No se pudieron marcar como leídos:", error);
+            console.error("⚠️ Error completo:", error.message);
         }
 
     } catch (error) {
@@ -427,29 +416,11 @@ async loadMessages() {
         const messagesContainer = document.getElementById('chat-messages');
         if (messagesContainer) {
             messagesContainer.innerHTML = `
-                <div style="
-                    color: #ef4444; 
-                    padding: 2rem; 
-                    text-align: center;
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    justify-content: center;
-                    height: 100%;
-                ">
+                <div style="color: #ef4444; padding: 2rem; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
                     <i class="fas fa-exclamation-triangle" style="font-size: 2rem; margin-bottom: 1rem; opacity: 0.7;"></i>
                     <p style="font-weight: 500;">Error al cargar mensajes</p>
                     <p style="font-size: 0.875rem; opacity: 0.8; margin-top: 0.5rem;">${error.message}</p>
-                    <button onclick="location.reload()" style="
-                        margin-top: 1rem;
-                        padding: 0.5rem 1rem;
-                        background: #3b82f6;
-                        color: white;
-                        border: none;
-                        border-radius: 0.5rem;
-                        cursor: pointer;
-                        font-size: 0.875rem;
-                    ">Recargar página</button>
+                    <button onclick="location.reload()" style="margin-top: 1rem; padding: 0.5rem 1rem; background: #3b82f6; color: white; border: none; border-radius: 0.5rem; cursor: pointer; font-size: 0.875rem;">Recargar página</button>
                 </div>
             `;
         }
