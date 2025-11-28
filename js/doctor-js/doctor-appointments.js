@@ -117,6 +117,135 @@ const getActionButtons = (status, appointmentId, patientId, patientName) => {
     return buttons;
 };
 
+// ===================================
+// MENSAJES NO LEÍDOS - CHAT (Solo Frontend)
+// ===================================
+
+/**
+ * Obtiene el conteo de mensajes no leídos para una sala de chat
+ */
+async function getUnreadMessagesCount(chatRoomId, doctorId) {
+    try {
+        // Importar la función directamente (no como objeto)
+        const { getChatMessages } = await import('../chat/chat-service.js');
+        
+        console.log('🔍 Obteniendo mensajes para chatRoom:', chatRoomId, 'doctor:', doctorId);
+        
+        const messages = await getChatMessages(chatRoomId, doctorId, 1, 100);
+        
+        console.log('🔍 Mensajes obtenidos:', messages);
+        
+        if (!messages || !Array.isArray(messages)) return 0;
+        
+        // Filtrar mensajes no leídos que fueron enviados por el paciente
+        const unreadCount = messages.filter(msg => {
+            const isRead = msg.isRead || msg.IsRead;
+            const senderRole = msg.senderRole || msg.SenderRole;
+            return !isRead && senderRole !== 'Doctor';
+        }).length;
+        
+        console.log('🔍 Mensajes no leídos:', unreadCount);
+        
+        return unreadCount;
+        
+    } catch (error) {
+        console.error('❌ Error obteniendo mensajes no leídos:', error);
+        return 0;
+    }
+}
+/**
+ * Busca el chatRoom para un appointment específico
+ */
+async function findChatRoomForAppointment(doctorId, patientId) {
+    try {
+        // Importar la función directamente (no como objeto)
+        const { getUserChatRooms } = await import('../chat/chat-service.js');
+        
+        console.log('🔍 Buscando chatRooms para doctor:', doctorId);
+        
+        const chatRooms = await getUserChatRooms(doctorId);
+        
+        console.log('🔍 ChatRooms obtenidos:', chatRooms);
+        
+        if (!chatRooms || !Array.isArray(chatRooms)) {
+            console.log('🔍 No hay chatRooms o no es array');
+            return null;
+        }
+        
+        const room = chatRooms.find(r => {
+            const roomDoctorId = r.doctorId || r.DoctorId;
+            const roomPatientId = r.patientId || r.PatientId;
+            console.log('🔍 Comparando room:', { roomDoctorId, roomPatientId, doctorId, patientId });
+            return roomDoctorId == doctorId && roomPatientId == patientId;
+        });
+        
+        console.log('🔍 Room encontrado:', room);
+        return room;
+        
+    } catch (error) {
+        console.error('❌ Error buscando chatRoom:', error);
+        return null;
+    }
+}
+
+/**
+ * Actualiza el badge de un botón de chat
+ */
+function updateChatButtonBadge(button, unreadCount) {
+    // Remover badge existente
+    const existingBadge = button.querySelector('.unread-badge');
+    if (existingBadge) {
+        existingBadge.remove();
+    }
+    
+    // Si hay mensajes no leídos, agregar badge
+    if (unreadCount > 0) {
+        const badge = document.createElement('span');
+        badge.className = 'unread-badge';
+        badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+        button.style.position = 'relative';
+        button.appendChild(badge);
+        console.log('✅ Badge agregado con count:', unreadCount);
+    }
+}
+
+/**
+ * Inicializa los badges de chat para todos los botones visibles
+ */
+async function initializeChatBadges() {
+    console.log('🔔 initializeChatBadges() llamada');
+    
+    const chatButtons = document.querySelectorAll('.open-chat-btn');
+    console.log('🔔 Botones de chat encontrados:', chatButtons.length);
+    
+    if (chatButtons.length === 0) return;
+    
+    const doctorId = getId(doctorState.currentDoctorData, 'doctorId');
+    console.log('🔔 Doctor ID:', doctorId);
+    
+    if (!doctorId) return;
+    
+    for (const button of chatButtons) {
+        const patientId = button.getAttribute('data-patient-id');
+        console.log('🔔 Procesando botón para paciente:', patientId);
+        
+        if (!patientId) continue;
+        
+        try {
+            const chatRoom = await findChatRoomForAppointment(doctorId, patientId);
+            console.log('🔔 ChatRoom encontrado:', chatRoom);
+            
+            if (chatRoom) {
+                const chatRoomId = chatRoom.id || chatRoom.Id;
+                const unreadCount = await getUnreadMessagesCount(chatRoomId, doctorId);
+                console.log('🔔 Mensajes no leídos para mostrar:', unreadCount);
+                updateChatButtonBadge(button, unreadCount);
+            }
+        } catch (error) {
+            console.error('❌ Error inicializando badge:', error);
+        }
+    }
+}
 
 document.addEventListener("click", (e) => {
     const toggle = e.target.closest(".appointment-action-toggle");
@@ -249,12 +378,12 @@ export async function loadTodayConsultations(selectedDate = null) {
     const consultationsList = document.getElementById('consultations-list');
     if (!consultationsList) return;
     
-    console.log('ðŸ“… Cargando consultas del dÃ­a:', selectedDate || 'hoy');
+    console.log('📅 Cargando consultas del día:', selectedDate || 'hoy');
     
     try {
         const doctorId = getId(doctorState.currentDoctorData, 'doctorId');
         if (!doctorId) {
-            consultationsList.innerHTML = '<p style="color: #6b7280; padding: 2rem; text-align: center;">No se pudo identificar al mÃ©dico</p>';
+            consultationsList.innerHTML = '<p style="color: #6b7280; padding: 2rem; text-align: center;">No se pudo identificar al médico</p>';
             return;
         }
         
@@ -262,11 +391,14 @@ export async function loadTodayConsultations(selectedDate = null) {
         renderAppointmentsList(consultationsList, appointments, filterDate);
         
     } catch (error) {
-        console.error('âŒ Error al cargar consultas:', error);
-        consultationsList.innerHTML = '<p style="color: #6b7280; padding: 2rem; text-align: center;">No se pudieron cargar las consultas del dÃ­a</p>';
+        console.error('❌ Error al cargar consultas:', error);
+        consultationsList.innerHTML = '<p style="color: #6b7280; padding: 2rem; text-align: center;">No se pudieron cargar las consultas del día</p>';
     }
     
-    setTimeout(initializeAttendButtons, 100);
+    setTimeout(() => {
+        initializeAttendButtons();
+        startChatBadgePolling(); // ✅ AGREGAR ESTA LÍNEA
+    }, 100);
 }
 
 export async function loadTodayFullHistory() {
@@ -880,14 +1012,31 @@ export async function handleDoctorChatOpen(appointmentId, patientId, patientName
         console.log('📞 chatRoom que se pasa:', chatRoom);
 
         // Abrir modal del chat
-        openChatModal(chatRoom, {
+       openChatModal(chatRoom, {
             currentUserId: doctorState.currentDoctorData.doctorId,
             currentUserName: doctorName,
             otherUserName: patientName || 'Paciente',
             userType: 'doctor'
         })
+        try {
+            const { markMessagesAsRead } = await import('../chat/chat-service.js');
+            const chatRoomId = chatRoom.id || chatRoom.Id;
+            const visitorDoctorId = doctorState.currentDoctorData.doctorId;
+            
+            await markMessagesAsRead(chatRoomId, visitorDoctorId);
+            console.log('✅ Mensajes marcados como leídos');
+            
+            // Actualizar el badge del botón a 0
+            const chatButton = document.querySelector(`.open-chat-btn[data-patient-id="${patientId}"]`);
+            if (chatButton) {
+                updateChatButtonBadge(chatButton, 0);
+            }
+        } catch (error) {
+            console.error('⚠️ Error marcando mensajes como leídos:', error);
+        }
 
         showNotification('Chat iniciado', 'success')
+
     } catch(error){
         console.error('Error al abrir chat: ', error)
         showNotification('Ocurrio un error al intentar abrir el chat', 'error')
@@ -1000,32 +1149,32 @@ export function initializeAttendButtons() {
     // Boton de chat
     document.querySelectorAll('.open-chat-btn').forEach(button => {
         replaceEventListener(button, 'click', async function(e) {
-            e.preventDefault()
-            e.stopPropagation()
+            e.preventDefault();
+            e.stopPropagation();
 
-            const appointmentId = this.getAttribute('data-appointment-id')
-            const patientId = this.getAttribute('data-patient-id')
-            const patientName = this.getAttribute('data-patient-name')
+            const appointmentId = this.getAttribute('data-appointment-id');
+            const patientId = this.getAttribute('data-patient-id');
+            const patientName = this.getAttribute('data-patient-name');
 
-            console.log('Click en boton de chat: ', { appointmentId, patientId, patientName })
+            console.log('Click en boton de chat: ', { appointmentId, patientId, patientName });
 
-            // ✅ Validar todos los datos
             if (!appointmentId || !patientId || !patientName) {
-                console.error('❌ Datos incompletos:', { 
-                    appointmentId: appointmentId || 'FALTA',
-                    patientId: patientId || 'FALTA',
-                    patientName: patientName || 'FALTA'
-                });
+                console.error('❌ Datos incompletos');
                 showNotification('No se puede abrir el chat: datos incompletos', 'error');
                 return;
             }
             
+            // Limpiar el badge al abrir el chat
+            updateChatButtonBadge(this, 0);
+            
             await handleDoctorChatOpen(appointmentId, patientId, patientName);
-        })
-    })
+        });
+    });
     
     // Inicializar dropdowns (para los botones de menú)
     initializeDropdowns();
+    // ✅ NUEVO: Inicializar badges de chat
+    initializeChatBadges();
 }
 
 function initializeDropdowns() {
@@ -1228,5 +1377,37 @@ export function updateCounter(elementId, change) {
         element.textContent = Math.max(0, currentValue + change);
     }
 }
+
+// ===================================
+// POLLING DE BADGES DE CHAT
+// ===================================
+
+let chatBadgeInterval = null;
+
+export function startChatBadgePolling() {
+    // Limpiar intervalo anterior si existe
+    if (chatBadgeInterval) {
+        clearInterval(chatBadgeInterval);
+    }
+    
+    // Actualizar inmediatamente
+    initializeChatBadges();
+    
+    // Luego cada 30 segundos
+    chatBadgeInterval = setInterval(() => {
+        initializeChatBadges();
+    }, 30000);
+    
+    console.log('✅ Polling de badges de chat iniciado');
+}
+
+export function stopChatBadgePolling() {
+    if (chatBadgeInterval) {
+        clearInterval(chatBadgeInterval);
+        chatBadgeInterval = null;
+        console.log('🛑 Polling de badges de chat detenido');
+    }
+}
+
 
 export { doctorState };
