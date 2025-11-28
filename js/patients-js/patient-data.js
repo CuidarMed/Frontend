@@ -28,6 +28,13 @@ export async function loadPatientData() {
         console.log("=== PACIENTE OBTENIDO DEL BACKEND ===");
         console.log("Respuesta completa:", patientResponse);
         
+        // Validar que la respuesta sea válida
+        if (!patientResponse || patientResponse.ok === true || !patientResponse.patientId) {
+            console.warn("⚠️ Respuesta inválida o paciente no encontrado:", patientResponse);
+            // No actualizar appState.currentPatient si la respuesta es inválida
+            return;
+        }
+        
         appState.currentPatient = normalizePatient(patientResponse);
         
         console.log("=== PACIENTE NORMALIZADO ===");

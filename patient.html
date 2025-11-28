@@ -169,16 +169,7 @@
                         <div class="form-group">
                             <label for="specialty">Especialidad:</label>
                             <select id="specialty" name="specialty" required>
-                                <option value="">Seleccionar especialidad</option>
-                                <option value="cardiologia">Cardiología</option>
-                                <option value="psiquiatria">Psiquiatría</option>
-                                <option value="cirugia">Cirugía</option>
-                                <option value="clinico">Clínico</option>
-                                <option value="dermatologia">Dermatología</option>
-                                <option value="traumatologia">Traumatología</option>
-                                <option value="pediatria">Pediatría</option>
-                                <option value="ginecologia">Ginecología</option>
-                                <option value="neurologia">Neurología</option>
+                                <option value="">Cargando especialidades...</option>
                             </select>
                         </div>
                         <div class="form-group">
@@ -344,6 +335,9 @@
             <div class="prescription-card-footer">
             <button class="btn btn-primary btn-prescription-view">
                 <i class="fas fa-download"></i> Descargar
+            </button>
+            <button class="btn btn-secondary btn-prescription-hl7" style="margin-left: 0.5rem;">
+                <i class="fas fa-file-alt"></i> Descargar HL7
             </button>
         </div>
         </div>

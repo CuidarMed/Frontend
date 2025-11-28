@@ -26,9 +26,14 @@ export function initializeModals() {
     const timeSelect = document.getElementById('time');
 
     if (newAppointmentBtn && appointmentModal) {
-        newAppointmentBtn.addEventListener('click', () => {
+        newAppointmentBtn.addEventListener('click', async () => {
             appointmentModal.classList.remove('hidden');
-            loadDoctorsForAppointment();
+            
+            // Cargar especialidades desde la API
+            await loadSpecialtiesForAppointment();
+            
+            // Cargar doctores
+            await loadDoctorsForAppointment();
             
             if (doctorSelect) doctorSelect.innerHTML = '<option value="">Seleccionar médico</option>';
             if (dateInput) dateInput.value = '';
@@ -121,6 +126,54 @@ export function initializeModals() {
 }
 
 /**
+ * Carga especialidades desde la API y las muestra en el select
+ */
+async function loadSpecialtiesForAppointment() {
+    const specialtySelect = document.getElementById('specialty');
+    if (!specialtySelect) return;
+    
+    try {
+        const { Api } = await import('../api.js');
+        console.log('🔍 Cargando especialidades desde DirectoryMS...');
+        
+        const specialties = await Api.get('v1/Specialty');
+        const specialtiesArray = Array.isArray(specialties) ? specialties : (specialties?.value || []);
+        
+        console.log(`✅ Especialidades obtenidas: ${specialtiesArray.length}`, specialtiesArray);
+        
+        // Limpiar el select
+        specialtySelect.innerHTML = '<option value="">Seleccionar especialidad</option>';
+        
+        if (specialtiesArray.length === 0) {
+            specialtySelect.innerHTML = '<option value="">No hay especialidades disponibles</option>';
+            console.warn('⚠️ No se encontraron especialidades en la BD');
+            return;
+        }
+        
+        // Agregar cada especialidad al select
+        specialtiesArray.forEach((spec) => {
+            const name = spec.name || spec.Name || '';
+            if (!name) return; // Saltar si no tiene nombre
+            
+            const option = document.createElement('option');
+            option.value = name; // Usar el nombre como valor
+            option.textContent = name;
+            // Aplicar color si está disponible
+            if (spec.color || spec.Color) {
+                option.style.color = spec.color || spec.Color;
+            }
+            specialtySelect.appendChild(option);
+        });
+        
+        console.log(`✅ ${specialtiesArray.length} especialidades cargadas en el select`);
+    } catch (error) {
+        console.error('❌ Error al cargar especialidades:', error);
+        specialtySelect.innerHTML = '<option value="">Error al cargar especialidades</option>';
+        showNotification('No se pudieron cargar las especialidades. Intenta recargar la página.', 'error');
+    }
+}
+
+/**
  * Carga doctores para el formulario de turno
  */
 export async function loadDoctorsForAppointment(selectedSpecialty = null) {
@@ -137,30 +190,21 @@ export async function loadDoctorsForAppointment(selectedSpecialty = null) {
         doctorSelect.innerHTML = '<option value="">Seleccionar médico</option>';
         
         if (doctors && doctors.length > 0) {
-            const specialtyMap = {
-                'cardiologia': 'Cardiologo',
-                'dermatologia': 'Dermatologo',
-                'traumatologia': 'Traumatologo',
-                'pediatria': 'Pediatra',
-                'ginecologia': 'Ginecologo',
-                'neurologia': 'Neurologo'
-            };
-            
-            const backendSpecialty = selectedSpecialty ? specialtyMap[selectedSpecialty.toLowerCase()] : null;
+            // El valor del select es el nombre exacto de la especialidad de la BD (ej: "Cardiología", "Neurología")
+            const selectedSpecialtyName = selectedSpecialty ? selectedSpecialty.trim() : null;
             
             let doctorsAdded = 0;
             doctors.forEach(doctor => {
                 const doctorId = doctor.doctorId || doctor.DoctorId;
-                const doctorSpecialty = doctor.specialty || doctor.Specialty || '';
+                const doctorSpecialty = (doctor.specialty || doctor.Specialty || '').trim();
                 const firstName = doctor.firstName || doctor.FirstName || '';
                 const lastName = doctor.lastName || doctor.LastName || '';
                 
-                if (backendSpecialty) {
-                    const normalizedDoctorSpecialty = (doctorSpecialty || '').trim();
-                    const normalizedBackendSpecialty = (backendSpecialty || '').trim();
-                    
-                    if (normalizedDoctorSpecialty.toLowerCase() !== normalizedBackendSpecialty.toLowerCase()) {
-                        return;
+                // Si hay una especialidad seleccionada, filtrar por ella
+                if (selectedSpecialtyName) {
+                    // Comparar sin importar mayúsculas/minúsculas
+                    if (doctorSpecialty.toLowerCase() !== selectedSpecialtyName.toLowerCase()) {
+                        return; // Saltar este doctor si no coincide con la especialidad
                     }
                 }
                 
@@ -172,8 +216,8 @@ export async function loadDoctorsForAppointment(selectedSpecialty = null) {
                 doctorsAdded++;
             });
             
-            if (doctorsAdded === 0 && backendSpecialty) {
-                showNotification(`No hay médicos disponibles para la especialidad seleccionada`, 'warning');
+            if (doctorsAdded === 0 && selectedSpecialtyName) {
+                showNotification(`No hay médicos disponibles para la especialidad "${selectedSpecialtyName}"`, 'warning');
             }
         }
     } catch (error) {

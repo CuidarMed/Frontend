@@ -170,9 +170,24 @@ const setupPrescribeButton = (modal) => {
                     const { ApiClinical } = await import('../api.js');
                     
                     // Primero verificar si ya existe un encounter
-                    const existingEncounters = await ApiClinical.get(`v1/Encounter?appointmentId=${appointmentId}`);
+                    let existingEncounters = [];
+                    try {
+                        const result = await ApiClinical.get(`v1/Encounter?appointmentId=${appointmentId}`);
+                        // Asegurar que sea un array
+                        existingEncounters = Array.isArray(result) ? result : (result ? [result] : []);
+                    } catch (getError) {
+                        // Si es 404 o no hay encounters, continuar para crear uno nuevo
+                        if (getError.status === 404 || getError.message?.includes('no tiene encuentros')) {
+                            console.log('ℹ️ No se encontró encounter existente, se creará uno nuevo');
+                            existingEncounters = [];
+                        } else {
+                            // Para otros errores, loguear pero continuar
+                            console.warn('⚠️ Error al buscar encounter, se intentará crear uno nuevo:', getError);
+                            existingEncounters = [];
+                        }
+                    }
                     
-                    if (existingEncounters?.length > 0) {
+                    if (existingEncounters && existingEncounters.length > 0) {
                         // Ya existe un encounter guardado
                         encounterId = existingEncounters[0].encounterId || existingEncounters[0].EncounterId;
                         console.log('✅ Encounter existente encontrado:', encounterId);
@@ -187,26 +202,31 @@ const setupPrescribeButton = (modal) => {
                         const assessmentField = modal.querySelector('#encounter-assessment');
                         const planField = modal.querySelector('#encounter-plan');
                         
+                        // Si faltan datos, permitir continuar sin encounterId (el modal de receta lo manejará)
                         if (!reasonsField?.value?.trim() || 
                             !subjectiveField?.value?.trim() || 
                             !objectiveField?.value?.trim() || 
                             !assessmentField?.value?.trim() || 
                             !planField?.value?.trim()) {
                             
+                            console.warn('⚠️ Faltan datos en el formulario, se continuará sin encounterId');
                             const { showNotification } = await import('./doctor-ui.js');
-                            showNotification('Por favor completa todos los campos de la consulta (S, O, A, P) antes de emitir una receta', 'warning');
-                            return;
-                        }
+                            showNotification('No se encontró una consulta guardada. La receta se guardará sin asociarla a una consulta específica.', 'warning');
+                            encounterId = null;
+                        } else {
                         
                         // Guardar el encounter primero
-                        const doctorId = modal.querySelector('#encounter-form').dataset.doctorId || 
-                                       (await import('./doctor-core.js')).doctorState.currentDoctorData?.doctorId;
+                        const { doctorState, getId } = await import('./doctor-core.js');
+                        const doctorId = getId(doctorState.currentDoctorData, 'doctorId');
                         
                         if (!doctorId) {
                             const { showNotification } = await import('./doctor-ui.js');
-                            showNotification('No se pudo identificar al médico', 'error');
+                            showNotification('No se pudo identificar al médico. Por favor, recarga la página.', 'error');
+                            console.error('❌ No se pudo obtener doctorId:', doctorState.currentDoctorData);
                             return;
                         }
+                        
+                        console.log('✅ DoctorId obtenido:', doctorId);
                         
                         const encounterData = {
                             PatientId: parseInt(patientId),
@@ -218,7 +238,7 @@ const setupPrescribeButton = (modal) => {
                             Assessment: assessmentField.value.trim(),
                             Plan: planField.value.trim(),
                             Notes: modal.querySelector('#encounter-notes')?.value?.trim() || '',
-                            Status: 'IN_PROGRESS', // Aún en progreso, no completado
+                            Status: 'Open', // El validador solo acepta "Open" o "Signed"
                             Date: new Date().toISOString()
                         };
                         
@@ -235,25 +255,50 @@ const setupPrescribeButton = (modal) => {
                             
                         } catch (saveError) {
                             console.error('❌ Error al guardar encounter:', saveError);
+                            console.error('   Status:', saveError.status);
+                            console.error('   Message:', saveError.message);
+                            console.error('   Details:', saveError.details);
                             
                             // Si ya existe (409), intentar obtenerlo de nuevo
                             if (saveError.status === 409) {
-                                const retryEncounters = await ApiClinical.get(`v1/Encounter?appointmentId=${appointmentId}`);
-                                if (retryEncounters?.length > 0) {
-                                    encounterId = retryEncounters[0].encounterId || retryEncounters[0].EncounterId;
-                                    console.log('✅ Encounter ya existía, usando ID:', encounterId);
+                                try {
+                                    const retryEncounters = await ApiClinical.get(`v1/Encounter?appointmentId=${appointmentId}`);
+                                    if (retryEncounters?.length > 0) {
+                                        encounterId = retryEncounters[0].encounterId || retryEncounters[0].EncounterId;
+                                        console.log('✅ Encounter ya existía, usando ID:', encounterId);
+                                    }
+                                } catch (retryError) {
+                                    console.error('❌ Error al obtener encounter existente:', retryError);
+                                    throw saveError;
                                 }
                             } else {
+                                // Mostrar detalles del error de validación
+                                if (saveError.status === 400 && saveError.details) {
+                                    const detailsArray = Object.entries(saveError.details).map(([field, errors]) => {
+                                        const errorList = Array.isArray(errors) ? errors.join(', ') : errors;
+                                        return `${field}: ${errorList}`;
+                                    });
+                                    console.error('   Errores de validación:', detailsArray);
+                                    throw new Error(`Error de validación: ${detailsArray.join('; ')}`);
+                                }
                                 throw saveError;
                             }
+                        }
                         }
                     }
                     
                 } catch (err) {
                     console.error('❌ Error al procesar encounter:', err);
-                    const { showNotification } = await import('./doctor-ui.js');
-                    showNotification('Error al preparar la receta. Por favor, intenta nuevamente.', 'error');
-                    return;
+                    
+                    // Si el error es que no hay encounters, permitir continuar sin encounterId
+                    if (err.message?.includes('no tiene encuentros') || err.status === 404) {
+                        console.warn('⚠️ No se encontró encounter, se continuará sin encounterId');
+                        encounterId = null;
+                    } else {
+                        const { showNotification } = await import('./doctor-ui.js');
+                        showNotification('Error al preparar la receta. Por favor, intenta nuevamente.', 'error');
+                        return;
+                    }
                 }
                 
                 // Ahora abrir el modal de receta con el encounterId válido
@@ -616,7 +661,20 @@ async function initializeVideoCall(modal, appointmentId, patientId, patientName)
             
         } catch (error) {
             console.error('❌ Error al inicializar videollamada:', error);
-            showVideoError(videoContainer, `Videollamada no disponible: ${error.message || 'Error desconocido'}`);
+            
+            // Mensajes de error más específicos
+            let errorMessage = 'Error desconocido';
+            if (error.status === 404) {
+                errorMessage = 'El servicio de videollamadas no está disponible. Por favor, contacta al administrador.';
+            } else if (error.status === 500) {
+                errorMessage = 'Error en el servidor de videollamadas. Por favor, intenta más tarde.';
+            } else if (error.message) {
+                errorMessage = error.message;
+            } else if (typeof error === 'string') {
+                errorMessage = error;
+            }
+            
+            showVideoError(videoContainer, `Videollamada no disponible: ${errorMessage}`);
         }
         
     } catch (error) {
@@ -658,7 +716,18 @@ function startVideoCall(videoContainer, roomUrl, token, modal, appointmentId) {
             })
             .catch((error) => {
                 console.error('❌ Error al unirse a la videollamada:', error);
-                showVideoError(videoContainer, `Error al conectar: ${error.message || 'Error desconocido'}`);
+                
+                // Manejar errores específicos de Daily.co
+                let errorMessage = 'Error desconocido';
+                if (error?.message) {
+                    errorMessage = error.message;
+                } else if (typeof error === 'string') {
+                    errorMessage = error;
+                } else if (error?.error?.message) {
+                    errorMessage = error.error.message;
+                }
+                
+                showVideoError(videoContainer, `Error al conectar: ${errorMessage}`);
             });
         
         // Manejar eventos

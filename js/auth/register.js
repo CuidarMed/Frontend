@@ -154,11 +154,38 @@ document.addEventListener("DOMContentLoaded", () => {
 
         try {
             if (role === "Patient") {
-                const patientResponse = await Api.get(`v1/Patient/User/${userId}`);
+                console.log(`🔍 Buscando paciente con UserId: ${userId}`);
+                let patientResponse;
+                let attempts = 0;
+                const maxAttempts = 5;
+                
+                // Intentar obtener el paciente con retry (puede tardar un poco en crearse)
+                while (attempts < maxAttempts) {
+                    try {
+                        patientResponse = await Api.get(`v1/Patient/User/${userId}`);
+                        if (patientResponse?.patientId || patientResponse?.PatientId) {
+                            break;
+                        }
+                    } catch (err) {
+                        if (err.message && err.message.includes("404")) {
+                            console.log(`⏳ Paciente aún no disponible (404), intentando nuevamente... (intento ${attempts + 1}/${maxAttempts})`);
+                        } else {
+                            console.error(`❌ Error al buscar paciente (intento ${attempts + 1}):`, err);
+                        }
+                    }
+                    
+                    if (attempts < maxAttempts - 1) {
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    }
+                    attempts++;
+                }
+                
                 const patientId = patientResponse?.patientId ?? patientResponse?.PatientId;
                 if (!patientId) {
-                    throw new Error("No se pudo identificar el paciente creado en DirectoryMS");
+                    throw new Error(`No se pudo identificar el paciente creado en DirectoryMS para userId ${userId} después de ${maxAttempts} intentos. Asegúrate de que DirectoryMS esté corriendo.`);
                 }
+                
+                console.log(`✅ Paciente encontrado con ID: ${patientId}`);
 
                 // Construir payload con todos los datos del paciente
                 const payload = {
@@ -167,15 +194,9 @@ document.addEventListener("DOMContentLoaded", () => {
                     Dni: parseInt(userData.dni, 10) || 0,
                 };
 
-                // Dirección
-                if (patientExtras?.address && patientExtras.address.trim()) {
-                    payload.Adress = patientExtras.address.trim();
-                }
-                
-                // Teléfono
-                if (patientExtras?.phone && patientExtras.phone.trim()) {
-                    payload.Phone = patientExtras.phone.trim();
-                }
+                // Dirección - SIEMPRE enviarla (incluso si está vacía, el backend solo actualiza si no está vacío)
+                payload.Adress = (patientExtras?.address?.trim() || '');
+                console.log("Enviando dirección al backend:", payload.Adress);
                 
                 // Fecha de nacimiento - siempre enviarla si está disponible
                 if (patientExtras?.birthDate) {
@@ -192,104 +213,230 @@ document.addEventListener("DOMContentLoaded", () => {
                             console.error("Formato de fecha inválido:", birthDate);
                         }
                     }
-                }
-                
-                // Obra social - siempre enviarla si está disponible
-                if (patientExtras?.healthPlan && patientExtras.healthPlan.trim()) {
-                    payload.HealthPlan = patientExtras.healthPlan.trim();
-                    console.log("Enviando obra social al backend:", payload.HealthPlan);
-                }
-                
-                // Número de afiliado - siempre enviarlo si está disponible
-                const membershipNumber = patientExtras?.membershipNumber?.trim();
-                if (membershipNumber) {
-                    payload.MembershipNumber = membershipNumber;
-                    console.log("Enviando número de afiliado al backend:", payload.MembershipNumber);
                 } else {
-                    console.warn("Número de afiliado vacío o no disponible:", patientExtras?.membershipNumber);
+                    console.warn("⚠️ No se proporcionó fecha de nacimiento en patientExtras");
                 }
+                
+                // Obra social - SIEMPRE enviarla (incluso si está vacía, el backend solo actualiza si no está vacío)
+                payload.HealthPlan = (patientExtras?.healthPlan?.trim() || '');
+                console.log("Enviando obra social al backend:", payload.HealthPlan);
+                
+                // Número de afiliado - SIEMPRE enviarlo (incluso si está vacío, el backend solo actualiza si no está vacío)
+                payload.MembershipNumber = (patientExtras?.membershipNumber?.trim() || '');
+                console.log("Enviando número de afiliado al backend:", payload.MembershipNumber);
 
                 console.log("Payload completo para actualizar paciente:", JSON.stringify(payload, null, 2));
                 console.log("patientExtras original:", JSON.stringify(patientExtras, null, 2));
+                console.log(`🔧 Intentando actualizar paciente ID: ${patientId} con PATCH`);
                 
-                const updateResponse = await Api.patch(`v1/Patient/${patientId}`, payload);
-                console.log("Respuesta de actualización:", updateResponse);
-                
-                // Verificar que los datos se actualizaron correctamente
-                if (updateResponse) {
-                    console.log("Datos actualizados - Obra Social:", updateResponse.HealthPlan || updateResponse.healthPlan);
-                    console.log("Datos actualizados - Número Afiliado:", updateResponse.MembershipNumber || updateResponse.membershipNumber);
+                try {
+                    console.log(`🚀 Ejecutando PATCH a v1/Patient/${patientId}`);
+                    console.log(`📦 Payload a enviar:`, JSON.stringify(payload, null, 2));
+                    
+                    const updateResponse = await Api.patch(`v1/Patient/${patientId}`, payload);
+                    
+                    console.log("✅ Respuesta de actualización recibida:", updateResponse);
+                    
+                    // Verificar que los datos se actualizaron correctamente
+                    if (updateResponse) {
+                        const updatedAdress = updateResponse.Adress || updateResponse.adress || '';
+                        const updatedHealthPlan = updateResponse.HealthPlan || updateResponse.healthPlan || '';
+                        const updatedMembershipNumber = updateResponse.MembershipNumber || updateResponse.membershipNumber || '';
+                        
+                        console.log("✅ Datos actualizados - Dirección:", updatedAdress || 'VACÍA');
+                        console.log("✅ Datos actualizados - Obra Social:", updatedHealthPlan || 'VACÍA');
+                        console.log("✅ Datos actualizados - Número Afiliado:", updatedMembershipNumber || 'VACÍA');
+                        
+                        // Verificar que los datos se guardaron correctamente
+                        if (payload.Adress && !updatedAdress) {
+                            console.warn("⚠️ ADVERTENCIA: Dirección enviada pero no se guardó en la respuesta");
+                        }
+                        if (payload.HealthPlan && !updatedHealthPlan) {
+                            console.warn("⚠️ ADVERTENCIA: Obra Social enviada pero no se guardó en la respuesta");
+                        }
+                        if (payload.MembershipNumber && !updatedMembershipNumber) {
+                            console.warn("⚠️ ADVERTENCIA: Número de Afiliado enviado pero no se guardó en la respuesta");
+                        }
+                    } else {
+                        console.warn("⚠️ Respuesta de actualización vacía o nula");
+                    }
+                    
+                    console.log("✅ Paciente actualizado exitosamente");
+                } catch (updateError) {
+                    console.error("❌ ERROR CRÍTICO al actualizar paciente:", updateError);
+                    console.error("❌ Detalles completos del error:", {
+                        message: updateError.message,
+                        status: updateError.status,
+                        statusText: updateError.statusText,
+                        details: updateError.details,
+                        stack: updateError.stack
+                    });
+                    // Re-lanzar el error para que se maneje en el catch externo
+                    throw updateError;
                 }
-                
-                console.log("Paciente actualizado exitosamente");
             } else if (role === "Doctor") {
+                console.log(`🔍 Buscando doctor con UserId: ${userId}`);
                 // Intentar obtener el doctor por UserId con retry
                 let doctor = null;
                 let attempts = 0;
-                const maxAttempts = 5;
+                const maxAttempts = 10; // Aumentado a 10 intentos para dar más tiempo
                 
                 while (!doctor && attempts < maxAttempts) {
                     try {
                         // Usar el endpoint específico para obtener doctor por UserId
+                        console.log(`🔍 Intento ${attempts + 1}/${maxAttempts}: Buscando doctor con UserId ${userId}`);
                         doctor = await Api.get(`v1/Doctor/User/${userId}`);
                         
+                        if (doctor && (doctor.doctorId || doctor.DoctorId)) {
+                            console.log(`✅ Doctor encontrado en intento ${attempts + 1}`);
+                            break;
+                        }
+                        
                         if (!doctor && attempts < maxAttempts - 1) {
-                            console.log(`Doctor no encontrado, intentando nuevamente... (intento ${attempts + 1}/${maxAttempts})`);
-                            await new Promise(resolve => setTimeout(resolve, 500));
+                            console.log(`⏳ Doctor no encontrado, esperando 1 segundo antes del siguiente intento... (intento ${attempts + 1}/${maxAttempts})`);
+                            await new Promise(resolve => setTimeout(resolve, 1000)); // Aumentado a 1 segundo
                         }
                     } catch (err) {
                         // Si es 404, el doctor aún no existe, intentar de nuevo
-                        if (err.message && err.message.includes("404")) {
-                            console.log(`Doctor aún no disponible (404), intentando nuevamente... (intento ${attempts + 1}/${maxAttempts})`);
+                        if (err.message && (err.message.includes("404") || err.message.includes("Not Found"))) {
+                            console.log(`⏳ Doctor aún no disponible (404), esperando 1 segundo antes del siguiente intento... (intento ${attempts + 1}/${maxAttempts})`);
                         } else {
-                            console.error(`Error al buscar doctor (intento ${attempts + 1}):`, err);
+                            console.error(`❌ Error al buscar doctor (intento ${attempts + 1}):`, err.message);
                         }
                         if (attempts < maxAttempts - 1) {
-                            await new Promise(resolve => setTimeout(resolve, 500));
+                            await new Promise(resolve => setTimeout(resolve, 1000)); // Aumentado a 1 segundo
                         }
                     }
                     attempts++;
                 }
 
-                if (!doctor) {
-                    throw new Error(`No se pudo encontrar el registro de doctor recién creado en DirectoryMS para userId ${userId} después de ${maxAttempts} intentos. Asegúrate de que DirectoryMS esté corriendo.`);
+                if (!doctor || (!doctor.doctorId && !doctor.DoctorId)) {
+                    console.error(`❌ No se pudo encontrar el doctor después de ${maxAttempts} intentos`);
+                    console.error(`❌ Última respuesta recibida:`, doctor);
+                    throw new Error(`No se pudo encontrar el registro de doctor recién creado en DirectoryMS para userId ${userId} después de ${maxAttempts} intentos. Verifica que DirectoryMS esté corriendo y que el doctor se haya creado correctamente.`);
                 }
 
                 const doctorId = doctor.doctorId ?? doctor.DoctorId;
                 
                 if (!doctorId) {
-                    throw new Error("No se pudo obtener el ID del doctor");
+                    console.error(`❌ Doctor encontrado pero sin ID:`, doctor);
+                    throw new Error("No se pudo obtener el ID del doctor. La respuesta del servidor no contiene doctorId.");
                 }
+                
+                console.log(`✅ Doctor encontrado con ID: ${doctorId}`);
 
+                // Construir payload - SIEMPRE enviar todos los campos, incluso si están vacíos
                 const payload = {
                     FirstName: userData.firstName,
                     LastName: userData.lastName,
-                    LicenseNumber: (doctorExtras?.licenseNumber && doctorExtras.licenseNumber.trim()) ? doctorExtras.licenseNumber.trim() : "PENDING",
-                    Specialty: (doctorExtras?.specialty && doctorExtras.specialty.trim()) ? doctorExtras.specialty.trim() : null,
-                    Biography: (doctorExtras?.biography && doctorExtras.biography.trim()) ? doctorExtras.biography.trim() : null,
-                    Phone: (doctorExtras?.phone && doctorExtras.phone.trim()) ? doctorExtras.phone.trim() : null,
                 };
+                
+                // Número de licencia - SIEMPRE enviarlo
+                payload.LicenseNumber = (doctorExtras?.licenseNumber?.trim() || 'PENDING');
+                console.log("Enviando número de licencia al backend:", payload.LicenseNumber);
+                
+                // Especialidad - SIEMPRE enviarla (puede ser null si está vacía)
+                if (doctorExtras?.specialty && doctorExtras.specialty.trim()) {
+                    payload.Specialty = doctorExtras.specialty.trim();
+                } else {
+                    payload.Specialty = null; // Enviar null explícitamente si está vacía
+                }
+                console.log("Enviando especialidad al backend:", payload.Specialty);
+                
+                // Biografía - SIEMPRE enviarla (puede ser null si está vacía)
+                if (doctorExtras?.biography && doctorExtras.biography.trim()) {
+                    payload.Biography = doctorExtras.biography.trim();
+                } else {
+                    payload.Biography = null; // Enviar null explícitamente si está vacía
+                }
+                console.log("Enviando biografía al backend:", payload.Biography ? 'PRESENTE' : 'VACÍA');
+                
+                // Teléfono - opcional
+                if (doctorExtras?.phone && doctorExtras.phone.trim()) {
+                    payload.Phone = doctorExtras.phone.trim();
+                }
 
                 console.log("=== ACTUALIZANDO DOCTOR ===");
                 console.log("doctorId:", doctorId);
                 console.log("Payload para doctor:", JSON.stringify(payload, null, 2));
-                console.log("doctorExtras:", JSON.stringify(doctorExtras, null, 2));
+                console.log("doctorExtras original:", JSON.stringify(doctorExtras, null, 2));
                 console.log("Specialty capturado:", doctorExtras?.specialty);
                 console.log("Specialty en payload:", payload.Specialty);
                 console.log("LicenseNumber en payload:", payload.LicenseNumber);
                 console.log("Biography en payload:", payload.Biography);
 
-                const updateResponse = await Api.patch(`v1/Doctor/${doctorId}`, payload);
-                console.log("Respuesta de actualización:", updateResponse);
-                console.log("Doctor actualizado exitosamente");
+                try {
+                    console.log(`🚀 Ejecutando PATCH a v1/Doctor/${doctorId}`);
+                    console.log(`📦 Payload a enviar:`, JSON.stringify(payload, null, 2));
+                    
+                    const updateResponse = await Api.patch(`v1/Doctor/${doctorId}`, payload);
+                    
+                    console.log("✅ Respuesta de actualización recibida:", updateResponse);
+                    
+                    // Verificar que los datos se actualizaron correctamente
+                    if (updateResponse) {
+                        const updatedSpecialty = updateResponse.Specialty || updateResponse.specialty || '';
+                        const updatedLicenseNumber = updateResponse.LicenseNumber || updateResponse.licenseNumber || '';
+                        const updatedBiography = updateResponse.Biography || updateResponse.biography || '';
+                        
+                        console.log("✅ Datos actualizados - Especialidad:", updatedSpecialty || 'VACÍA');
+                        console.log("✅ Datos actualizados - Matrícula:", updatedLicenseNumber || 'VACÍA');
+                        console.log("✅ Datos actualizados - Biografía:", updatedBiography ? 'PRESENTE' : 'VACÍA');
+                        
+                        // Verificar que los datos se guardaron correctamente
+                        if (payload.Specialty && !updatedSpecialty) {
+                            console.warn("⚠️ ADVERTENCIA: Especialidad enviada pero no se guardó en la respuesta");
+                        }
+                        if (payload.LicenseNumber && !updatedLicenseNumber) {
+                            console.warn("⚠️ ADVERTENCIA: Matrícula enviada pero no se guardó en la respuesta");
+                        }
+                        if (payload.Biography && !updatedBiography) {
+                            console.warn("⚠️ ADVERTENCIA: Biografía enviada pero no se guardó en la respuesta");
+                        }
+                    } else {
+                        console.warn("⚠️ Respuesta de actualización vacía o nula");
+                    }
+                    
+                    console.log("✅ Doctor actualizado exitosamente");
+                } catch (updateError) {
+                    console.error("❌ ERROR CRÍTICO al actualizar doctor:", updateError);
+                    console.error("❌ Detalles completos del error:", {
+                        message: updateError.message,
+                        status: updateError.status,
+                        statusText: updateError.statusText,
+                        details: updateError.details,
+                        stack: updateError.stack
+                    });
+                    // Re-lanzar el error para que se maneje en el catch externo
+                    throw updateError;
+                }
             }
         } catch (error) {
-            console.warn("No se pudo sincronizar la información adicional en DirectoryMS", error);
+            console.error("❌ ERROR al sincronizar la información adicional en DirectoryMS:", error);
+            console.error("❌ Tipo de error:", error.constructor.name);
+            console.error("❌ Mensaje:", error.message);
+            console.error("❌ Stack trace completo:", error.stack);
+            if (error.details) {
+                console.error("❌ Detalles adicionales:", error.details);
+            }
+            // Re-lanzar el error para que se maneje en el catch del submit
+            throw error;
         }
     }
 
+    // Protección contra múltiples envíos
+    let isSubmitting = false;
+
     form.addEventListener("submit", async (event) => {
         event.preventDefault();
+
+        // Prevenir múltiples envíos simultáneos
+        if (isSubmitting) {
+            console.warn("⚠️ Intento de envío duplicado bloqueado");
+            return;
+        }
+
+        isSubmitting = true;
 
         const selectedRole = roleInput.value || "Patient";
 
@@ -300,7 +447,7 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-        // Construir userData - ImageUrl se envía como null para que el backend use su valor por defecto
+        // Construir userData - ImageUrl se envía como cadena vacía para que el backend use su valor por defecto
         const userData = {
             firstName: document.getElementById("firstName").value.trim(),
             lastName: document.getElementById("lastName").value.trim(),
@@ -308,7 +455,7 @@ document.addEventListener("DOMContentLoaded", () => {
             dni: document.getElementById("dni").value.trim(),
             password: passwordValue,
             role: selectedRole,
-            imageUrl: null // Enviar explícitamente null para que el backend use el valor por defecto
+            imageUrl: "" // Enviar cadena vacía para que el backend use el valor por defecto
         };
 
         if (!userData.firstName || !userData.lastName || !userData.email || !userData.dni || !userData.password) {
@@ -394,8 +541,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
             try {
                 console.log("Sincronizando perfil en DirectoryMS...");
-                // Esperar un poco para asegurar que el doctor se haya creado en DirectoryMS
+                // Esperar un poco para asegurar que el doctor/paciente se haya creado en DirectoryMS
                 if (selectedRole === "Doctor") {
+                    console.log("⏳ Esperando 2 segundos para que DirectoryMS cree el doctor...");
+                    await new Promise(resolve => setTimeout(resolve, 2000)); // Aumentado a 2 segundos
+                } else if (selectedRole === "Patient") {
+                    console.log("⏳ Esperando 1 segundo para que DirectoryMS cree el paciente...");
                     await new Promise(resolve => setTimeout(resolve, 1000));
                 }
                 await syncDirectoryProfile(
@@ -444,6 +595,7 @@ document.addEventListener("DOMContentLoaded", () => {
             // Mostrar solo el mensaje de error específico
             alert(`Error al crear la cuenta:\n\n${errorMessage}`);
         } finally {
+            isSubmitting = false; // Permitir nuevos envíos
             button.disabled = false;
             button.innerHTML = '<i class="fas fa-user-plus"></i> Crear Cuenta';
         }

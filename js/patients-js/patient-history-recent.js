@@ -35,9 +35,41 @@ export async function loadRecentPatientHistory() {
         console.log('🔍 Cargando historial reciente para patientId:', patientId);
         console.log('📅 Rango de fechas:', from.toISOString(), 'hasta', now.toISOString());
 
-        const response = await ApiClinical.get(
-            `v1/Encounter?patientId=${patientId}&from=${from.toISOString()}&to=${now.toISOString()}`
-        );
+        let response;
+        try {
+            // Construir la URL con parámetros codificados correctamente
+            const fromParam = encodeURIComponent(from.toISOString());
+            const toParam = encodeURIComponent(now.toISOString());
+            const endpoint = `v1/Encounter?patientId=${patientId}&from=${fromParam}&to=${toParam}`;
+            
+            console.log('📡 Endpoint completo:', endpoint);
+            
+            response = await ApiClinical.get(endpoint);
+            
+            console.log('📥 Respuesta recibida:', response);
+        } catch (error) {
+            console.error('❌ Error al obtener encounters:', error);
+            // Si el error es que no hay encounters, mostrar mensaje apropiado
+            if (error.message && error.message.includes('no tiene encuentros')) {
+                historyList.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-file-medical"></i>
+                        <p>No hay consultas recientes</p>
+                    </div>`;
+                return;
+            }
+            // Si es un error 404, puede ser que el endpoint no exista o el servicio no esté disponible
+            if (error.status === 404) {
+                console.error('❌ Endpoint no encontrado (404). Verificar que ClinicalMS esté corriendo y que la ruta sea correcta.');
+                historyList.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <p>No se pudo conectar con el servicio de historial médico</p>
+                    </div>`;
+                return;
+            }
+            throw error; // Re-lanzar si es otro tipo de error
+        }
 
         const encounters = Array.isArray(response) ? response : response?.value || [];
 

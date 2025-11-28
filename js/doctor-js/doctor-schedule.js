@@ -278,19 +278,36 @@ function generateAppointmentHTML(apt) {
  * Obtiene los botones de acción según el estado
  */
 function getActionButtons(status, appointmentId, patientId, patientName) {
+    const dataAttrs = `data-appointment-id="${appointmentId}" data-patient-id="${patientId}" data-patient-name="${patientName}"`;
+    
     if (status === 'COMPLETED') {
-        return '<span style="padding: 0.5rem 1rem; font-size: 0.875rem; color: #10b981; font-weight: 600; text-align: center; display: block;"><i class="fas fa-check-circle"></i> Consulta realizada</span>';
+        return `
+            <span style="padding: 0.5rem 1rem; font-size: 0.875rem; color: #10b981; font-weight: 600; text-align: center; display: block; margin-bottom: 0.5rem;"><i class="fas fa-check-circle"></i> Consulta realizada</span>
+            <button class="btn btn-info btn-sm btn-hl7-download-agenda" 
+                    data-appointment-id="${appointmentId}" 
+                    data-patient-id="${patientId}"
+                    style="background: #10b981; color: white; border: none; padding: 0.625rem 1rem; font-size: 0.875rem; width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem; border-radius: 6px; cursor: pointer; font-weight: 500;">
+                <i class="fas fa-file-download"></i> Descargar HL7
+            </button>
+        `;
     }
     if (status === 'NO_SHOW') {
         return '<span style="padding: 0.5rem 1rem; font-size: 0.875rem; color: #6b7280; font-weight: 600; text-align: center; display: block;"><i class="fas fa-user-slash"></i> No asistió</span>';
     }
-    if (status === 'SCHEDULED' || status === 'CONFIRMED') {
-        return `<button class="btn btn-primary btn-sm attend-appointment-btn" data-appointment-id="${appointmentId}" data-patient-id="${patientId}" data-patient-name="${patientName}" style="padding: 0.625rem 1rem; font-size: 0.875rem; width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem;"><i class="fas fa-video"></i> Atender</button>`;
+    if (status === 'SCHEDULED') {
+        return `<button class="btn btn-primary btn-sm attend-appointment-btn" ${dataAttrs} style="padding: 0.625rem 1rem; font-size: 0.875rem; width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem;"><i class="fas fa-video"></i> Atender</button>`;
+    }
+    if (status === 'CONFIRMED') {
+        return `
+            <button class="btn btn-primary btn-sm attend-appointment-btn" ${dataAttrs} style="padding: 0.625rem 1rem; font-size: 0.875rem; width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem;"><i class="fas fa-video"></i> Atender</button>
+            <button class="btn btn-chat-doctor btn-sm open-chat-btn" ${dataAttrs} style="background: #10b981; color: white; border: none; padding: 0.625rem 1rem; font-size: 0.875rem; width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem;"><i class="fas fa-comments"></i> Chat</button>
+        `;
     }
     if (status === 'IN_PROGRESS') {
         return `
-            <button class="btn btn-success btn-sm complete-appointment-btn" data-appointment-id="${appointmentId}" data-patient-id="${patientId}" data-patient-name="${patientName}" style="padding: 0.625rem 1rem; font-size: 0.875rem; width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem;"><i class="fas fa-check"></i> Completar</button>
+            <button class="btn btn-success btn-sm complete-appointment-btn" ${dataAttrs} style="padding: 0.625rem 1rem; font-size: 0.875rem; width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem;"><i class="fas fa-check"></i> Completar</button>
             <button class="btn btn-warning btn-sm no-show-appointment-btn" data-appointment-id="${appointmentId}" style="padding: 0.625rem 1rem; font-size: 0.875rem; width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem;"><i class="fas fa-times"></i> No asistió</button>
+            <button class="btn btn-chat-doctor btn-sm open-chat-btn" ${dataAttrs} style="background: #10b981; color: white; border: none; padding: 0.625rem 1rem; font-size: 0.875rem; width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem;"><i class="fas fa-comments"></i> Chat</button>
         `;
     }
     return '';
@@ -300,7 +317,7 @@ function getActionButtons(status, appointmentId, patientId, patientName) {
  * Inicializa todos los event handlers
  */
 function initializeEventHandlers() {
-    import('./doctor-appointments.js').then(({ attendConsultation, updateAppointmentStatus }) => {
+    import('./doctor-appointments.js').then(({ attendConsultation, updateAppointmentStatus, handlerDoctorChatOpen }) => {
         // Botones de atender
         attachEventListeners('.attend-appointment-btn', async function() {
             const { appointmentId, patientId, patientName } = this.dataset;
@@ -325,6 +342,22 @@ function initializeEventHandlers() {
             }
         });
         
+        // Botones de chat
+        attachEventListeners('.open-chat-btn', async function() {
+            const appointmentId = this.getAttribute('data-appointment-id');
+            const patientId = this.getAttribute('data-patient-id');
+            const patientName = this.getAttribute('data-patient-name');
+            
+            console.log('Click en botón de chat desde agenda:', { appointmentId, patientId, patientName });
+            
+            if (appointmentId && patientId && patientName) {
+                await handlerDoctorChatOpen(appointmentId, patientId, patientName);
+            } else {
+                console.error('Datos incompletos para abrir chat');
+                showNotification('No se puede abrir el chat: datos incompletos', 'error');
+            }
+        });
+        
         // Selectores de estado
         attachEventListeners('.appointment-status-select', async function() {
             const appointmentId = this.dataset.appointmentId;
@@ -336,6 +369,33 @@ function initializeEventHandlers() {
                 if (agendaSection) await renderAgendaContent(agendaSection);
             }
         }, 'change');
+        
+        // Botones de descarga HL7
+        attachEventListeners('.btn-hl7-download-agenda', async function() {
+            const appointmentId = this.getAttribute('data-appointment-id');
+            const patientId = this.getAttribute('data-patient-id');
+            
+            if (appointmentId && patientId) {
+                // Deshabilitar el botón mientras se descarga
+                this.disabled = true;
+                const originalHTML = this.innerHTML;
+                this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Descargando...';
+                
+                try {
+                    const { downloadHl7Summary } = await import('./doctor-appointments.js');
+                    await downloadHl7Summary(appointmentId, patientId);
+                } catch (error) {
+                    console.error('Error al descargar HL7:', error);
+                    showNotification('Error al descargar el resumen HL7', 'error');
+                } finally {
+                    // Rehabilitar el botón
+                    this.disabled = false;
+                    this.innerHTML = originalHTML;
+                }
+            } else {
+                showNotification('No se puede descargar el resumen HL7: datos incompletos', 'error');
+            }
+        });
     });
 }
 
@@ -636,9 +696,9 @@ async function saveAvailability(formModal, parentModal, doctorId, availabilityId
         const [startH, startM] = formData.get('startTime').split(':');
         const [endH, endM] = formData.get('endTime').split(':');
 
+        // El backend espera el enum numérico (1-7), no el string
         const data = {
-            doctorId: doctorId,
-            dayOfWeek: dayString, // ← ← ← el backend lo quiere en texto
+            dayOfWeek: numericDay, // Enviar el número (1-7) que corresponde al enum
             startTime: `${startH.padStart(2, '0')}:${startM.padStart(2, '0')}:00`,
             endTime: `${endH.padStart(2, '0')}:${endM.padStart(2, '0')}:00`,
             durationMinutes: parseInt(formData.get('durationMinutes'))

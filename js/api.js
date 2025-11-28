@@ -1,14 +1,17 @@
 // ============================================
 // CONFIGURACIÓN DE URLs - Puedes cambiar esto para usar ngrok
 // ============================================
-// Para usar ngrok, descomenta y modifica las líneas de abajo:
-// const USE_NGROK = true;
-// const NGROK_DIRECTORY = 'https://abc123.ngrok.io';
-// const NGROK_AUTH = 'https://def456.ngrok.io';
-// const NGROK_SCHEDULING = 'https://ghi789.ngrok.io';
-// const NGROK_CLINICAL = 'https://jkl012.ngrok.io';
+// Para usar ngrok con reverse proxy (recomendado):
+// 1. Levanta nginx: .\levantar-nginx-ngrok.ps1
+// 2. Ejecuta: ngrok http 80
+// 3. Copia la URL HTTPS que te da ngrok (ej: https://abc123.ngrok.io)
+// 4. Pega esa URL en NGROK_BASE_URL abajo
+// 5. Cambia USE_NGROK a true
 
-const USE_NGROK = false; // Cambia a true para usar ngrok
+const USE_NGROK = true; // Cambia a true para usar ngrok
+const NGROK_BASE_URL = 'https://6cf7c59d6f1f.ngrok-free.app'; // URL de ngrok (sin / al final)
+
+// URLs individuales (si usas ngrok Pro con múltiples túneles)
 const NGROK_DIRECTORY = '';
 const NGROK_AUTH = '';
 const NGROK_SCHEDULING = '';
@@ -17,15 +20,19 @@ const NGROK_CLINICAL = '';
 const defaultHostnames = [window.location.hostname || "localhost", "localhost", "127.0.0.1"];
 
 // DirectoryMS: puertos Docker (8081) e IIS Express (5112)
-const DIRECTORY_API_BASE_URLS = USE_NGROK && NGROK_DIRECTORY
-  ? [`${NGROK_DIRECTORY}/api`]
+const DIRECTORY_API_BASE_URLS = USE_NGROK && NGROK_BASE_URL
+  ? [`${NGROK_BASE_URL}/api/directory`]  // Reverse proxy route
+  : USE_NGROK && NGROK_DIRECTORY
+  ? [`${NGROK_DIRECTORY}/api`]  // URL individual
   : [
       ...defaultHostnames.flatMap(host => [`http://${host}:8081/api`, `http://${host}:5112/api`])
     ].filter((value, index, self) => self.indexOf(value) === index);
 
 // AuthMS: puertos Docker (8082) e IIS Express (5093)
-const AUTH_API_BASE_URLS = USE_NGROK && NGROK_AUTH
-  ? [`${NGROK_AUTH}/api/v1`]
+const AUTH_API_BASE_URLS = USE_NGROK && NGROK_BASE_URL
+  ? [`${NGROK_BASE_URL}/api/auth`]  // Reverse proxy route
+  : USE_NGROK && NGROK_AUTH
+  ? [`${NGROK_AUTH}/api/v1`]  // URL individual
   : [
       ...defaultHostnames.flatMap(host => [
         `http://${host}:8082/api/v1`,  // Docker con /v1
@@ -34,15 +41,19 @@ const AUTH_API_BASE_URLS = USE_NGROK && NGROK_AUTH
     ].filter((value, index, self) => self.indexOf(value) === index);
 
 // SchedulingMS: puertos Docker (8083) e IIS Express (34372), Development (5140)
-const SCHEDULING_API_BASE_URLS = USE_NGROK && NGROK_SCHEDULING
-  ? [`${NGROK_SCHEDULING}/api`]
+const SCHEDULING_API_BASE_URLS = USE_NGROK && NGROK_BASE_URL
+  ? [`${NGROK_BASE_URL}/api/scheduling`]  // Reverse proxy route
+  : USE_NGROK && NGROK_SCHEDULING
+  ? [`${NGROK_SCHEDULING}/api`]  // URL individual
   : [
       ...defaultHostnames.flatMap(host => [`http://${host}:8083/api`, `http://${host}:34372/api`, `http://${host}:5140/api`])
     ].filter((value, index, self) => self.indexOf(value) === index);
 
 // ClinicalMS: puertos Docker (8084) e IIS Express (27124), Development (5073)
-const CLINICAL_API_BASE_URLS = USE_NGROK && NGROK_CLINICAL
-  ? [`${NGROK_CLINICAL}/api`]
+const CLINICAL_API_BASE_URLS = USE_NGROK && NGROK_BASE_URL
+  ? [`${NGROK_BASE_URL}/api/clinical`]  // Reverse proxy route
+  : USE_NGROK && NGROK_CLINICAL
+  ? [`${NGROK_CLINICAL}/api`]  // URL individual
   : [
       ...defaultHostnames.flatMap(host => [`http://${host}:8084/api`, `http://${host}:27124/api`, `http://${host}:5073/api`])
     ].filter((value, index, self) => self.indexOf(value) === index);
@@ -124,6 +135,12 @@ function subscribeTokenRefresh(callback) {
 
 function buildHeaders() {
   const headers = { "Content-Type": "application/json" };
+  
+  // Agregar header para evitar la página de advertencia de ngrok
+  if (USE_NGROK && NGROK_BASE_URL) {
+    headers["ngrok-skip-browser-warning"] = "true";
+  }
+  
   try {
     const token = localStorage.getItem("token");
     if (token) {
@@ -222,11 +239,17 @@ async function refreshAccessToken() {
     try {
       console.log("📡 Probando refresh en:", baseUrl);
       
+      const refreshHeaders = { "Content-Type": "application/json" };
+      // Agregar header para evitar la página de advertencia de ngrok
+      if (USE_NGROK && NGROK_BASE_URL) {
+        refreshHeaders["ngrok-skip-browser-warning"] = "true";
+      }
+      
       const response = await fetchWithTimeout(
         `${baseUrl}/Auth/RefreshToken`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: refreshHeaders,
           body: JSON.stringify({ 
             expiredAccessToken,
             refreshToken 
@@ -275,7 +298,15 @@ async function apiRequestFirstOk(baseUrls, endpoint, method = "GET", body = null
   let lastError;
   for (const baseUrl of baseUrls) {
     try {
-      const response = await fetchWithTimeout(`${baseUrl}/${endpoint}`, options, 7000);
+      const fullUrl = `${baseUrl}/${endpoint}`;
+      console.log(`📡 ${method} ${fullUrl}`);
+      if (body) {
+        console.log(`📦 Body:`, typeof body === 'string' ? JSON.parse(body) : body);
+      }
+      // Aumentar timeout para operaciones que pueden tardar más (como crear usuario/doctor)
+      const timeoutMs = (method === 'POST' || method === 'PATCH') ? 15000 : 7000;
+      const response = await fetchWithTimeout(fullUrl, options, timeoutMs);
+      console.log(`📥 Response status: ${response.status} ${response.statusText}`);
       
       // Si es 401 y no es una petición de auth, intentar refresh
       if (response.status === 401 && retryWithRefresh && !endpoint.includes('Auth/')) {
@@ -340,11 +371,25 @@ async function apiRequestFirstOk(baseUrls, endpoint, method = "GET", body = null
       if (!response.ok) {
         let message = "Error en la solicitud";
         let errorDetails = null;
-        try { 
-          const errorData = await response.json(); 
-          message = errorData.message || errorData.title || message;
-          errorDetails = errorData.errors || errorData.details || null;
-        } catch (_) {}
+        const contentType = response.headers.get('content-type');
+        
+        // Verificar si la respuesta es HTML (error del servidor)
+        if (contentType && contentType.includes('text/html')) {
+          const htmlText = await response.text();
+          console.error(`❌ El servidor devolvió HTML (${response.status}):`, htmlText.substring(0, 500));
+          message = `El servidor devolvió una página HTML (error ${response.status}). Esto generalmente significa que el endpoint no existe o hay un error en el servidor. URL: ${baseUrl}/${endpoint}`;
+          errorDetails = { htmlResponse: htmlText.substring(0, 500) };
+        } else {
+          try { 
+            const errorData = await response.json(); 
+            message = errorData.message || errorData.title || message;
+            errorDetails = errorData.errors || errorData.details || null;
+          } catch (_) {
+            const text = await response.text().catch(() => 'No se pudo leer el error');
+            message = `Error ${response.status}: ${response.statusText}`;
+            errorDetails = { rawResponse: text.substring(0, 500) };
+          }
+        }
         
         const error = new Error(message);
         error.status = response.status;
@@ -353,10 +398,25 @@ async function apiRequestFirstOk(baseUrls, endpoint, method = "GET", body = null
         throw error;
       }
       
+      let responseText = null;
       try { 
-        return await response.json(); 
-      } catch (_) { 
-        return { ok: true }; 
+        responseText = await response.text();
+        if (!responseText || responseText.trim() === '') {
+          console.warn(`⚠️ Respuesta vacía de ${baseUrl}/${endpoint}`);
+          return null;
+        }
+        
+        // Verificar si la respuesta es HTML (error del servidor)
+        if (responseText.trim().startsWith('<!DOCTYPE') || responseText.trim().startsWith('<html')) {
+          console.error(`❌ El servidor devolvió HTML en lugar de JSON:`, responseText.substring(0, 200));
+          throw new Error(`El servidor devolvió una página HTML (probablemente un error 404 o 500). URL: ${baseUrl}/${endpoint}`);
+        }
+        
+        return JSON.parse(responseText);
+      } catch (parseError) { 
+        console.error(`❌ Error al parsear JSON de ${baseUrl}/${endpoint}:`, parseError);
+        console.error(`❌ Respuesta recibida (primeros 500 caracteres):`, responseText ? responseText.substring(0, 500) : 'No se pudo leer la respuesta');
+        throw new Error(`Respuesta inválida del servidor: ${parseError.message}`);
       }
     } catch (err) {
       lastError = err;
@@ -408,14 +468,32 @@ export const ApiHl7Gateway = {
     const headers = buildHeaders();
     delete headers["Content-Type"];
     
+    let lastError;
     for (const baseUrl of HL7GATEWAY_API_BASE_URLS) {
       try {
-        const response = await fetchWithTimeout(`${baseUrl}/${endpoint}`, { 
+        // Construir URL correctamente (asegurarse de que no haya doble slash)
+        const cleanEndpoint = endpoint.startsWith('/') ? endpoint.substring(1) : endpoint;
+        const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+        const fullUrl = `${cleanBaseUrl}/${cleanEndpoint}`;
+        
+        console.log(`📥 Intentando descargar HL7 desde: ${fullUrl}`);
+        
+        const response = await fetchWithTimeout(fullUrl, { 
           method: "GET", 
           headers 
-        }, 7000);
+        }, 10000);
         
         if (!response.ok) {
+          // Si es 404, puede ser que no haya archivo o que el servicio no esté disponible
+          if (response.status === 404) {
+            const errorText = await response.text();
+            try {
+              const errorJson = JSON.parse(errorText);
+              throw new Error(errorJson.message || `No se encontró el resumen HL7 (404)`);
+            } catch {
+              throw new Error(`No se encontró el resumen HL7 (404)`);
+            }
+          }
           throw new Error(`Error ${response.status}: ${response.statusText}`);
         }
         
@@ -428,10 +506,24 @@ export const ApiHl7Gateway = {
         a.click();
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
+        console.log(`✅ Archivo HL7 descargado exitosamente: ${filename}`);
         return;
       } catch (err) {
+        console.warn(`⚠️ Error al intentar descargar desde ${baseUrl}:`, err.message);
+        lastError = err;
         continue;
       }
+    }
+    
+    // Si llegamos aquí, todos los intentos fallaron
+    if (lastError) {
+      // Si el error es de conexión, el servicio probablemente no está corriendo
+      if (lastError.message.includes('Failed to fetch') || 
+          lastError.message.includes('NetworkError') ||
+          lastError.message.includes('ERR_CONNECTION_REFUSED')) {
+        throw new Error("El servicio Hl7Gateway no está disponible. Por favor, verifica que esté corriendo en el puerto 5000.");
+      }
+      throw lastError;
     }
     throw new Error("No se pudo contactar al Hl7Gateway");
   }

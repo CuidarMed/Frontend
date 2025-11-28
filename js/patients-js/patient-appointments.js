@@ -107,7 +107,9 @@ export function renderAppointmentsFull(appointments) {
         };
 
         const appointmentId = apt.appointmentId || apt.AppointmentId;
+        const patientId = apt.patientId || apt.PatientId;
         const canCancel = status === "confirmed" || status === "scheduled" || status === "rescheduled";
+        const isCompleted = status === "completed";
 
         // Verificarmos si el chat esta disponible(turno confirmado o en progreso)
         // Normalizar el estado a minúsculas para comparar
@@ -118,16 +120,16 @@ export function renderAppointmentsFull(appointments) {
 
         return `
             <div class="appointment-clean-card">
-                <div class="appointment-clean-icon">
-                    <i class="fas fa-calendar-alt"></i>
+                <div class="appointment-clean-header-top">
+                    <div class="appointment-clean-icon">
+                        <i class="fas fa-calendar-alt"></i>
+                    </div>
+                    <span class="appointment-clean-status status-${status}">
+                        ${statusMap[status] || status}
+                    </span>
                 </div>
                 <div class="appointment-clean-content">
-                    <div class="appointment-clean-header">
-                        <h4 class="appointment-clean-doctor">${doctorName}</h4>
-                        <span class="appointment-clean-status status-${status}">
-                            ${statusMap[status] || status}
-                        </span>
-                    </div>
+                    <h4 class="appointment-clean-doctor">${doctorName}</h4>
                     <div class="appointment-clean-specialty">${specialty}</div>
                     <div class="appointment-clean-datetime">
                         <i class="fa-regular fa-clock"></i>
@@ -139,21 +141,31 @@ export function renderAppointmentsFull(appointments) {
                 </div>
                 <div class="appointment-clean-actions">
                     ${chatAvailable ? `
-                            <button class="btn-clean-chat"
-                                data-appointment-id="${appointmentId}"
-                                data-doctor-id="${apt.doctorId || apt.DoctorId}"
-                                data-doctor-name="${doctorName}"
-                                title="Chat con el doctor"
-                                style="background: #3b82f6; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.5rem;">
-                                <i class="fas fa-comments"></i> Chat
-                            </button>
-                        ` : ""}
+                        <button class="btn-clean-chat"
+                            data-appointment-id="${appointmentId}"
+                            data-doctor-id="${apt.doctorId || apt.DoctorId}"
+                            data-doctor-name="${doctorName}"
+                            title="Chat con el doctor"
+                            style="background: #3b82f6; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; width: 100%; font-weight: 500;">
+                            <i class="fas fa-comments"></i> Chat
+                        </button>
+                    ` : ""}
+                    ${isCompleted ? `
+                        <button class="btn-clean-hl7-download"
+                            data-appointment-id="${appointmentId}"
+                            data-patient-id="${patientId}"
+                            title="Descargar resumen HL7"
+                            style="background: #10b981; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; width: 100%; font-weight: 500; margin-top: ${chatAvailable ? '0.5rem' : '0'};">
+                            <i class="fas fa-file-download"></i> Descargar HL7
+                        </button>
+                    ` : ""}
                     ${canCancel ? `
-                    <button class="btn-clean-cancel" onclick="cancelAppointment(${appointmentId})" title="Cancelar turno">
-                        <i class="fas fa-times"></i>
-                        Cancelar
-                    </button>
-                </div>` : ""}
+                        <button class="btn-clean-cancel" onclick="cancelAppointment(${appointmentId})" title="Cancelar turno" style="width: 100%;">
+                            <i class="fas fa-times"></i>
+                            Cancelar
+                        </button>
+                    ` : ""}
+                </div>
             </div>
         `;
     }).join('');
@@ -161,7 +173,7 @@ export function renderAppointmentsFull(appointments) {
 
 // Funcion Handler del chat para pasiente
 
-async function handlerPatientChatOpen(appointmentId, doctorId, doctorName){
+export async function handlerPatientChatOpen(appointmentId, doctorId, doctorName){
     try{
         console.log('Abriendo chat: ', {appointmentId, doctorId, doctorName})
 
@@ -273,19 +285,80 @@ async function handlerPatientChatOpen(appointmentId, doctorId, doctorName){
             currentUserId 
         });
         
+        // Obtener nombre del doctor con fallbacks
+        let finalDoctorName = doctorName;
+        if (!finalDoctorName || finalDoctorName === 'undefined undefined' || finalDoctorName.includes('undefined')) {
+            // Intentar obtener del appointment
+            if (appoinment.doctorName) {
+                finalDoctorName = appoinment.doctorName;
+            } else if (appoinment.doctorFirstName || appoinment.doctorLastName) {
+                const firstName = appoinment.doctorFirstName || '';
+                const lastName = appoinment.doctorLastName || '';
+                finalDoctorName = `${firstName} ${lastName}`.trim() || 'Doctor';
+            } else {
+                finalDoctorName = 'Doctor';
+            }
+        }
+        
+        console.log('👤 Nombres para el chat (paciente):', { patientName, doctorName: finalDoctorName });
+
         // abrir modal del chat 
         openChatModal(chatRoom, {
             currentUserId: currentUserId, // userId original para referencia
-            senderId: patientId || currentUserId, // patientId para enviar mensajes
+            participantId: patientId, // patientId para referencia
+            otherParticipantId: chatRoom.DoctorId || chatRoom.doctorId || chatRoom.DoctorID || appoinment.doctorId || appoinment.DoctorId || doctorId,
             currentUserName: patientName,
-            otherUserName: doctorName || 'Doctor',
-            userType: 'patient'
+            otherUserName: finalDoctorName,
+            userType: 'patient',
+            appointment: appoinment,
+            patientId: patientId,
+            doctorId: chatRoom.DoctorId || chatRoom.doctorId || chatRoom.DoctorID || appoinment.doctorId || appoinment.DoctorId || doctorId
         })
 
         showNotification('Chat iniciado', 'success') 
     } catch(error){
         console.error('Error al abrir el chat: ', error)
         showNotification('Ocurrio un error al intentar abrir el chat', 'error')
+    }
+}
+
+/**
+ * Descarga el resumen HL7 para un turno completado
+ */
+async function downloadHl7Summary(appointmentId, patientId) {
+    try {
+        console.log('📥 Descargando resumen HL7 para consulta (paciente):', { appointmentId, patientId });
+        
+        const { ApiHl7Gateway } = await import('../api.js');
+        
+        if (!appointmentId) {
+            showNotification('No se pudo identificar la consulta', 'error');
+            return;
+        }
+
+        // Intentar descargar directamente
+        try {
+            await ApiHl7Gateway.download(
+                `v1/Hl7Summary/by-appointment/${appointmentId}`, 
+                `resumen-hl7-appointment-${appointmentId}.txt`
+            );
+            showNotification('Resumen HL7 descargado exitosamente', 'success');
+            return;
+        } catch (downloadError) {
+            console.warn('⚠️ No se pudo descargar por appointmentId:', downloadError);
+            
+            // Si es 404, el resumen no existe
+            if (downloadError.message?.includes('404') || downloadError.message?.includes('No se encontró')) {
+                showNotification('El resumen HL7 aún no está disponible. Por favor, contacta al médico para completar la consulta.', 'warning');
+                return;
+            }
+            
+            // Otro error
+            showNotification('Error al descargar el resumen HL7. Por favor, intenta nuevamente.', 'error');
+        }
+    } catch (error) {
+        console.error('❌ Error al descargar resumen HL7:', error);
+        showNotification('Error al descargar el resumen HL7. Por favor, intenta nuevamente.', 'error');
     }
 }
 
@@ -340,6 +413,39 @@ function initializeChatButtons(){
             }
         })
     })
+    
+    // Inicializar botones de descarga HL7
+    document.querySelectorAll('.btn-clean-hl7-download').forEach(button => {
+        const newButton = button.cloneNode(true);
+        button.parentNode.replaceChild(newButton, button);
+        
+        newButton.addEventListener('click', async function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const appointmentId = this.getAttribute('data-appointment-id');
+            const patientId = this.getAttribute('data-patient-id');
+            
+            console.log('📥 Click en botón de descarga HL7:', { appointmentId, patientId });
+            
+            if (appointmentId) {
+                // Deshabilitar el botón mientras se descarga
+                this.disabled = true;
+                this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Descargando...';
+                
+                try {
+                    await downloadHl7Summary(appointmentId, patientId);
+                } finally {
+                    // Rehabilitar el botón
+                    this.disabled = false;
+                    this.innerHTML = '<i class="fas fa-file-download"></i> Descargar HL7';
+                }
+            } else {
+                console.error('Datos incompletos para descargar HL7:', { appointmentId, patientId });
+                showNotification('No se puede descargar el resumen HL7: datos incompletos', 'error');
+            }
+        });
+    });
 }
 
 /**
@@ -409,7 +515,7 @@ export async function loadPatientAppointments() {
             }, 100)
         }
         else if (activeSection === "turnos") {
-            appointmentsList.innerHTML = renderAppointmentsFull(appointments);
+            appointmentsList.innerHTML = `<div class="appointments-clean-grid">${renderAppointmentsFull(appointments)}</div>`;
 
             // Inicializamos botones de chat despues de renderizar
             setTimeout(() => {

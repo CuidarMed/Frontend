@@ -166,28 +166,47 @@ export async function getChatRoom(chatRoomId, userId, token) {
 export async function getChatMessages(chatRoomId, userId, pageNumber = 1, pageSize = 50, token) {
     console.log('💬 Obteniendo mensajes:', { chatRoomId, userId, pageNumber, pageSize });
     
-    const response = await tryFetch(`/Chat/rooms/${chatRoomId}/messages`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-            ChatRoomId: chatRoomId,
-            UserId: userId,
-            PageNumber: pageNumber,
-            PageSize: pageSize
-        })
-    });
+    try {
+        const response = await tryFetch(`/Chat/rooms/${chatRoomId}/messages`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                ChatRoomId: chatRoomId,
+                UserId: userId,
+                PageNumber: pageNumber,
+                PageSize: pageSize
+            })
+        });
 
-    if (!response.ok) {
-        const error = await response.json().catch(() => ({ message: 'Error al obtener mensajes' }));
-        throw new Error(error.message);
+        if (!response.ok) {
+            let errorMessage = 'Error al obtener mensajes';
+            try {
+                const errorData = await response.json();
+                errorMessage = errorData.message || errorData.Message || errorMessage;
+            } catch (e) {
+                errorMessage = `Error ${response.status}: ${response.statusText}`;
+            }
+            console.error('❌ Error en respuesta:', errorMessage);
+            throw new Error(errorMessage);
+        }
+
+        const result = await response.json();
+        console.log('✅ Mensajes obtenidos:', result);
+        return result;
+    } catch (error) {
+        console.error('❌ Error al obtener mensajes:', error);
+        // Si es un error de conexión, retornar array vacío en lugar de lanzar error
+        if (error.message?.includes('no está disponible') || 
+            error.message?.includes('Failed to fetch') || 
+            error.message?.includes('ERR_CONNECTION')) {
+            console.warn('⚠️ Servicio de chat no disponible, retornando array vacío');
+            return [];
+        }
+        throw error;
     }
-
-    const result = await response.json();
-    console.log('✅ Mensajes obtenidos:', result);
-    return result;
 }
 
 /**

@@ -75,7 +75,10 @@ export function getActiveSection() {
  * Normaliza datos del paciente desde el backend
  */
 export function normalizePatient(rawPatient) {
-    if (!rawPatient) return null;
+    if (!rawPatient || rawPatient.ok === true) {
+        console.warn("⚠️ normalizePatient recibió datos inválidos:", rawPatient);
+        return null;
+    }
 
     let birthDate = rawPatient.birthDate ?? rawPatient.dateOfBirth ?? rawPatient.DateOfBirth ?? '';
     if (birthDate) {

@@ -555,31 +555,8 @@ function updateConsultationsListTitle(dayName, dateStr) {
             </span>
         `;
         
-        // Agregar botón para volver a hoy
-        let backButton = consultationsSection.querySelector('.back-to-today-btn');
-        if (!backButton) {
-            backButton = document.createElement('button');
-            backButton.className = 'btn btn-secondary btn-sm back-to-today-btn';
-            backButton.innerHTML = '<i class="fas fa-arrow-left"></i> Hoy';
-            backButton.style.marginLeft = '1rem';
-            
-            backButton.addEventListener('click', async () => {
-                // Remover selección de la agenda
-                document.querySelectorAll('.schedule-item').forEach(si => {
-                    si.style.border = '';
-                    si.style.backgroundColor = '';
-                });
-                
-                // Restaurar título original
-                header.innerHTML = 'Consultas de Hoy';
-                backButton.remove();
-                
-                // Cargar consultas de hoy
-                await loadTodayConsultationsForDashboard();
-            });
-            
-            header.parentElement.appendChild(backButton);
-        }
+        // El botón "Hoy" ya está en el HTML, no necesitamos agregarlo dinámicamente
+        // Si se selecciona un día desde la agenda, el botón "Hoy" en el filtro de fecha funcionará
     }
 }
 /**

@@ -534,18 +534,55 @@ async function fetchUsers() {
       try {
         const payload = JSON.parse(atob(token.split(".")[1]));
         console.log("🔍 Token payload:", payload);
-        console.log("🔍 Rol en token:", payload.role || payload.Role || payload["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"]);
+        const role = payload.role || payload.Role || payload["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"];
+        console.log("🔍 Rol en token:", role);
+        
+        if (role !== "Admin" && !Array.isArray(role) || (Array.isArray(role) && !role.includes("Admin"))) {
+          console.warn("⚠️ El token no tiene rol Admin. Rol actual:", role);
+        }
       } catch (e) {
         console.error("Error al decodificar token:", e);
       }
+    } else {
+      console.error("❌ No hay token en localStorage");
+      pushActivity("No hay token de autenticación. Por favor, inicia sesión nuevamente.");
+      return [];
     }
     
+    console.log("📡 Intentando obtener usuarios desde AuthMS...");
     const data = await ApiAuth.get("User");
-    if (!Array.isArray(data)) return [];
+    
+    if (!data) {
+      console.warn("⚠️ La respuesta está vacía");
+      return [];
+    }
+    
+    if (!Array.isArray(data)) {
+      console.warn("⚠️ La respuesta no es un array:", typeof data, data);
+      return [];
+    }
+    
+    console.log(`✅ Se obtuvieron ${data.length} usuarios`);
     return data.map(mapUserResponse);
   } catch (error) {
-    console.error("❌ No se pudieron obtener usuarios reales:", error);
-    pushActivity("No se pudo sincronizar el listado de usuarios. Verifica AuthMS.");
+    console.error("❌ Error al obtener usuarios:", error);
+    console.error("❌ Detalles del error:", {
+      message: error.message,
+      status: error.status,
+      statusText: error.statusText,
+      details: error.details
+    });
+    
+    let errorMessage = "No se pudo sincronizar el listado de usuarios.";
+    if (error.status === 401 || error.status === 403) {
+      errorMessage = "No tienes permisos para ver usuarios. Verifica que tu rol sea Admin.";
+    } else if (error.status === 404) {
+      errorMessage = "El endpoint de usuarios no se encontró. Verifica que AuthMS esté corriendo.";
+    } else if (error.message?.includes("Failed to fetch") || error.message?.includes("NetworkError")) {
+      errorMessage = "No se pudo conectar a AuthMS. Verifica que los servicios estén corriendo y accesibles.";
+    }
+    
+    pushActivity(errorMessage);
     return [];
   }
 }

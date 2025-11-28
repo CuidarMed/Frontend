@@ -50,11 +50,14 @@ body {
     font-size: 1.2rem;
     transition: all 0.3s ease;
     box-shadow: 0 2px 6px rgba(37, 99, 235, 0.15);
-    display: flex;
+    display: flex !important;
     align-items: center;
     justify-content: center;
     width: 44px;
     height: 44px;
+    z-index: 101;
+    visibility: visible !important;
+    opacity: 1 !important;
 }
 
 .chat-notification-btn:hover {
@@ -63,6 +66,18 @@ body {
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
     color: #1e3a8a;
+}
+
+.chat-notification-btn.has-unread {
+    border-color: #ef4444;
+    color: #ef4444;
+    animation: chatPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes chatPulse {
+    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.35); }
+    70% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
 }
 
 .chat-badge {
@@ -74,6 +89,8 @@ body {
     border-radius: 50%;
     width: 20px;
     height: 20px;
+    min-width: 20px;
+    min-height: 20px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -81,6 +98,49 @@ body {
     font-weight: bold;
     border: 2px solid white;
     animation: pulse 2s infinite;
+    z-index: 1000;
+    pointer-events: none;
+}
+
+.chat-toast-container {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    z-index: 12000;
+    pointer-events: none;
+}
+
+.chat-toast {
+    background: #1d4ed8;
+    color: #fff;
+    padding: 0.75rem 1rem;
+    border-radius: 0.75rem;
+    box-shadow: 0 10px 25px rgba(30, 64, 175, 0.3);
+    min-width: 260px;
+    max-width: 320px;
+    opacity: 0;
+    transform: translateY(-10px);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.chat-toast.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.chat-toast strong {
+    display: block;
+    font-size: 0.95rem;
+    margin-bottom: 0.2rem;
+}
+
+.chat-toast p {
+    margin: 0;
+    font-size: 0.85rem;
+    line-height: 1.4;
 }
 
 @keyframes pulse {
@@ -1866,15 +1926,16 @@ body {
 -------------------------------------------------------------- */
 /* Contenedor de las tarjetas */
 .appointments-clean-grid {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
     width: 100%;
 }
 
 /* Tarjeta individual */
 .appointment-clean-card {
     display: flex;
+    flex-direction: column;
     align-items: flex-start;
     gap: 1rem;
     background: white;
@@ -1883,6 +1944,7 @@ body {
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     border: 1px solid #e5e7eb;
     transition: all 0.3s ease;
+    min-height: 200px;
 }
 
 .appointment-clean-card:hover {
@@ -1893,17 +1955,18 @@ body {
 
 /* Icono del calendario */
 .appointment-clean-icon {
-    width: 60px;
-    height: 60px;
-    min-width: 60px;
+    width: 50px;
+    height: 50px;
+    min-width: 50px;
     background: linear-gradient(135deg, #176df8 0%, #74a0ff 100%);
     border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
     color: white;
-    font-size: 1.25rem;
+    font-size: 1.1rem;
     box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    flex-shrink: 0;
 }
 
 /* Contenido principal */
@@ -1912,6 +1975,14 @@ body {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+}
+
+.appointment-clean-header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
 }
 
 .appointment-clean-header {
@@ -2006,14 +2077,20 @@ body {
 /* Botón cancelar */
 .appointment-clean-actions {
     display: flex;
-    align-items: center;
-    padding-left: 1rem;
-    border-left: 1px solid #e5e7eb;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 0.75rem;
+    width: 100%;
+    margin-top: auto;
+    padding-top: 1rem;
+    border-top: 1px solid #e5e7eb;
 }
 
 .btn-clean-cancel {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 0.5rem;
     padding: 0.625rem 1rem;
     background: white;
@@ -2039,7 +2116,17 @@ body {
 }
 
 /* Responsive */
+@media (max-width: 1200px) {
+    .appointments-clean-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
 @media (max-width: 768px) {
+    .appointments-clean-grid {
+        grid-template-columns: 1fr;
+    }
+    
     .appointment-clean-card {
         flex-direction: column;
     }
@@ -3438,6 +3525,29 @@ ease;
 
 .btn-prescription-view:hover {
     background-color: #138496;
+}
+
+.btn-prescription-hl7 {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.625rem 1.25rem;
+    background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(107, 114, 128, 0.25);
+}
+
+.btn-prescription-hl7:hover {
+    background: linear-gradient(135deg, #4b5563 0%, #374151 100%);
+    box-shadow: 0 4px 12px rgba(107, 114, 128, 0.4);
+    transform: translateY(-2px);
 }
 
 /* Grid de turnos en inicio - 3 columnas */

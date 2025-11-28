@@ -54,42 +54,43 @@ async function loadAllPatients() {
     if (!patientsList) return;
 
     try {
-        const { state } = await import('../state.js');
-        const { ApiScheduling, Api } = await import('../api.js');
-        const doctorId = state.doctorData?.doctorId || state.doctorData?.DoctorId;
+        const { Api } = await import('../api.js');
+        
+        console.log('🔍 Cargando todos los pacientes desde DirectoryMS...');
+        
+        // Obtener TODOS los pacientes de DirectoryMS, no solo los que tienen turnos con este doctor
+        let patientsData = await Api.get('v1/Patient/all');
+        patientsData = Array.isArray(patientsData) ? patientsData : (patientsData?.value || [patientsData]).filter(Boolean);
 
-        if (!doctorId) {
-            patientsList.innerHTML = createHTML.error('No se pudo identificar al médico');
-            return;
-        }
-
-        let patientsData = await ApiScheduling.get(`v1/Appointments/doctor/${doctorId}/patients`);
-        patientsData = Array.isArray(patientsData) ? patientsData : [patientsData];
+        console.log(`✅ Pacientes obtenidos: ${patientsData.length}`);
+        console.log('Pacientes:', patientsData);
 
         if (!patientsData?.length) {
-            patientsList.innerHTML = createHTML.empty('fa-user-slash', 'No has atendido pacientes aún');
+            patientsList.innerHTML = createHTML.empty('fa-user-slash', 'No hay pacientes registrados');
             allPatientsList = [];
             return;
         }
 
-        const enrichedPatients = await Promise.all(patientsData.map(async (p) => {
+        // Los datos ya vienen completos de DirectoryMS, solo necesitamos normalizarlos
+        const enrichedPatients = patientsData.map((p) => {
             const patientId = p.patientId || p.PatientId;
-            if (!patientId) return p;
+            if (!patientId) {
+                console.warn('⚠️ Paciente sin ID:', p);
+                return null;
+            }
 
-            try {
-                const fullPatient = await Api.get(`v1/Patient/${patientId}`);
-                return {
-                    patientId, PatientId: patientId,
-                    name: fullPatient.name || fullPatient.Name || p.name || p.Name || '',
-                    Name: fullPatient.name || fullPatient.Name || p.name || p.Name || '',
-                    lastName: fullPatient.lastName || fullPatient.LastName || p.lastName || p.LastName || '',
-                    LastName: fullPatient.lastName || fullPatient.LastName || p.lastName || p.LastName || '',
-                    dni: fullPatient.dni || fullPatient.Dni || p.dni || p.Dni || '',
-                    Dni: fullPatient.dni || fullPatient.Dni || p.dni || p.Dni || '',
-                    ...fullPatient
-                };
-            } catch { return p; }
-        }));
+            return {
+                patientId,
+                PatientId: patientId,
+                name: p.name || p.Name || '',
+                Name: p.name || p.Name || '',
+                lastName: p.lastName || p.LastName || '',
+                LastName: p.lastName || p.LastName || '',
+                dni: p.dni || p.Dni || '',
+                Dni: p.dni || p.Dni || '',
+                ...p
+            };
+        }).filter(Boolean); // Filtrar nulls
 
         enrichedPatients.sort((a, b) => {
             const nameA = `${a.name || a.Name || ''} ${a.lastName || a.LastName || ''}`.trim().toLowerCase();
@@ -98,10 +99,17 @@ async function loadAllPatients() {
         });
 
         allPatientsList = enrichedPatients;
+        console.log(`✅ Total de pacientes procesados: ${allPatientsList.length}`);
         renderPatientsList(allPatientsList);
     } catch (error) {
         console.error('❌ Error al cargar pacientes:', error);
-        patientsList.innerHTML = createHTML.error('Error al cargar los pacientes del médico.');
+        console.error('❌ Detalles del error:', {
+            message: error.message,
+            stack: error.stack,
+            status: error.status,
+            statusText: error.statusText
+        });
+        patientsList.innerHTML = createHTML.error(`Error al cargar los pacientes: ${error.message || 'Error desconocido'}`);
     }
 }
 
