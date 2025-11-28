@@ -1382,21 +1382,6 @@ export function updateCounter(elementId, change) {
 
 export { doctorState };
 
-// Agregar hover effect al botón de chat
-const style = document.createElement('style');
-style.textContent = `
-    .btn-clean-chat:hover {
-        background: #2563eb !important;
-        transform: translateY(-2px);
-        box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
-        transition: all 0.2s ease;
-    }
-    
-    .btn-clean-chat:active {
-        transform: translateY(0);
-    }
-`;
-document.head.appendChild(style);
 // ===================================
 // POLLING DE BADGES DE CHAT
 // ===================================

@@ -160,9 +160,6 @@ export function openChatModal(chatRoom, config) {
     modalContent.style.cssText = `
         width: 100%;
         height: 100%;
-        max-width: 300px;
-        height: 60vh;
-        max-height: 400px;
         background: white;
         display: flex;
         flex-direction: column;

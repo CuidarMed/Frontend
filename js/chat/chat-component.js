@@ -680,7 +680,7 @@ attachEventListeners() {
                         
                         // Restauramos alineación original del header
                         header.style.justifyContent = header.dataset.originalJustify;
-                        header.style.gap = "1 rem";
+                        header.style.gap = '0';
 
                         button.innerHTML = '<i class="fas fa-minus"></i>';
                         button.title = 'Minimizar';
@@ -689,7 +689,7 @@ attachEventListeners() {
                     } else {
                         // Minimizar
                         modal.dataset.minimized = "true";
-                        modal.style.width = "350px";
+                        modal.style.width = "400px";
                         modal.style.height = "70px";
 
                         children.forEach(child => {
@@ -698,7 +698,7 @@ attachEventListeners() {
 
                         // Centramos el header
                         header.style.justifyContent = "center";
-                        header.style.gap = "";
+                        header.style.gap = '1rem';
 
                         button.innerHTML = '<i class="fas fa-window-maximize"></i>';
                         button.title = 'Maximizar';
