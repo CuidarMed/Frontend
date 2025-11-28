@@ -72,7 +72,7 @@ const getActionButtons = (status, appointmentId, patientId, patientName) => {
                 <i class="fas fa-video"></i> Atender
             </button>
             <!-- Boton del chat -->
-            <button class="btn btn-chat-doctor btn-sm open-chat-btn" ${dataAttrs} style="background: #10b981; color: white; border: none;">
+            <button class="btn btn-chat-doctor btn-sm open-chat-btn" ${dataAttrs} style="background: #10b981; color: white; border: none; adding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem;">
                 <i class="fas fa-comments"></i> Chat
             </button>
         `;
@@ -85,7 +85,7 @@ const getActionButtons = (status, appointmentId, patientId, patientName) => {
                 <i class="fas fa-user-slash"></i> No asistió
             </button>
             <!-- Boton del chat -->
-            <button class="btn btn-chat-doctor btn-sm open-chat-btn" ${dataAttrs} style="background: #10b981; color: white; border: none;">
+            <button class="btn btn-chat-doctor btn-sm open-chat-btn" ${dataAttrs} style="background: #10b981; color: white; border: none; adding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem;">
                 <i class="fas fa-comments"></i> Chat
             </button>
         `;
@@ -1225,3 +1225,19 @@ export function updateCounter(elementId, change) {
 }
 
 export { doctorState };
+
+// Agregar hover effect al botón de chat
+const style = document.createElement('style');
+style.textContent = `
+    .btn-clean-chat:hover {
+        background: #2563eb !important;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
+        transition: all 0.2s ease;
+    }
+    
+    .btn-clean-chat:active {
+        transform: translateY(0);
+    }
+`;
+document.head.appendChild(style);
