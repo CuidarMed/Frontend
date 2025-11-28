@@ -70,9 +70,8 @@ export function renderAppointmentsHome(appointments) {
                             data-appointment-id="${appointmentId}"
                             data-doctor-id="${doctorId}"
                             data-doctor-name="${doctorName}"
-                            title="Chat con el doctor"
-                            style="background: #3b82f6; color: white; border: none; padding: 0.4rem 0.75rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem;">
-                            <i class="fas fa-comments"></i> Chat
+                            title="Chat con el doctor">
+                        <i class="fas fa-comments"></i>
                         </button>
                     ` : ""}
                     <div class="appointment-clean-status status-${status}">
@@ -166,14 +165,13 @@ export function renderAppointmentsFull(appointments) {
                 </div>
                 <div class="appointment-clean-actions" style="display: flex; flex-direction: row; gap: 0.75rem; align-items: center;">
                     ${chatAvailable && appointmentId && doctorId && doctorName ? `
-                        <button class="btn-clean-chat"
+                    <button class="btn-clean-chat"
                             data-appointment-id="${appointmentId}"
                             data-doctor-id="${doctorId}"
                             data-doctor-name="${doctorName}"
-                            title="Chat con el doctor"
-                            style="background: #3b82f6; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem;">
-                            <i class="fas fa-comments"></i> Chat
-                        </button>
+                            title="Chat con el doctor">
+                        <i class="fas fa-comments"></i>
+                    </button>
                     ` : ""}
                     ${canCancel ? `
                         <button class="btn-clean-cancel" 

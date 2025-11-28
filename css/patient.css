@@ -3383,29 +3383,6 @@ ease;
 .btn-prescription-view:hover {
     background-color: #138496;
 }
-/* ============================================
-   ANIMACIONES DE ESTADO
-   ============================================ */
-
-/* Animación cuando cambia el estado */
-@keyframes statusChange {
-    0% {
-        transform: scale(1);
-        opacity: 1;
-    }
-    50% {
-        transform: scale(1.08);
-        opacity: 0.9;
-    }
-    100% {
-        transform: scale(1);
-        opacity: 1;
-    }
-}
-
-.status-changed {
-    animation: statusChange 0.5s ease;
-}
 
 
 
@@ -3444,4 +3421,30 @@ ease;
     display: flex;
     align-items: center;
     gap: 10px;
+}
+
+
+.btn-clean-chat {
+    background: #3b82f6;
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem; /* Tamaño moderado */
+    border-radius: 8px; /* Bordes redondeados */
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem; /* Espacio entre ícono y texto */
+    font-size: 1rem; /* Tamaño de fuente normal */
+    font-weight: 600; /* Peso de fuente más fuerte */
+    text-transform: uppercase; /* Texto en mayúsculas */
+    transition: all 0.3s ease; /* Transición suave */
+}
+
+.btn-clean-chat:hover {
+    background: #2563eb; /* Color más oscuro al pasar el mouse */
+    transform: scale(1.05); /* Efecto de aumento al pasar el mouse */
+}
+
+.btn-clean-chat i {
+    font-size: 1.25rem; /* Ícono de tamaño moderado */
 }

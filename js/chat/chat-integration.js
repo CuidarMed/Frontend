@@ -159,9 +159,9 @@ export function openChatModal(chatRoom, config) {
     const modalContent = document.createElement('div');
     modalContent.style.cssText = `
         width: 100%;
-        max-width: 600px;
-        height: 80vh;
-        max-height: 700px;
+        max-width: 300px;
+        height: 60vh;
+        max-height: 400px;
         background: white;
         border-radius: 12px;
         overflow: hidden;
