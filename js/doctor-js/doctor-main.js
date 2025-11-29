@@ -21,8 +21,6 @@ import {
 
 import { 
     initializeConsultationDateFilter,
-    loadTodayConsultations,
-    loadTodayFullHistory,
     createConsultationItemElement,
     initializeDoctorRescheduleModal
 } from './doctor-appointments.js';
