@@ -8,7 +8,7 @@ import { showNotification } from './patient-notifications.js';
 import { handleAppointmentChatCreation, openChatModal } from '../chat/chat-integration.js';
 import { getStatusFilter } from './patient-filters.js';
 // En la sección de imports
-import { forceStyleUpdate } from './patient-ui.js';
+
 /**
  * Renderiza turnos para la página de inicio (solo 3 próximos)
  */

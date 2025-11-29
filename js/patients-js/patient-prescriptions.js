@@ -1,5 +1,5 @@
 // ============================================
-// MÓDULO DE PRESCRIPCIONES - PACIENTE
+// MÓDULO DE PRESCRIPCIONES - PACIENTE (CORREGIDO)
 // ============================================
 
 import { ApiClinical, Api } from '../api.js';
@@ -48,19 +48,18 @@ export async function viewPrescription(encounterId) {
         const prescription = response[0];
         console.log('✅ Receta seleccionada:', prescription);
 
-
         // Preparar datos según la estructura real de la BD
         const prescriptionData = {
             prescriptionId: prescription.prescriptionId,
             encounterId: prescription.encounterId,
             patientId: prescription.patientId,
             doctorId: prescription.doctorId,
-            diagnosis: prescription.diagnosis,
-            medication: prescription.medication,
-            dosage: prescription.dosage,
-            frequency: prescription.frequency,
-            duration: prescription.duration,
-            additionalInstructions: prescription.additionalInstructions,
+            diagnosis: prescription.diagnosis || 'No especificado',
+            medication: prescription.medication || 'No especificado',
+            dosage: prescription.dosage || 'No especificada',
+            frequency: prescription.frequency || 'No especificada',
+            duration: prescription.duration || 'No especificada',
+            additionalInstructions: prescription.additionalInstructions || 'Sin instrucciones adicionales',
             prescriptionDate: prescription.prescriptionDate || prescription.createdAt
         };
 
@@ -150,6 +149,11 @@ export async function viewPrescription(encounterId) {
         prescriptionData.doctorSpecialty = doctorSpecialty;
         modal.setAttribute('data-prescription', JSON.stringify(prescriptionData));
         
+        // ✅ CRÍTICO: Re-inicializar event listeners DESPUÉS de abrir el modal
+        setTimeout(() => {
+            attachModalEventListeners();
+        }, 100);
+        
         console.log('✅ Receta renderizada exitosamente');
         showNotification('Receta cargada correctamente', 'success');
 
@@ -201,23 +205,22 @@ export function closePrescription() {
  * Descarga la receta como PDF
  */
 export function downloadPrescriptionPDF() {
-    console.log('📥 Descargando receta PDF...');
+    console.log('📥 Iniciando descarga de PDF...');
     
     try {
         const modal = document.getElementById('prescription-modal');
         const prescriptionDataStr = modal?.getAttribute('data-prescription');
-        
         
         if (!prescriptionDataStr) {
             throw new Error('No hay datos de prescripción disponibles');
         }
         
         const prescriptionData = JSON.parse(prescriptionDataStr);
-
+        console.log('📄 Datos para PDF:', prescriptionData);
         
         // Verificar que jsPDF esté disponible
         if (!window.jspdf || !window.jspdf.jsPDF) {
-            throw new Error('Librería jsPDF no está cargada');
+            throw new Error('Librería jsPDF no está cargada. Verifica que el script esté en el HTML.');
         }
         
         const { jsPDF } = window.jspdf;
@@ -258,7 +261,7 @@ export function downloadPrescriptionPDF() {
         // Función helper para agregar secciones
         const addSection = (title, content) => {
             if (!content || content === 'No especificado' || content === 'No especificada' || content === 'Sin instrucciones adicionales') {
-                return; // No mostrar secciones sin datos
+                return;
             }
             
             doc.setFont(undefined, 'bold');
@@ -271,7 +274,7 @@ export function downloadPrescriptionPDF() {
             y += lineHeight * lines.length + 5;
         };
 
-        // Secciones del contenido (según estructura de la BD)
+        // Secciones del contenido
         addSection('Diagnóstico:', prescriptionData.diagnosis);
         addSection('Medicamento:', prescriptionData.medication);
         addSection('Dosis:', prescriptionData.dosage);
@@ -305,67 +308,95 @@ export function downloadPrescriptionPDF() {
 }
 
 /**
- * Inicializa el modal de prescripciones y sus eventos
+ * ✅ NUEVA FUNCIÓN: Vincula event listeners al modal
+ * Se llama cada vez que se abre el modal
+ */
+function attachModalEventListeners() {
+    console.log('🔧 Vinculando event listeners del modal...');
+    
+    const modal = document.getElementById('prescription-modal');
+    if (!modal) return;
+
+    // Botón Cerrar (X en header)
+    const closeButtons = modal.querySelectorAll('.close-modal');
+    closeButtons.forEach(btn => {
+        // Remover listeners previos clonando el botón
+        const newBtn = btn.cloneNode(true);
+        btn.parentNode.replaceChild(newBtn, btn);
+        
+        newBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('🔘 Click en X');
+            closePrescription();
+        });
+    });
+
+    // Botón Cerrar (footer)
+    const closeBtn = document.getElementById('close-prescription');
+    if (closeBtn) {
+        const newCloseBtn = closeBtn.cloneNode(true);
+        closeBtn.parentNode.replaceChild(newCloseBtn, closeBtn);
+        
+        newCloseBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('🔘 Click en Cerrar');
+            closePrescription();
+        });
+        console.log('✅ Botón Cerrar vinculado');
+    }
+
+    // ✅ Botón Descargar PDF
+    const downloadBtn = document.getElementById('download-prescription');
+    if (downloadBtn) {
+        const newDownloadBtn = downloadBtn.cloneNode(true);
+        downloadBtn.parentNode.replaceChild(newDownloadBtn, downloadBtn);
+        
+        newDownloadBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('🔘 Click en Descargar PDF');
+            downloadPrescriptionPDF();
+        });
+        console.log('✅ Botón Descargar vinculado');
+    } else {
+        console.warn('⚠️ Botón download-prescription no encontrado');
+    }
+
+    // Click fuera del modal
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            closePrescription();
+        }
+    });
+    
+    console.log('✅ Event listeners vinculados correctamente');
+}
+
+/**
+ * Inicializa el modal de prescripciones (solo al cargar la página)
  */
 export function initializePrescriptionModal() {
-    console.log('🔧 Inicializando modal de prescripciones (delegación)...');
-
+    console.log('🔧 Inicializando modal de prescripciones...');
+    
     const modal = document.getElementById('prescription-modal');
     if (!modal) {
         console.warn('⚠️ Modal de prescripción no encontrado en el DOM');
         return;
     }
 
-    // Delegación de clicks dentro del modal
-    // Maneja: .close-modal, .btn-close, .btn-cancel, #download-prescription
-    modal.addEventListener('click', (e) => {
-        const target = /** @type {HTMLElement} */ (e.target);
-
-        // Buscar el botón real si el click fue en un icono o span dentro del botón
-        const closestClose = target.closest('.close-modal, .btn-close');
-        if (closestClose) {
-            e.preventDefault();
-            closePrescription();
-            return;
-        }
-
-        const closestCancel = target.closest('.btn-cancel');
-        if (closestCancel) {
-            e.preventDefault();
-            closePrescription();
-            return;
-        }
-
-        const closestDownload = target.closest('#download-prescription');
-        if (closestDownload) {
-            e.preventDefault();
-            // Llamamos a la función que genera el PDF
-            try {
-                downloadPrescriptionPDF();
-            } catch (err) {
-                console.error('Error al iniciar descarga de PDF:', err);
-            }
-            return;
-        }
-
-        // Cerrar al clickear fuera del contenido (asumiendo que el contenido es .prescription-content)
-        if (target === modal) {
-            // click en el backdrop
-            closePrescription();
-        }
-    });
-
-    // Cerrar con tecla ESC (una sola vez)
+    // Evento ESC para cerrar
     const escHandler = (e) => {
         if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
             closePrescription();
         }
     };
-    // Evitar múltiples listeners al reiniciar: removemos antes y luego añadimos
+    
     document.removeEventListener('keydown', escHandler);
     document.addEventListener('keydown', escHandler);
 
-    console.log('✅ Modal de prescripciones inicializado (delegación activa)');
+    console.log('✅ Modal de prescripciones inicializado');
 }
 
 // Exportar a window para uso global
