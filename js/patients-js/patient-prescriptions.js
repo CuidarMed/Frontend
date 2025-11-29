@@ -66,6 +66,7 @@ export async function viewPrescription(encounterId) {
         // Obtener información del doctor
         let doctorName = 'Dr. Desconocido';
         let doctorSpecialty = '';
+        let doctorMatricula = "";
         
         if (prescriptionData.doctorId) {
             try {
@@ -75,6 +76,7 @@ export async function viewPrescription(encounterId) {
                 const lastName = doctor.LastName || doctor.lastName || '';
                 doctorName = `Dr. ${firstName} ${lastName}`.trim();
                 doctorSpecialty = doctor.Specialty || doctor.specialty || '';
+                doctorMatricula = doctor.LicenseNumber || doctor.licenseNumber || '';
                 console.log('✅ Doctor encontrado:', doctorName);
             } catch (err) {
                 console.warn('⚠️ No se pudo cargar info del doctor:', err);
@@ -88,7 +90,7 @@ export async function viewPrescription(encounterId) {
             month: 'long', 
             day: 'numeric' 
         });
-
+        prescriptionData.doctorMatricula = doctorMatricula;
         // Renderizar contenido
         content.innerHTML = `
             <div class="prescription-container">
@@ -100,9 +102,11 @@ export async function viewPrescription(encounterId) {
                     <div class="prescription-info">
                         <h4>${doctorName}</h4>
                         ${doctorSpecialty ? `<p class="prescription-specialty">${doctorSpecialty}</p>` : ''}
+
                         <p class="prescription-date">Fecha: ${dateStr}</p>
                     </div>
                 </div>
+
                 <div class="prescription-divider"></div>
 
                 <div class="prescription-section">
@@ -138,7 +142,7 @@ export async function viewPrescription(encounterId) {
                 <div class="prescription-footer">
                     <p class="prescription-signature">
                         <strong>${doctorName}</strong><br>
-                        Matrícula Profesional
+                        Matrícula Profesional: ${prescriptionData.doctorMatricula || 'No disponible'}
                     </p>
                 </div>
             </div>
@@ -147,9 +151,9 @@ export async function viewPrescription(encounterId) {
         // Guardar datos para PDF (incluir nombre del doctor)
         prescriptionData.doctorName = doctorName;
         prescriptionData.doctorSpecialty = doctorSpecialty;
+        prescriptionData.doctorMatricula = doctorMatricula;
         modal.setAttribute('data-prescription', JSON.stringify(prescriptionData));
         
-        // ✅ CRÍTICO: Re-inicializar event listeners DESPUÉS de abrir el modal
         setTimeout(() => {
             attachModalEventListeners();
         }, 100);
@@ -206,106 +210,198 @@ export function closePrescription() {
  */
 export function downloadPrescriptionPDF() {
     console.log('📥 Iniciando descarga de PDF...');
-    
+
     try {
         const modal = document.getElementById('prescription-modal');
         const prescriptionDataStr = modal?.getAttribute('data-prescription');
-        
+
         if (!prescriptionDataStr) {
             throw new Error('No hay datos de prescripción disponibles');
         }
-        
+
         const prescriptionData = JSON.parse(prescriptionDataStr);
-        console.log('📄 Datos para PDF:', prescriptionData);
-        
-        // Verificar que jsPDF esté disponible
+
         if (!window.jspdf || !window.jspdf.jsPDF) {
-            throw new Error('Librería jsPDF no está cargada. Verifica que el script esté en el HTML.');
+            throw new Error('jsPDF no está cargado');
         }
-        
+
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
-        
+
         const margin = 20;
-        let y = margin;
-        const lineHeight = 7;
+        let y = 20;
         const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
 
-        // Header - Logo y título
-        doc.setFontSize(18);
+        // ================================
+        //   HEADER CUIDARMED+
+        // ================================
         doc.setFont(undefined, 'bold');
+        doc.setFontSize(24);
+        doc.setTextColor(37, 99, 235);
         doc.text('CuidarMed+', margin, y);
-        y += 10;
 
-        doc.setFontSize(12);
+        y += 8;
+
+        doc.setDrawColor(37, 99, 235);
+        doc.setLineWidth(0.8);
+        doc.line(margin, y, pageWidth - margin, y);
+
+        y += 12;
+
+        // SUBTÍTULO
+        doc.setFontSize(16);
         doc.setFont(undefined, 'normal');
+        doc.setTextColor(75, 85, 99);
         doc.text('Receta Médica', margin, y);
-        y += lineHeight * 2;
 
-        // Información del doctor
+        y += 15;
+
+        // ================================
+        //   INFORMACIÓN DEL MÉDICO
+        // ================================
         doc.setFontSize(11);
         doc.setFont(undefined, 'bold');
+        doc.setTextColor(31, 41, 55);
         doc.text(prescriptionData.doctorName || 'Dr. Desconocido', margin, y);
-        y += lineHeight;
-        
-        if (prescriptionData.doctorSpecialty) {
-            doc.setFont(undefined, 'normal');
-            doc.text(prescriptionData.doctorSpecialty, margin, y);
-            y += lineHeight;
-        }
-        
-        const date = new Date(prescriptionData.prescriptionDate);
-        doc.text(`Fecha: ${date.toLocaleDateString('es-AR')}`, margin, y);
-        y += lineHeight * 2;
 
-        // Función helper para agregar secciones
-        const addSection = (title, content) => {
-            if (!content || content === 'No especificado' || content === 'No especificada' || content === 'Sin instrucciones adicionales') {
-                return;
-            }
-            
-            doc.setFont(undefined, 'bold');
-            doc.text(title, margin, y);
-            y += lineHeight;
-            
+        y += 6;
+
+        if (prescriptionData.doctorSpecialty) {
+            doc.setFontSize(10);
             doc.setFont(undefined, 'normal');
+            doc.setTextColor(107, 114, 128);
+            doc.text(prescriptionData.doctorSpecialty, margin, y);
+            y += 6;
+        }
+
+        const date = new Date(prescriptionData.prescriptionDate);
+
+        doc.setFontSize(9);
+        doc.setTextColor(107, 114, 128);
+        doc.text(
+            'Fecha: ' + date.toLocaleDateString('es-AR', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            }),
+            margin,
+            y
+        );
+
+        y += 12;
+
+        doc.setDrawColor(229, 231, 235);
+        doc.setLineWidth(0.6);
+        doc.line(margin, y, pageWidth - margin, y);
+
+        y += 12;
+
+        // ================================
+        //   FUNCIÓN PARA SECCIONES
+        // ================================
+        const addSection = (title, content) => {
+            if (!content) return;
+
+            if (y > pageHeight - 40) {
+                doc.addPage();
+                y = 20;
+            }
+
+            doc.setFontSize(12);
+            doc.setFont(undefined, 'bold');
+            doc.setTextColor(31, 41, 55);
+            doc.text(title, margin, y);
+
+            y += 7;
+
+            doc.setFontSize(10);
+            doc.setFont(undefined, 'normal');
+            doc.setTextColor(55, 65, 81);
+
             const lines = doc.splitTextToSize(content, pageWidth - 2 * margin);
             doc.text(lines, margin, y);
-            y += lineHeight * lines.length + 5;
+
+            y += lines.length * 6 + 10;
         };
 
-        // Secciones del contenido
-        addSection('Diagnóstico:', prescriptionData.diagnosis);
-        addSection('Medicamento:', prescriptionData.medication);
-        addSection('Dosis:', prescriptionData.dosage);
-        addSection('Frecuencia:', prescriptionData.frequency);
-        addSection('Duración:', prescriptionData.duration);
-        addSection('Instrucciones Adicionales:', prescriptionData.additionalInstructions);
+        // ================================
+        //   SECCIONES DE CONTENIDO
+        // ================================
+        addSection('Diagnóstico', prescriptionData.diagnosis);
+        addSection('Medicación', prescriptionData.medication);
+        addSection('Dosis', prescriptionData.dosage);
+        addSection('Frecuencia', prescriptionData.frequency);
+        addSection('Duración', prescriptionData.duration);
+        addSection('Instrucciones Adicionales', prescriptionData.additionalInstructions);
 
-        // Footer - Firma
-        y += 20;
-        doc.line(margin, y, pageWidth - margin, y);
-        y += lineHeight;
-        
+        // ================================
+        //   FIRMA
+        // ================================
+        if (y > pageHeight - 35) {
+            doc.addPage();
+            y = 20;
+        }
+
+        doc.setDrawColor(156, 163, 175);
+        doc.setLineWidth(0.5);
+        doc.line(margin, y, margin + 70, y);
+
+        y += 8;
+
+        doc.setFontSize(11);
         doc.setFont(undefined, 'bold');
+        doc.setTextColor(31, 41, 55);
         doc.text(prescriptionData.doctorName || 'Dr. Desconocido', margin, y);
-        y += lineHeight;
-        
-        doc.setFont(undefined, 'normal');
-        doc.text('Matrícula Profesional', margin, y);
 
-        // Guardar PDF
-        const fileName = `receta_${date.toISOString().split('T')[0]}.pdf`;
+        y += 5;
+
+        doc.setFontSize(8);
+        doc.setFont(undefined, 'normal');
+        doc.setTextColor(107, 114, 128);
+
+        const licenseText = prescriptionData.doctorMatricula
+            ? `Matrícula Profesional: ${prescriptionData.doctorMatricula}`
+            : "Matrícula Profesional";
+
+        doc.text(licenseText, margin, y);
+
+
+        // ================================
+        //   FOOTER
+        // ================================
+        const footerY = pageHeight - 15;
+
+        doc.setDrawColor(229, 231, 235);
+        doc.setLineWidth(0.3);
+        doc.line(margin, footerY - 3, pageWidth - margin, footerY - 3);
+
+        doc.setFontSize(7);
+        doc.setFont(undefined, 'normal');
+        doc.setTextColor(156, 163, 175);
+
+        const footerText =
+            'CuidarMed+ - Sistema de Gestión Médica | Documento generado el ' +
+            new Date().toLocaleDateString('es-AR');
+
+        const footerWidth = doc.getTextWidth(footerText);
+        doc.text(footerText, (pageWidth - footerWidth) / 2, footerY);
+
+        // ================================
+        //   GUARDAR
+        // ================================
+        const fileName = `Receta_${date.toISOString().split('T')[0]}.pdf`;
         doc.save(fileName);
-        
+
         console.log('✅ PDF descargado:', fileName);
         showNotification('Receta descargada exitosamente', 'success');
-        
+
     } catch (error) {
         console.error('❌ Error al descargar PDF:', error);
         showNotification('Error al descargar la receta: ' + error.message, 'error');
     }
 }
+
 
 /**
  * ✅ NUEVA FUNCIÓN: Vincula event listeners al modal
