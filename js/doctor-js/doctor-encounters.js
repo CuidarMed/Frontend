@@ -11,79 +11,125 @@ import { updateAppointmentStatus } from './doctor-appointments.js';
 // ===================================
 
 const createEncounterForm = (appointmentId, patientId, patientName) => `
-    <div class="modal-content" style="max-width: 900px;">
-        <div class="modal-header">
-            <h3>Consulta con ${patientName}</h3>
-            <button class="close-modal">&times;</button>
-        </div>
-        <div class="modal-body">
-            <form id="encounter-form">
-                <input type="hidden" id="encounter-appointment-id" value="${appointmentId}">
-                <input type="hidden" id="encounter-patient-id" value="${patientId}">
-                
-                <div id="video-call-section" style="margin-bottom: 1.5rem; padding: 1rem; background: #f0f9ff; border-radius: 0.5rem; border: 1px solid #bae6fd;">
-                    <h4 style="margin-bottom: 0.5rem; color: #0369a1; display: flex; align-items: center; gap: 0.5rem;">
+        <div class="modal-content encounter-modal-content">
+    <div class="modal-header">
+        <h3>Consulta con ${patientName}</h3>
+        <button class="close-modal">&times;</button>
+    </div>
+
+    <div class="modal-body encounter-modal-body">
+        <form id="encounter-form" class="encounter-form-layout">
+
+            <input type="hidden" id="encounter-appointment-id" value="${appointmentId}">
+            <input type="hidden" id="encounter-patient-id" value="${patientId}">
+
+            <!-- Columna izquierda -->
+            <div class="encounter-form-column">
+
+                <div class="encounter-form-scrollable">
+
+                    <div class="form-group">
+                        <label for="encounter-reasons">Motivo de consulta: *</label>
+                        <textarea id="encounter-reasons" rows="2" required placeholder="Ej: Dolor de cabeza intenso desde hace 3 días"></textarea>
+                    </div>
+
+                    <div class="soap-section">
+                        <h4 class="soap-title">
+                            <i class="fas fa-notes-medical"></i> Notas SOAP
+                        </h4>
+
+                        ${['subjective', 'objective', 'assessment', 'plan'].map((field, i) => {
+                            const labels = [
+                                'Subjetivo (Síntomas del paciente)',
+                                'Objetivo (Hallazgos físicos)',
+                                'Assessment (Diagnóstico)',
+                                'Plan (Tratamiento)'
+                            ];
+                            const helps = [
+                                '¿Qué dice el paciente?',
+                                '¿Qué observas tú?',
+                                '¿Cuál es tu diagnóstico?',
+                                '¿Qué vas a hacer?'
+                            ];
+                            return `
+                                <div class="form-group">
+                                    <label for="encounter-${field}">
+                                        <strong>${field[0].toUpperCase()}</strong>${labels[i].slice(field[0].length)}: *
+                                    </label>
+
+                                    <textarea id="encounter-${field}" rows="3" required placeholder="..."></textarea>
+
+                                    <small class="soap-help">${helps[i]}</small>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="encounter-notes">Notas adicionales:</label>
+                        <textarea id="encounter-notes" rows="2" placeholder="Información complementaria (opcional)"></textarea>
+                    </div>
+                </div>
+
+                <div class="form-actions encounter-form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancel-encounter">
+                        <i class="fas fa-times"></i> Cancelar
+                    </button>
+
+                    <button type="button" class="btn btn-success hl7-btn" id="download-hl7-summary-btn"
+                        data-appointment-id="${appointmentId}"
+                        data-patient-id="${patientId}">
+                        <i class="fas fa-file-download"></i> Descargar HL7
+                    </button>
+
+                    <button type="button" class="btn btn-prescription prescription-btn"
+                        id="generate-prescription-btn"
+                        data-patient-id="${patientId}"
+                        data-patient-name="${patientName}"
+                        data-appointment-id="${appointmentId}">
+                        <i class="fas fa-prescription"></i> Recetar
+                    </button>
+
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Guardar Consulta
+                    </button>
+                </div>
+
+            </div>
+
+            <!-- Columna derecha / videollamada -->
+            <div class="encounter-video-column">
+                <div id="video-call-section" class="video-section">
+
+                    <h4 class="video-title">
                         <i class="fas fa-video"></i> Videollamada
                     </h4>
-                    <div id="video-call-container" style="min-height: 200px; background: #000; border-radius: 0.5rem; position: relative; display: flex; align-items: center; justify-content: center; color: #fff;">
-                        <p id="video-loading" style="text-align: center;">Cargando videollamada...</p>
+
+                    <div id="video-call-container" class="video-call-container">
+                        <p id="video-loading">Cargando videollamada...</p>
                     </div>
-                    <div id="video-controls" style="margin-top: 0.5rem; display: flex; gap: 0.5rem; justify-content: center;">
-                        <button type="button" id="toggle-mic" class="btn btn-secondary" style="padding: 0.5rem 1rem;">
+
+                    <div id="video-controls" class="video-controls">
+                        <button type="button" id="toggle-mic" class="btn btn-secondary video-btn">
                             <i class="fas fa-microphone"></i> Micrófono
                         </button>
-                        <button type="button" id="toggle-camera" class="btn btn-secondary" style="padding: 0.5rem 1rem;">
+
+                        <button type="button" id="toggle-camera" class="btn btn-secondary video-btn">
                             <i class="fas fa-video"></i> Cámara
                         </button>
-                        <button type="button" id="end-call" class="btn btn-danger" style="padding: 0.5rem 1rem;">
+
+                        <button type="button" id="end-call" class="btn btn-danger video-btn">
                             <i class="fas fa-phone-slash"></i> Finalizar
                         </button>
                     </div>
+
                 </div>
-                
-                <div class="form-group">
-                    <label for="encounter-reasons">Motivo de consulta: *</label>
-                    <textarea id="encounter-reasons" rows="2" required placeholder="Ej: Dolor de cabeza intenso desde hace 3 días"></textarea>
-                </div>
-                
-                <div class="soap-section" style="background: #f9fafb; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
-                    <h4 style="margin-bottom: 1rem; color: #1f2937; display: flex; align-items: center; gap: 0.5rem;">
-                        <i class="fas fa-notes-medical"></i> Notas SOAP
-                    </h4>
-                    ${['subjective', 'objective', 'assessment', 'plan'].map((field, i) => {
-                        const labels = ['Subjetivo (Síntomas del paciente)', 'Objetivo (Hallazgos físicos)', 'Assessment (Diagnóstico)', 'Plan (Tratamiento)'];
-                        const helps = ['¿Qué dice el paciente?', '¿Qué observas tú?', '¿Cuál es tu diagnóstico?', '¿Qué vas a hacer?'];
-                        return `
-                            <div class="form-group">
-                                <label for="encounter-${field}"><strong>${field[0].toUpperCase()}</strong>${labels[i].slice(field[0].length)}: *</label>
-                                <textarea id="encounter-${field}" rows="3" required placeholder="..."></textarea>
-                                <small style="color: #6b7280;">${helps[i]}</small>
-                            </div>
-                        `;
-                    }).join('')}
-                </div>
-                
-                <div class="form-group">
-                    <label for="encounter-notes">Notas adicionales:</label>
-                    <textarea id="encounter-notes" rows="2" placeholder="Información complementaria (opcional)"></textarea>
-                </div>
-                
-                <div class="form-actions" style="display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end;">
-                    <button type="button" class="btn btn-secondary" id="cancel-encounter"><i class="fas fa-times"></i> Cancelar</button>
-                    <button type="button" class="btn btn-success" id="download-hl7-summary-btn" data-appointment-id="${appointmentId}" data-patient-id="${patientId}" 
-                            style="background-color: #28a745; border-color: #28a745; color: white;">
-                        <i class="fas fa-file-download"></i> Descargar HL7
-                    </button>
-                    <button type="button" class="btn btn-prescription" id="generate-prescription-btn" data-patient-id="${patientId}" 
-                            data-patient-name="${patientName}" data-appointment-id="${appointmentId}" 
-                            style="background-color: #17a2b8; border-color: #17a2b8; color: white;">
-                        <i class="fas fa-prescription"></i> Recetar
-                    </button>
-                    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Guardar Consulta</button>
-                </div>
-            </form>
-        </div>
+            </div>
+
+        </form>
     </div>
+</div>
+
 `;
 
 const restoreAttendButton = (appointmentId) => {
@@ -462,72 +508,85 @@ const createEncounterDetailsHTML = (encounter, patientName, doctorName) => {
     const notes = getEncounterField(encounter, 'notes', 'Notes');
 
     return `
-        <div class="modal-content" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
-            <div class="modal-header">
-                <div>
-                    <h3>Detalles de la Consulta</h3>
-                    <p class="encounter-modal-subtitle">Consulta médica completa</p>
-                </div>
-                <button class="close-modal">&times;</button>
+        <div class="modal-content encounter-details-modal">
+        <div class="modal-header">
+            <div>
+                <h3>Detalles de la Consulta</h3>
+                <p class="encounter-modal-subtitle">Consulta médica completa</p>
             </div>
-            <div class="modal-body encounter-modal-body">
-                <div class="encounter-info-section">
-                    <div class="encounter-info-header">
-                        <i class="fas fa-info-circle"></i>
-                        <h4>Información General</h4>
-                    </div>
-                    <div class="encounter-info-grid">
-                        ${[
-                            ['calendar', 'Fecha', date.toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })],
-                            ['clock', 'Hora', date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })],
-                            ['user', 'Paciente', patientName],
-                            ['user-md', 'Médico', doctorName],
-                            ['flag', 'Estado', status]
-                        ].map(([icon, label, value]) => `
-                            <div class="encounter-info-item">
-                                <span class="info-label"><i class="fas fa-${icon}"></i> ${label}:</span>
-                                <span class="info-value">${value}</span>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-                <div class="encounter-info-section" style="margin-top: 2rem;">
-                    <div class="encounter-info-header">
-                        <i class="fas fa-stethoscope"></i>
-                        <h4>Motivo de Consulta</h4>
-                    </div>
-                    <p style="color: #111827; margin-top: 1rem;">${reasons}</p>
-                </div>
-                <div class="encounter-info-section" style="margin-top: 2rem;">
-                    <div class="encounter-info-header">
-                        <i class="fas fa-file-medical"></i>
-                        <h4>Notas SOAP</h4>
-                    </div>
-                    <div style="margin-top: 1rem;">
-                        ${[
-                            ['Subjetivo (S)', subjective],
-                            ['Objetivo (O)', objective],
-                            ['Evaluación (A)', assessment],
-                            ['Plan (P)', plan]
-                        ].map(([label, text]) => `
-                            <div style="margin-bottom: 1rem;">
-                                <strong style="color: #6b7280; display: block; margin-bottom: 0.5rem;">${label}:</strong>
-                                <p style="color: #111827; margin: 0; white-space: pre-wrap;">${text}</p>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-                ${notes ? `
-                    <div class="encounter-info-section" style="margin-top: 2rem;">
-                        <div class="encounter-info-header">
-                            <i class="fas fa-sticky-note"></i>
-                            <h4>Notas Adicionales</h4>
-                        </div>
-                        <p style="color: #111827; margin-top: 1rem; white-space: pre-wrap;">${notes}</p>
-                    </div>
-                ` : ''}
-            </div>
+            <button class="close-modal">&times;</button>
         </div>
+
+        <div class="modal-body encounter-modal-body">
+
+            <!-- Información general -->
+            <div class="encounter-info-section">
+                <div class="encounter-info-header">
+                    <i class="fas fa-info-circle"></i>
+                    <h4>Información General</h4>
+                </div>
+
+                <div class="encounter-info-grid">
+                    ${[
+                        ['calendar', 'Fecha', date.toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })],
+                        ['clock', 'Hora', date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })],
+                        ['user', 'Paciente', patientName],
+                        ['user-md', 'Médico', doctorName],
+                        ['flag', 'Estado', status]
+                    ].map(([icon, label, value]) => `
+                        <div class="encounter-info-item">
+                            <span class="info-label"><i class="fas fa-${icon}"></i> ${label}:</span>
+                            <span class="info-value">${value}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+
+            <!-- Motivo -->
+            <div class="encounter-info-section encounter-info-spacing">
+                <div class="encounter-info-header">
+                    <i class="fas fa-stethoscope"></i>
+                    <h4>Motivo de Consulta</h4>
+                </div>
+
+                <p class="encounter-text-block">${reasons}</p>
+            </div>
+
+            <!-- Notas SOAP -->
+            <div class="encounter-info-section encounter-info-spacing">
+                <div class="encounter-info-header">
+                    <i class="fas fa-file-medical"></i>
+                    <h4>Notas SOAP</h4>
+                </div>
+
+                <div class="soap-items-container">
+                    ${[
+                        ['Subjetivo (S)', subjective],
+                        ['Objetivo (O)', objective],
+                        ['Evaluación (A)', assessment],
+                        ['Plan (P)', plan]
+                    ].map(([label, text]) => `
+                        <div class="soap-item">
+                            <strong class="soap-item-label">${label}:</strong>
+                            <p class="soap-item-text">${text}</p>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+
+            <!-- Notas adicionales -->
+            ${notes ? `
+                <div class="encounter-info-section encounter-info-spacing">
+                    <div class="encounter-info-header">
+                        <i class="fas fa-sticky-note"></i>
+                        <h4>Notas Adicionales</h4>
+                    </div>
+                    <p class="encounter-text-block">${notes}</p>
+                </div>
+            ` : ''}
+        </div>
+    </div>
+
     `;
 };
 

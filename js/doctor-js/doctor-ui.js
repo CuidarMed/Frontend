@@ -4,39 +4,7 @@
 
 import { doctorState, DEFAULT_AVATAR_URL, getDoctorAvatarUrl, getDoctorDisplayName } from './doctor-core.js';
 
-// ===================================
-// GESTIÓN DE AVATARES
-// ===================================
 
-const AVATAR_SELECTORS = ['#userMenuAvatar', '#doctor-avatar-preview', '#profile-avatar', '.doctor-avatar'];
-
-export function updateAllDoctorAvatars(imageUrl) {
-    if (!imageUrl?.trim() || imageUrl === 'null' || imageUrl === 'undefined') {
-        console.warn('updateAllDoctorAvatars: imageUrl inválida', imageUrl);
-        return;
-    }
-    
-    console.log('🖼️ Actualizando avatares con URL:', imageUrl.substring(0, 100));
-    
-    AVATAR_SELECTORS.forEach(selector => {
-        document.querySelectorAll(selector).forEach(el => {
-            if (el.tagName === 'IMG') {
-                el.src = imageUrl;
-                el.onerror = () => {
-                    console.error('❌ Error cargando imagen:', imageUrl);
-                    el.src = DEFAULT_AVATAR_URL;
-                };
-            }
-        });
-    });
-}
-
-export function isValidImageUrl(url) {
-    if (!url || typeof url !== 'string' || url === 'null' || url === 'undefined') return false;
-    if (url === DEFAULT_AVATAR_URL || url.includes('icons.veryicon.com')) return false;
-    if (url.startsWith('data:image/')) return true;
-    try { new URL(url); return true; } catch { return false; }
-}
 
 // ===================================
 // ACTUALIZACIÓN DEL HEADER

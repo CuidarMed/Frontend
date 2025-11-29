@@ -393,9 +393,10 @@ function displayPatientSuggestions(patients, container, input) {
         suggestionItem.className = 'patient-suggestion-item';
         suggestionItem.style.cssText = 'padding: 0.75rem 1rem; cursor: pointer; border-bottom: 1px solid #f3f4f6; transition: background-color 0.2s;';
         suggestionItem.innerHTML = `
-            <div style="font-weight: 600; color: #1f2937; margin-bottom: 0.25rem;">${fullName}</div>
-            <div style="font-size: 0.875rem; color: #6b7280;">DNI: ${dni}</div>
-        `;
+        <div class="suggestion-name">${fullName}</div>
+        <div class="suggestion-dni">DNI: ${dni}</div>
+    `;
+
         
         // Estilos hover
         suggestionItem.addEventListener('mouseenter', function() {
@@ -469,17 +470,19 @@ export async function loadPrescriptionsView() {
         const prescriptionsSection = document.createElement('div');
         prescriptionsSection.className = 'dashboard-section prescriptions-section';
         prescriptionsSection.innerHTML = `
-            <div class="section-header">
-                <div>
-                    <h3>Recetas Médicas</h3>
-                    <p>Recetas emitidas por ti</p>
-                </div>
+        <div class="section-header">
+            <div>
+                <h3>Recetas Médicas</h3>
+                <p>Recetas emitidas por ti</p>
             </div>
-            <div style="text-align: center; padding: 2rem; color: #ef4444;">
-                <i class="fas fa-exclamation-circle" style="font-size: 2rem; margin-bottom: 1rem;"></i>
-                <p>No se pudo obtener el ID del doctor. Por favor, recarga la página.</p>
-            </div>
-        `;
+        </div>
+
+        <div class="doctor-id-error">
+            <i class="fas fa-exclamation-circle doctor-id-error-icon"></i>
+            <p>No se pudo obtener el ID del doctor. Por favor, recarga la página.</p>
+        </div>
+    `;
+
         dashboardContent.appendChild(prescriptionsSection);
         return;
     }
@@ -494,13 +497,15 @@ export async function loadPrescriptionsView() {
                 <p>Recetas emitidas por ti</p>
             </div>
         </div>
-        <div id="prescriptions-list" style="margin-top: 2rem;">
-            <div style="text-align: center; padding: 2rem; color: #6b7280;">
-                <i class="fas fa-spinner fa-spin" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+
+        <div id="prescriptions-list" class="prescriptions-list">
+            <div class="loading-prescriptions">
+                <i class="fas fa-spinner fa-spin loading-icon"></i>
                 <p>Cargando recetas...</p>
             </div>
         </div>
     `;
+
     dashboardContent.appendChild(prescriptionsSection);
 
     // Cargar recetas
@@ -578,89 +583,81 @@ function renderPrescriptionsList(prescriptions) {
     const prescriptionsList = document.getElementById('prescriptions-list');
     if (!prescriptionsList) return;
 
-    prescriptionsList.innerHTML = prescriptions.map(prescription => {
-        const prescriptionId = prescription.prescriptionId || prescription.PrescriptionId;
-        const patientName = prescription.patientName || 'Paciente desconocido';
-        const patientDni = prescription.patientDni || '';
-        const diagnosis = prescription.diagnosis || prescription.Diagnosis || 'Sin diagnóstico';
-        const medication = prescription.medication || prescription.Medication || 'Sin medicamento';
-        const dosage = prescription.dosage || prescription.Dosage || 'Sin especificar';
-        const frequency = prescription.frequency || prescription.Frequency || 'Sin especificar';
-        const duration = prescription.duration || prescription.Duration || 'Sin especificar';
-        const additionalInstructions = prescription.additionalInstructions || prescription.AdditionalInstructions || '';
-        
-        // Formatear fecha
-        let prescriptionDate = 'Fecha no disponible';
+    prescriptionsList.innerHTML = prescriptions.map(p => {
+
+        const prescriptionId = p.prescriptionId || p.PrescriptionId;
+        const patientName = p.patientName || 'Paciente desconocido';
+        const patientDni = p.patientDni || '';
+        const diagnosis = p.diagnosis || p.Diagnosis || 'Sin diagnóstico';
+        const medication = p.medication || p.Medication || 'Sin medicamento';
+        const dosage = p.dosage || p.Dosage || '–';
+        const frequency = p.frequency || p.Frequency || '–';
+        const duration = p.duration || p.Duration || '–';
+        const extra = p.additionalInstructions || p.AdditionalInstructions || '';
+
+        let prescriptionDate = "Fecha no disponible";
         try {
-            const date = new Date(prescription.prescriptionDate || prescription.PrescriptionDate);
-            if (!isNaN(date.getTime())) {
-                prescriptionDate = date.toLocaleDateString('es-AR', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
-                });
-            }
-        } catch (err) {
-            console.warn('Error al formatear fecha:', err);
-        }
+            const date = new Date(p.prescriptionDate || p.PrescriptionDate);
+            prescriptionDate = date.toLocaleDateString("es-AR", {
+                weekday: "long",
+                day: "numeric",
+                month: "long",
+                year: "numeric"
+            });
+        } catch {}
 
         return `
-            <div class="prescription-card" 
-                 style="background: white; border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 1.5rem; margin-bottom: 1rem; transition: all 0.2s;"
-                 onmouseover="this.style.boxShadow='0 4px 6px rgba(0,0,0,0.1)'; this.style.borderColor='#10b981';"
-                 onmouseout="this.style.boxShadow='none'; this.style.borderColor='#e5e7eb';">
-                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 2px solid #f3f4f6;">
-                    <div>
-                        <h4 style="margin: 0; color: #111827; font-size: 1.125rem;">
-                            <i class="fas fa-user" style="color: #10b981; margin-right: 0.5rem;"></i>
-                            ${patientName}
-                        </h4>
-                        ${patientDni ? `<p style="margin: 0.25rem 0 0 0; color: #6b7280; font-size: 0.875rem;">DNI: ${patientDni}</p>` : ''}
-                    </div>
-                    <div style="text-align: right;">
-                        <span style="display: inline-block; background: #10b981; color: white; padding: 0.25rem 0.75rem; border-radius: 0.375rem; font-size: 0.875rem; font-weight: 500;">
-                            <i class="fas fa-calendar" style="margin-right: 0.25rem;"></i>
-                            ${prescriptionDate}
-                        </span>
-                    </div>
+    <div class="prescription-item">
+
+        <!-- HEADER estilo consultation-header -->
+        <div class="prescription-header">
+            <div class="prescription-icon-wrapper">
+                <div class="prescription-icon">
+                    <i class="fas fa-prescription-bottle-alt"></i>
                 </div>
-                
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
-                    <div>
-                        <label style="display: block; color: #6b7280; font-size: 0.875rem; font-weight: 500; margin-bottom: 0.25rem;">Diagnóstico</label>
-                        <p style="margin: 0; color: #111827; font-weight: 500;">${diagnosis}</p>
-                    </div>
-                    <div>
-                        <label style="display: block; color: #6b7280; font-size: 0.875rem; font-weight: 500; margin-bottom: 0.25rem;">Medicamento</label>
-                        <p style="margin: 0; color: #111827; font-weight: 500;">${medication}</p>
-                    </div>
-                </div>
-                
-                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1rem;">
-                    <div>
-                        <label style="display: block; color: #6b7280; font-size: 0.875rem; font-weight: 500; margin-bottom: 0.25rem;">Dosis</label>
-                        <p style="margin: 0; color: #111827;">${dosage}</p>
-                    </div>
-                    <div>
-                        <label style="display: block; color: #6b7280; font-size: 0.875rem; font-weight: 500; margin-bottom: 0.25rem;">Frecuencia</label>
-                        <p style="margin: 0; color: #111827;">${frequency}</p>
-                    </div>
-                    <div>
-                        <label style="display: block; color: #6b7280; font-size: 0.875rem; font-weight: 500; margin-bottom: 0.25rem;">Duración</label>
-                        <p style="margin: 0; color: #111827;">${duration}</p>
-                    </div>
-                </div>
-                
-                ${additionalInstructions ? `
-                    <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #f3f4f6;">
-                        <label style="display: block; color: #6b7280; font-size: 0.875rem; font-weight: 500; margin-bottom: 0.25rem;">Instrucciones adicionales</label>
-                        <p style="margin: 0; color: #111827;">${additionalInstructions}</p>
-                    </div>
-                ` : ''}
             </div>
+
+            <div class="prescription-info">
+                <h4 class="prescription-patient">${patientName}</h4>
+
+                <div class="prescription-meta">
+                    <span class="prescription-date">
+                        <i class="fas fa-calendar-alt"></i> ${prescriptionDate}
+                    </span>
+
+                    ${patientDni ? `
+                    <span class="prescription-dni">
+                        <i class="fas fa-id-card"></i> DNI: ${patientDni}
+                    </span>` : ''}
+                </div>
+            </div>
+        </div>
+
+        <!-- CUERPO estilo consultation-body -->
+        <div class="prescription-body">
+            <div class="prescription-grid">
+                <div class="prescription-field"><strong>Diagnóstico:</strong> ${diagnosis}</div>
+                <div class="prescription-field"><strong>Medicamento:</strong> ${medication}</div>
+                <div class="prescription-field"><strong>Dosis:</strong> ${dosage}</div>
+                <div class="prescription-field"><strong>Frecuencia:</strong> ${frequency}</div>
+                <div class="prescription-field"><strong>Duración:</strong> ${duration}</div>
+            </div>
+
+            ${extra ? `
+            <div class="prescription-extra">
+                <strong>Instrucciones adicionales:</strong>
+                <p>${extra}</p>
+            </div>` : ''}
+        </div>
+
+    </div>
         `;
     }).join('');
 }
+
+
+
+
 
 // Exportar todas las funciones necesarias
 export { allPatientsList };

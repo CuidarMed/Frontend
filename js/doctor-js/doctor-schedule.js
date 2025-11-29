@@ -9,13 +9,13 @@ import { getAllowedTransitionsFrom } from './appointment-state-machine.js';
 const DAYS_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 const MONTHS_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 const STATUS_CONFIG = {
-    SCHEDULED: { label: 'Programado', color: '#f59e0b' },
-    CONFIRMED: { label: 'Confirmado', color: '#10b981' },
-    COMPLETED: { label: 'Completado', color: '#10b981' },
-    CANCELLED: { label: 'Cancelado', color: '#dc2626' },
-    RESCHEDULED: { label: 'Reprogramado', color: '#8b5cf6' },
-    NO_SHOW: { label: 'No asistió', color: '#6b7280' },
-    IN_PROGRESS: { label: 'En curso', color: '#3b82f6' }
+    SCHEDULED: { label: 'Programado', color: '#f59e0b',gradient: "linear-gradient(135deg, #fff7ed 0%, #ffffff 100%)"},
+    CONFIRMED: { label: 'Confirmado', color: '#10b981', gradient: "linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%)" },
+    COMPLETED: { label: 'Completado', color: '#10b981', gradient: "linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%)" },
+    CANCELLED: { label: 'Cancelado', color: '#dc2626', gradient: "linear-gradient(135deg, #fef2f2 0%, #ffffff 100%)" },
+    RESCHEDULED: { label: 'Reprogramado', color: '#8b5cf6',gradient: "linear-gradient(135deg, #f5f3ff 0%, #ffffff 100%)" },
+    NO_SHOW: { label: 'No asistió', color: '#6b7280',gradient: "linear-gradient(135deg, #f3f4f6 0%, #ffffff 100%)"  },
+    IN_PROGRESS: { label: 'En curso', color: '#3b82f6', gradient: "linear-gradient(135deg, #eff6ff 0%, #ffffff 100%)"  }
 };
 
 /**
@@ -61,16 +61,19 @@ function createAgendaSection() {
                     <h2>Agenda Médica</h2>
                     <p>Gestión completa de tus turnos asignados</p>
                 </div>
+
                 <button class="btn btn-secondary" id="refreshAgendaBtn">
                     <i class="fas fa-sync-alt"></i> Actualizar
                 </button>
             </div>
-            <div id="agenda-content" style="padding: 2rem; text-align: center;">
-                <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: #2563eb;"></i>
-                <p style="margin-top: 1rem; color: #6b7280;">Cargando turnos...</p>
+
+            <div id="agenda-content" class="agenda-loading">
+                <i class="fas fa-spinner fa-spin loading-icon"></i>
+                <p class="loading-text">Cargando turnos...</p>
             </div>
         </div>
     `;
+
     return section;
 }
 
@@ -195,12 +198,14 @@ function generateSummaryHTML(appointments) {
     }).join('');
     
     return `
-        <div style="margin-bottom: 2rem;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                <h3 style="margin: 0; color: #1f2937;">Total de turnos: ${appointments.length}</h3>
-                <div style="display: flex; gap: 0.5rem;">${badges}</div>
+        <div class="appointments-summary">
+        <div class="appointments-summary-header">
+            <h3>Total de turnos: ${appointments.length}</h3>
+            <div class="appointments-summary-badges">
+                ${badges}
             </div>
         </div>
+    </div>
     `;
 }
 
@@ -210,16 +215,20 @@ function generateSummaryHTML(appointments) {
 function generateDayCardHTML(dayName, dayNumber, monthName, appointments) {
     const appointmentsHTML = appointments.map(apt => generateAppointmentHTML(apt)).join('');
     return `
-        <div class="agenda-day-card" style="margin-bottom: 1.5rem; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
-            <div style="background: #f3f4f6; padding: 1rem 1.5rem; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                    <h3 style="margin: 0; color: #1f2937; font-size: 1.25rem;">${dayName}, ${dayNumber} de ${monthName}</h3>
-                    <p style="margin: 0.25rem 0 0 0; color: #6b7280; font-size: 0.875rem;">${appointments.length} ${appointments.length === 1 ? 'turno' : 'turnos'}</p>
-                </div>
-                <span style="padding: 0.5rem 1rem; background: #10b981; color: white; border-radius: 6px; font-weight: 600;">${appointments.length}</span>
+        <div class="agenda-day-card">
+        <div class="agenda-day-header">
+            <div>
+                <h3>${dayName}, ${dayNumber} de ${monthName}</h3>
+                <p>${appointments.length} ${appointments.length === 1 ? 'turno' : 'turnos'}</p>
             </div>
-            <div style="padding: 1rem 1.5rem;">${appointmentsHTML}</div>
+
+            <span class="day-appointment-count">${appointments.length}</span>
         </div>
+
+        <div class="appointments-grid">
+            ${appointmentsHTML}
+        </div>
+    </div>
     `;
 }
 
@@ -256,29 +265,18 @@ function generateAppointmentHTML(apt) {
     let statusElement;
 
     if (isFinalState(status)) {
-        // 🔒 Estado final → no editable → solo texto
-        statusElement = `
-            <span class="appointment-status-final"
-                  style="padding: 0.25rem 0.5rem; 
-                         font-size: 0.75rem; 
-                         font-weight: 600; 
-                         color: ${config.color};">
-                ${config.label}
-            </span>
-        `;
+    // Estado final → solo texto
+    statusElement = `
+        <span class="appointment-status-final" style="color: ${config.color};">
+            ${config.label}
+        </span>
+    `;
     } else {
-        // ✏️ Estado editable → select normal
+        // Estado editable → select
         statusElement = `
             <select class="appointment-status-select"
                     data-appointment-id="${appointmentId}"
-                    style="padding: 0.25rem 0.5rem; 
-                           border: 1px solid #e5e7eb; 
-                           border-radius: 4px; 
-                           font-size: 0.75rem; 
-                           background: white; 
-                           color: ${config.color}; 
-                           font-weight: 600; 
-                           cursor: pointer;">
+                    style="color: ${config.color};">
                 ${statusOptions}
             </select>
         `;
@@ -296,76 +294,97 @@ function generateAppointmentHTML(apt) {
     // 4) HTML final del turno
     // ============================
     //
-    return `
-        <div style="display: flex; justify-content: space-between; align-items: center; 
-                    padding: 1rem; margin-bottom: 0.75rem; 
-                    background: #f9fafb; border-radius: 6px; 
-                    border-left: 4px solid ${config.color};">
-            
-            <div style="flex: 1;">
-                
-                <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem;">
-                    <div style="font-weight: 600; color: #1f2937; font-size: 1.1rem;">
-                        ${apt.patientName}
-                    </div>
+        return `
+    <div class="appointment-card" style="border-top-color: ${config.color}">
+        
+        <div class="appointment-header" style="background: ${config.gradient}">
+            <h4 class="appointment-patient">${apt.patientName}</h4>
 
-                    <!-- El elemento dinámico de estado -->
-                    ${statusElement}
-                </div>
+            ${
+                status === 'COMPLETED' || status === 'NO_SHOW'
+                    ? `<span class="appointment-status-badge" 
+                           style="color:${config.color}; background:${status === 'COMPLETED' ? '#d1fae5' : '#f3f4f6'};">
+                            ${STATUS_CONFIG[status].label}
+                       </span>`
+                    : `<select class="appointment-status-select" data-appointment-id="${appointmentId}" 
+                               style="color:${config.color}">
+                            ${statusOptions}
+                       </select>`
+            }
+        </div>
 
-                <div style="color: #6b7280; font-size: 0.875rem;">
-                    <i class="fas fa-clock" style="margin-right: 0.5rem;"></i>${timeStr}
-                </div>
-
-                <div style="color: #6b7280; font-size: 0.875rem;">
-                    <i class="fas fa-user" style="margin-right: 0.5rem;"></i>DNI: ${apt.patientDni}
-                </div>
-
-                <div style="color: #6b7280; font-size: 0.875rem;">
-                    <i class="fas fa-stethoscope" style="margin-right: 0.5rem;"></i>${reason}
-                </div>
+        <div class="appointment-info">
+            <div class="info-row">
+                <i class="fas fa-clock icon"></i>
+                <span>${timeStr}</span>
             </div>
 
-            <div style="display: flex; gap: 0.5rem; margin-left: 1rem;">
-                ${actions}
+            <div class="info-row">
+                <i class="fas fa-user icon"></i>
+                <span>DNI: ${apt.patientDni}</span>
+            </div>
+
+            <div class="info-row">
+                <i class="fas fa-stethoscope icon"></i>
+                <span>${reason}</span>
             </div>
         </div>
-    `;
+
+        <div class="appointment-actions">
+            ${actions}
+        </div>
+    </div>
+`;
 }
+
 
 /**
  * Obtiene los botones de acción según el estado
  */
 function getActionButtons(status, appointmentId, patientId, patientName) {
     if (status === 'COMPLETED') {
-        return '<span style="padding: 0.5rem 1rem; font-size: 0.875rem; color: #10b981; font-weight: 600;"><i class="fas fa-check-circle"></i> Consulta realizada</span>';
-    }
-    if (status === 'SCHEDULED' || status === 'CONFIRMED') {
-    return `
-        <button class="btn btn-primary btn-sm attend-appointment-btn"
-                data-appointment-id="${appointmentId}"
-                data-patient-id="${patientId}"
-                data-patient-name="${patientName}"
-                style="padding: 0.5rem 1rem; font-size: 0.875rem;">
-            <i class="fas fa-video"></i> Atender
-        </button>
-
-        <button class="btn btn-chat-doctor btn-sm open-chat-btn"
-                data-appointment-id="${appointmentId}"
-                data-patient-id="${patientId}"
-                data-patient-name="${patientName}"
-                title="Chatear con el paciente"
-                style="background: #10b981; color: #fff; border: none; padding: 0.5rem 1rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 0.4rem;">
-            <i class="fas fa-comments"></i> Chat
-        </button>
-    `;
-}
-    if (status === 'IN_PROGRESS') {
         return `
-            <button class="btn btn-success btn-sm complete-appointment-btn" data-appointment-id="${appointmentId}" data-patient-id="${patientId}" data-patient-name="${patientName}" style="padding: 0.5rem 1rem; font-size: 0.875rem; margin-right: 0.5rem;"><i class="fas fa-check"></i> Completar</button>
-            <button class="btn btn-warning btn-sm no-show-appointment-btn" data-appointment-id="${appointmentId}" style="padding: 0.5rem 1rem; font-size: 0.875rem;"><i class="fas fa-times"></i> No asistió</button>
+            <span class="appt-done-label">
+                <i class="fas fa-check-circle"></i> Consulta realizada
+            </span>
         `;
     }
+
+    if (status === 'SCHEDULED' || status === 'CONFIRMED') {
+        return `
+            <button class="btn btn-primary btn-sm attend-appointment-btn"
+                    data-appointment-id="${appointmentId}"
+                    data-patient-id="${patientId}"
+                    data-patient-name="${patientName}">
+                <i class="fas fa-video"></i> Atender
+            </button>
+
+            <button class="btn btn-chat-doctor btn-sm open-chat-btn"
+                    data-appointment-id="${appointmentId}"
+                    data-patient-id="${patientId}"
+                    data-patient-name="${patientName}"
+                    title="Chatear con el paciente">
+                <i class="fas fa-comments"></i> Chat
+            </button>
+        `;
+    }
+
+    if (status === 'IN_PROGRESS') {
+        return `
+            <button class="btn btn-success btn-sm complete-appointment-btn"
+                    data-appointment-id="${appointmentId}"
+                    data-patient-id="${patientId}"
+                    data-patient-name="${patientName}">
+                <i class="fas fa-check"></i> Completar
+            </button>
+
+            <button class="btn btn-warning btn-sm no-show-appointment-btn"
+                    data-appointment-id="${appointmentId}">
+                <i class="fas fa-times"></i> No asistió
+            </button>
+        `;
+    }
+
     return '';
 }
 
@@ -577,37 +596,39 @@ function renderAvailabilityList(availability) {
             const id = slot.availabilityId || slot.AvailabilityId;
             const active = slot.isActive !== false;
             
-            return `
-                <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; margin-bottom: 0.5rem; background: white; border-radius: 6px; border: 1px solid #e5e7eb;">
-                    <div style="display: flex; align-items: center; gap: 1rem;">
-                        <span style="font-weight: 600; color: #1f2937;">${start} - ${end}</span>
-                        <span style="color: #6b7280;">Duración: ${duration} min</span>
-                        ${!active ? '<span style="color: #dc2626;">(Inactivo)</span>' : ''}
-                    </div>
-                    <div>
-                        <button class="btn btn-sm btn-secondary edit-availability-btn" data-id="${id}" style="margin-right: 0.5rem;">
-                            <i class="fas fa-edit"></i> Editar
-                        </button>
-                        <button class="btn btn-sm btn-danger delete-availability-btn" data-id="${id}">
-                            <i class="fas fa-trash"></i> Eliminar
-                        </button>
-                    </div>
+           return `
+            <div class="availability-card ${!active ? 'inactive' : ''}">
+                <div class="availability-info">
+                    <span class="availability-time">${start} - ${end}</span>
+                    <span class="availability-duration">Duración: ${duration} min</span>
+                    ${!active ? '<span class="availability-inactive-msg">(Inactivo)</span>' : ''}
                 </div>
-            `;
+
+                <div class="availability-actions">
+                    <button class="btn btn-sm btn-secondary edit-availability-btn" data-id="${id}">
+                        <i class="fas fa-edit"></i> Editar
+                    </button>
+
+                    <button class="btn btn-sm btn-danger delete-availability-btn" data-id="${id}">
+                        <i class="fas fa-trash"></i> Eliminar
+                    </button>
+                </div>
+            </div>
+        `;
+
         }).join('');
         
         return `
-            <div style="margin-bottom: 1.5rem; padding: 1rem; background: #f9fafb; border-radius: 8px;">
-                <h4 style="margin-bottom: 1rem; color: #1f2937;"><i class="fas fa-calendar-day"></i> ${dayName}</h4>
+            <div class="availability-day-card">
+                <h4 class="availability-day-title">
+                    <i class="fas fa-calendar-day"></i> ${dayName}
+                </h4>
                 ${slotsHTML}
             </div>
         `;
     }).join('');
 }
 
-/**
- * Formatea tiempo
- */
 /**
  * Formatea tiempo
  */
@@ -689,27 +710,31 @@ async function openAvailabilityForm(parentModal, doctorId, availabilityId = null
     const modal = createModal(
         availabilityId ? 'Editar Horario' : 'Agregar Horario',
         `
-        <form id="availability-form">
+        <form id="availability-form" class="availability-form">
             <div class="form-group">
-                <label style="display: block; margin-bottom: 0.5rem; color: #374151; font-weight: 600; font-size: 0.9rem;">Día de la semana:</label>
-                <select name="dayOfWeek" required style="width: 100%; padding: 0.75rem 1rem; border: 2px solid #e5e7eb; border-radius: 10px; font-size: 0.95rem; color: #374151; background: white; cursor: pointer; transition: all 0.3s ease; appearance: none; background-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23374151' d='M6 9L1 4h10z'/%3E%3C/svg%3E\"); background-repeat: no-repeat; background-position: right 1rem center; padding-right: 2.5rem;">
+                <label class="availability-label">Día de la semana:</label>
+                <select name="dayOfWeek" required class="availability-select">
                     <option value="">Seleccionar día</option>
                     ${dayOptions}
                 </select>
             </div>
+
             <div class="form-group">
-                <label>Hora de inicio:</label>
-                <input type="time" name="startTime" value="${startTime}" required>
+                <label class="availability-label">Hora de inicio:</label>
+                <input type="time" name="startTime" value="${startTime}" required class="availability-input">
             </div>
+
             <div class="form-group">
-                <label>Hora de fin:</label>
-                <input type="time" name="endTime" value="${endTime}" required>
+                <label class="availability-label">Hora de fin:</label>
+                <input type="time" name="endTime" value="${endTime}" required class="availability-input">
             </div>
+
             <div class="form-group">
-                <label>Duración (minutos):</label>
-                <input type="number" name="durationMinutes" min="15" max="480" value="${duration}" required>
+                <label class="availability-label">Duración (minutos):</label>
+                <input type="number" name="durationMinutes" min="15" max="480" value="${duration}" required class="availability-input">
             </div>
-            <div class="form-actions" style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid #e5e7eb; flex-wrap: wrap;">
+
+            <div class="availability-form-actions">
                 <button type="button" class="btn btn-secondary cancel-modal">Cancelar</button>
                 <button type="submit" class="btn btn-primary">Guardar</button>
             </div>
@@ -719,16 +744,13 @@ async function openAvailabilityForm(parentModal, doctorId, availabilityId = null
         1001
     );
 
+
     modal.querySelector('form').addEventListener('submit', async (e) => {
         e.preventDefault();
         await saveAvailability(modal, parentModal, doctorId, availabilityId);
     });
 }
 
-
-/**
- * Guarda disponibilidad
- */
 /**
  * Guarda disponibilidad
  */

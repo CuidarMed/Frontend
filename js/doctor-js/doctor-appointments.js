@@ -41,7 +41,6 @@ const getActionButtons = (status, appointmentId, patientId, patientName) => {
             </span>
         `;
     }
-    
     if (status === 'CANCELLED') {
         return `
             <span class="status-cancelled">
@@ -49,7 +48,6 @@ const getActionButtons = (status, appointmentId, patientId, patientName) => {
             </span>
         `;
     }
-    
     if (status === 'NO_SHOW') {
         return `
             <span class="status-no-show">
@@ -57,9 +55,7 @@ const getActionButtons = (status, appointmentId, patientId, patientName) => {
             </span>
         `;
     }
-    
     let buttons = '';
-    
     if (status === 'SCHEDULED') {
         buttons = `
             <button class="btn btn-success btn-sm confirm-appointment-btn" ${dataAttrs}>
@@ -71,8 +67,8 @@ const getActionButtons = (status, appointmentId, patientId, patientName) => {
             <button class="btn btn-primary btn-sm attend-appointment-btn" ${dataAttrs}>
                 <i class="fas fa-video"></i> Atender
             </button>
-            <!-- Boton del chat -->
-            <button class="btn btn-chat-doctor btn-sm open-chat-btn" ${dataAttrs} style="background: #10b981; color: white; border: none; adding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem;">
+
+            <button class="btn btn-chat-doctor btn-sm open-chat-btn" ${dataAttrs}>
                 <i class="fas fa-comments"></i> Chat
             </button>
         `;
@@ -81,17 +77,18 @@ const getActionButtons = (status, appointmentId, patientId, patientName) => {
             <button class="btn btn-success btn-sm complete-appointment-btn" ${dataAttrs}>
                 <i class="fas fa-check-circle"></i> Completar
             </button>
+
             <button class="btn btn-warning btn-sm no-show-appointment-btn" data-appointment-id="${appointmentId}">
                 <i class="fas fa-user-slash"></i> No asistió
             </button>
-            <!-- Boton del chat -->
-            <button class="btn btn-chat-doctor btn-sm open-chat-btn" ${dataAttrs} style="background: #10b981; color: white; border: none; adding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem;">
+
+            <button class="btn btn-chat-doctor btn-sm open-chat-btn" ${dataAttrs}>
                 <i class="fas fa-comments"></i> Chat
             </button>
         `;
     }
     
-    // ——— Dropdown de opciones (Reprogramar / Cancelar) ———
+    // Dropdown extra de acciones
     if (status !== 'COMPLETED' && status !== 'IN_PROGRESS') {
         buttons += `
             <div class="appointment-action-menu">
@@ -116,6 +113,7 @@ const getActionButtons = (status, appointmentId, patientId, patientName) => {
 
     return buttons;
 };
+
 
 // ===================================
 // MENSAJES NO LEÍDOS - CHAT (Solo Frontend)
@@ -192,20 +190,16 @@ async function findChatRoomForAppointment(doctorId, patientId) {
  * Actualiza el badge de un botón de chat
  */
 function updateChatButtonBadge(button, unreadCount) {
-    // Remover badge existente
     const existingBadge = button.querySelector('.unread-badge');
-    if (existingBadge) {
-        existingBadge.remove();
-    }
-    
-    // Si hay mensajes no leídos, agregar badge
+    if (existingBadge) existingBadge.remove();
+
     if (unreadCount > 0) {
         const badge = document.createElement('span');
         badge.className = 'unread-badge';
         badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+
         button.style.position = 'relative';
         button.appendChild(badge);
-        console.log('✅ Badge agregado con count:', unreadCount);
     }
 }
 
@@ -342,21 +336,89 @@ export function createConsultationItemElement(appointment) {
     const status = appointment.status || appointment.Status || 'SCHEDULED';
     const statusInfo = getStatusInfo(status);
     
+    // Formatear fecha
+    const dateStr = startTime.toLocaleDateString('es-AR', { 
+        weekday: 'long', 
+        day: 'numeric', 
+        month: 'long', 
+        year: 'numeric' 
+    });
+    const dateFormatted = dateStr.charAt(0).toUpperCase() + dateStr.slice(1);
+    
     item.innerHTML = `
-        <div class="consultation-icon"><i class="fas fa-clock"></i></div>
-        <div class="consultation-info">
-            <h4>${appointment.patientName || 'Paciente Desconocido'}</h4>
-            <p>${appointment.reason || appointment.Reason || 'Sin motivo'}</p>
-            <span>${formatTime(startTime)} - ${formatTime(endTime)}</span>
+        <!-- HEADER con fondo completo en la parte superior -->
+        <div class="consultation-header status-${statusInfo.class}">
+            <div class="consultation-icon-wrapper">
+                <div class="consultation-icon">
+                    <i class="fas fa-user-md"></i>
+                </div>
+            </div>
+
+            <div class="consultation-info">
+                <h4 class="consultation-patient">
+                    ${appointment.patientName || 'Paciente Desconocido'}
+                </h4>
+
+                <div class="consultation-meta">
+                    <span class="consultation-date">
+                        <i class="fas fa-calendar-alt"></i> ${dateFormatted}
+                    </span>
+
+                    <span class="consultation-time">
+                        <i class="fas fa-clock"></i> ${formatTime(startTime)} - ${formatTime(endTime)}
+                    </span>
+                </div>
+            </div>
+
+            <span class="status-badge status ${statusInfo.class}">
+                ${statusInfo.text}
+            </span>
         </div>
-        <div class="consultation-actions" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-            <span class="status ${statusInfo.class}">${statusInfo.text}</span>
-            ${getActionButtons(status, appointment.appointmentId || appointment.AppointmentId, appointment.patientId || appointment.PatientId, appointment.patientName)}
+
+        <div class="consultation-body">
+            <div class="consultation-reason-wrapper">
+                <i class="fas fa-stethoscope"></i>
+                <div class="consultation-reason-content">
+                    <strong>Motivo:</strong> 
+                    ${appointment.reason || appointment.Reason || 'Sin motivo especificado'}
+                </div>
+            </div>
+        </div>
+
+        <div class="consultation-actions">
+            ${getActionButtons(
+                status,
+                appointment.appointmentId || appointment.AppointmentId,
+                appointment.patientId || appointment.PatientId,
+                appointment.patientName
+            )}
+
+            ${status === 'COMPLETED' ? `
+                <button 
+                    class="btn btn-info btn-sm btn-hl7-download"
+                    data-appointment-id="${appointment.appointmentId || appointment.AppointmentId}"
+                    data-patient-id="${appointment.patientId || appointment.PatientId}">
+                    <i class="fas fa-file-download"></i> Descargar HL7
+                </button>
+            ` : ''}
         </div>
     `;
     
+    // Event listener para botón HL7
+    const hl7Button = item.querySelector('.btn-hl7-download');
+    if (hl7Button) {
+        hl7Button.addEventListener('click', async function() {
+            const appointmentId = this.getAttribute('data-appointment-id');
+            const patientId = this.getAttribute('data-patient-id');
+            const { downloadHl7Summary } = await import('./doctor-hl7.js');
+            await downloadHl7Summary(appointmentId, patientId);
+        });
+    }
+    
     return item;
 }
+
+
 
 const renderAppointmentsList = (container, appointments, filterDate) => {
     container.innerHTML = '';
@@ -397,7 +459,7 @@ export async function loadTodayConsultations(selectedDate = null) {
     
     setTimeout(() => {
         initializeAttendButtons();
-        startChatBadgePolling(); // ✅ AGREGAR ESTA LÍNEA
+        startChatBadgePolling(); 
     }, 100);
 }
 
@@ -1277,27 +1339,81 @@ export async function attendConsultation(appointmentId, patientId, patientName) 
     }
 }
 
-// ===================================
 // VISTAS
-// ===================================
 
 export function initializeConsultationDateFilter() {
     const dateFilter = document.getElementById('consultation-date-filter');
     if (!dateFilter) return;
     
-    console.log('ðŸ“… Inicializando filtro de fecha');
+    console.log('📅 Inicializando filtro de fecha');
     
+    // Obtener fecha de hoy en zona horaria local (no UTC)
     const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    const todayStr = `${year}-${month}-${day}`;
+    
+    console.log('📅 Fecha de hoy (local):', todayStr);
+    
     dateFilter.value = todayStr;
+    
+    // Cargar consultas de hoy automáticamente al inicializar
+    loadTodayConsultations(todayStr).catch(err => {
+        console.error('❌ Error al cargar consultas de hoy:', err);
+    });
     
     dateFilter.addEventListener('change', async function(e) {
         const selectedDate = e.target.value;
         if (selectedDate) {
-            console.log('ðŸ“† Fecha seleccionada:', selectedDate);
+            console.log('📅 Fecha seleccionada:', selectedDate);
             await loadTodayConsultations(selectedDate);
         }
     });
+
+    // Botones de navegación de fecha
+    const prevDayBtn = document.getElementById('prev-day-btn');
+    const nextDayBtn = document.getElementById('next-day-btn');
+    const todayBtn = document.getElementById('today-btn');
+
+    if (prevDayBtn) {
+        prevDayBtn.addEventListener('click', () => {
+            const currentDate = new Date(dateFilter.value || todayStr + 'T00:00:00');
+            currentDate.setDate(currentDate.getDate() - 1);
+            const year = currentDate.getFullYear();
+            const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+            const day = String(currentDate.getDate()).padStart(2, '0');
+            const newDateStr = `${year}-${month}-${day}`;
+            dateFilter.value = newDateStr;
+            dateFilter.dispatchEvent(new Event('change'));
+        });
+    }
+
+    if (nextDayBtn) {
+        nextDayBtn.addEventListener('click', () => {
+            const currentDate = new Date(dateFilter.value || todayStr + 'T00:00:00');
+            currentDate.setDate(currentDate.getDate() + 1);
+            const year = currentDate.getFullYear();
+            const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+            const day = String(currentDate.getDate()).padStart(2, '0');
+            const newDateStr = `${year}-${month}-${day}`;
+            dateFilter.value = newDateStr;
+            dateFilter.dispatchEvent(new Event('change'));
+        });
+    }
+
+    if (todayBtn) {
+        todayBtn.addEventListener('click', () => {
+            // Recalcular fecha de hoy para asegurar que sea correcta
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const currentTodayStr = `${year}-${month}-${day}`;
+            dateFilter.value = currentTodayStr;
+            dateFilter.dispatchEvent(new Event('change'));
+        });
+    }
 }
 
 export async function loadTodayConsultationsView() {
@@ -1308,27 +1424,51 @@ export async function loadTodayConsultationsView() {
 
     const section = document.createElement('div');
     section.className = 'dashboard-section consultas-section';
+    // Obtener fecha de hoy en zona horaria local (no UTC)
     const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    const todayStr = `${year}-${month}-${day}`;
     
     section.innerHTML = `
-        <div class="section-header">
-            <div>
-                <h3>Historial de Consultas</h3>
-                <p>Filtra las consultas por fecha</p>
-            </div>
-            <div class="date-filter-container">
-                <label for="consultation-date-filter-view" style="margin-right: 0.5rem; color: #6b7280; font-size: 0.875rem;">
-                    <i class="fas fa-calendar-alt"></i> Fecha:
-                </label>
-                <input type="date" id="consultation-date-filter-view" class="date-filter-input" value="${todayStr}"
-                       style="padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.375rem; font-size: 0.875rem;">
+    <div class="section-header">
+        <div>
+            <h3>Historial de Consultas</h3>
+            <p>Filtra las consultas por fecha</p>
+        </div>
+
+        <div class="date-filter-container">
+            <label for="consultation-date-filter-view" class="date-filter-label">
+                <i class="fas fa-calendar-alt"></i> Fecha:
+            </label>
+
+            <div class="date-navigation">
+                <button type="button" id="prev-day-btn-view" class="date-nav-btn" title="Día anterior">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+
+                <input type="date" 
+                       id="consultation-date-filter-view" 
+                       class="date-filter-input"
+                       value="${todayStr}">
+
+                <button type="button" id="next-day-btn-view" class="date-nav-btn" title="Día siguiente">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+
+                <button type="button" id="today-btn-view" class="date-nav-btn today-btn" title="Ir a hoy">
+                    Hoy
+                </button>
             </div>
         </div>
-        <div id="consultas-hoy-list" class="consultations-list">
-            <p style="padding:1rem;">Cargando...</p>
-        </div>
-    `;
+    </div>
+
+    <div id="consultas-hoy-list" class="consultations-list">
+        <p class="consultations-loading">Cargando...</p>
+    </div>
+`;
+
     
     dashboardContent.appendChild(section);
 
@@ -1339,6 +1479,50 @@ export async function loadTodayConsultationsView() {
             if (selectedDate) {
                 await loadTodayConsultationsForNav(selectedDate);
             }
+        });
+    }
+
+    // Botones de navegación de fecha para la vista dinámica
+    const prevDayBtnView = document.getElementById('prev-day-btn-view');
+    const nextDayBtnView = document.getElementById('next-day-btn-view');
+
+    if (prevDayBtnView && dateFilterView) {
+        prevDayBtnView.addEventListener('click', () => {
+            const currentDate = new Date(dateFilterView.value || todayStr + 'T00:00:00');
+            currentDate.setDate(currentDate.getDate() - 1);
+            const year = currentDate.getFullYear();
+            const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+            const day = String(currentDate.getDate()).padStart(2, '0');
+            const newDateStr = `${year}-${month}-${day}`;
+            dateFilterView.value = newDateStr;
+            dateFilterView.dispatchEvent(new Event('change'));
+        });
+    }
+
+    if (nextDayBtnView && dateFilterView) {
+        nextDayBtnView.addEventListener('click', () => {
+            const currentDate = new Date(dateFilterView.value || todayStr + 'T00:00:00');
+            currentDate.setDate(currentDate.getDate() + 1);
+            const year = currentDate.getFullYear();
+            const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+            const day = String(currentDate.getDate()).padStart(2, '0');
+            const newDateStr = `${year}-${month}-${day}`;
+            dateFilterView.value = newDateStr;
+            dateFilterView.dispatchEvent(new Event('change'));
+        });
+    }
+
+    const todayBtnView = document.getElementById('today-btn-view');
+    if (todayBtnView && dateFilterView) {
+        todayBtnView.addEventListener('click', () => {
+            // Recalcular fecha de hoy para asegurar que sea correcta
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const currentTodayStr = `${year}-${month}-${day}`;
+            dateFilterView.value = currentTodayStr;
+            dateFilterView.dispatchEvent(new Event('change'));
         });
     }
 
