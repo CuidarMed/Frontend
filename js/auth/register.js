@@ -165,8 +165,9 @@ document.addEventListener("DOMContentLoaded", () => {
             const response = await registerUser(payload);
             console.log("Respuesta de AuthMS:", response);
 
-            alert(`¡Cuenta creada exitosamente! Tu rol es: ${selectedRole}`);
-            window.location.href = "login.html";
+            // Redirigir a la página de confirmación con el email
+            const email = encodeURIComponent(payload.email);
+            window.location.href = `confirmacion.html?email=${email}`;
         } catch (err) {
             console.error("Error al registrar usuario:", err);
 

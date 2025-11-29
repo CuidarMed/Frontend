@@ -32,6 +32,33 @@ export async function registerUser(userData) {
     }
 }
 
+export async function verifyEmail(email, verificationCode) {
+    try {
+        console.log('📧 Verificando código para:', email);
+        const result = await ApiAuth.post("Auth/VerifyEmail", { 
+            email, 
+            verificationCode 
+        });
+        console.log('✅ Email verificado exitosamente');
+        return result;
+    } catch (error) {
+        console.error("❌ Error en verifyEmail:", error);
+        throw new Error(error.message || "Error al verificar el código");
+    }
+}
+
+export async function resendVerificationEmail(email) {
+    try {
+        console.log('📧 Reenviando código de verificación a:', email);
+        const result = await ApiAuth.post("Auth/ResendVerificationEmail", { email });
+        console.log('✅ Código reenviado exitosamente');
+        return result;
+    } catch (error) {
+        console.error("❌ Error en resendVerificationEmail:", error);
+        throw new Error(error.message || "Error al reenviar el código");
+    }
+}
+
 /**
  * Extrae los datos del usuario desde el JWT almacenado
  * Ya no necesita llamar al backend porque el token contiene toda la info
