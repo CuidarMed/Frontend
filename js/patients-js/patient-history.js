@@ -86,121 +86,132 @@ function renderHistoryCards(encounters, container, doctorsMap) {
 
         // Descargar PDF
         clone.querySelector('.btn-history-details').onclick = () => {
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF();
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
 
-            const margin = 14;
-            let y = 20;
-            const lineHeight = 7;
-            const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 20;
+        let y = 20;
+        const lineHeight = 7;
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
 
-            // =============================
-            // HEADER CUIDARMED+
-            // =============================
-            doc.setFontSize(22);
+        // ENCABEZADO 
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(22);
+        doc.setTextColor(37, 99, 235); // azul institucional
+        doc.text("CuidarMed+", margin, y);
+
+        y += 14;
+
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(55, 65, 81);
+        doc.text("Informe de Consulta Médica", margin, y);
+
+        y += 10;
+
+        // Línea divisoria sutil
+        doc.setDrawColor(200, 200, 200);
+        doc.setLineWidth(0.5);
+        doc.line(margin, y, pageWidth - margin, y);
+
+        y += 12;
+
+        // INFORMACIÓN DEL MÉDICO Y CONSULTA 
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.setTextColor(45, 55, 72);
+
+        doc.text("Médico:", margin, y);
+        doc.setFont("helvetica", "normal");
+        doc.text(doctorInfo.fullName, margin + 35, y);
+        y += lineHeight;
+
+        if (doctorInfo.specialty) {
             doc.setFont("helvetica", "bold");
-            doc.setTextColor(0, 85, 170); // Azul suave
-            doc.text("CuidarMed+", margin, y);
-            y += 12;
+            doc.text("Especialidad:", margin, y);
+            doc.setFont("helvetica", "normal");
+            doc.text(doctorInfo.specialty, margin + 35, y);
+            y += lineHeight;
+        }
 
+        doc.setFont("helvetica", "bold");
+        doc.text("Fecha:", margin, y);
+        doc.setFont("helvetica", "normal");
+        doc.text(`${date.toLocaleDateString()} ${date.toLocaleTimeString()}`, margin + 35, y);
+        y += lineHeight;
+
+        doc.setFont("helvetica", "bold");
+        doc.text("Motivo:", margin, y);
+        doc.setFont("helvetica", "normal");
+        doc.text(reasons || "No registrado", margin + 35, y);
+
+        y += lineHeight + 8;
+
+        // Línea divisoria
+        doc.setDrawColor(200, 200, 200);
+        doc.line(margin, y, pageWidth - margin, y);
+        y += 12;
+
+        // UTILIDADES
+        const sectionHeader = (title) => {
             doc.setFontSize(13);
-            doc.setFont("helvetica", "normal");
-            doc.setTextColor(0, 0, 0);
-            doc.text("Informe de Consulta Médica", margin, y);
-            y += 10;
-
-            // Línea divisoria
-            doc.setDrawColor(180, 180, 180);
-            doc.line(margin, y, pageWidth - margin, y);
-            y += 10;
-
-            // =============================
-            // DATOS DE LA CONSULTA
-            // =============================
-            doc.setFontSize(12);
-
             doc.setFont("helvetica", "bold");
-            doc.text("Fecha:", margin, y);
-            doc.setFont("helvetica", "normal");
-            doc.text(`${date.toLocaleDateString()} - ${date.toLocaleTimeString()}`, margin + 35, y);
-            y += lineHeight;
+            doc.setTextColor(37, 99, 235); // azul institucional
+            doc.text(title, margin, y);
+            y += 8;
 
-            doc.setFont("helvetica", "bold");
-            doc.text("Médico:", margin, y);
-            doc.setFont("helvetica", "normal");
-            doc.text(doctorInfo.fullName, margin + 35, y);
-            y += lineHeight;
-
-            if (doctorInfo.specialty) {
-                doc.setFont("helvetica", "bold");
-                doc.text("Especialidad:", margin, y);
-                doc.setFont("helvetica", "normal");
-                doc.text(doctorInfo.specialty, margin + 35, y);
-                y += lineHeight;
-            }
-
-            doc.setFont("helvetica", "bold");
-            doc.text("Motivo:", margin, y);
-            doc.setFont("helvetica", "normal");
-            doc.text(reasons, margin + 35, y);
-            y += lineHeight * 2;
-
-            // Línea divisoria
+            doc.setDrawColor(200, 200, 200);
+            doc.setLineWidth(0.3);
             doc.line(margin, y, pageWidth - margin, y);
-            y += 10;
 
-            // =============================
-            // FUNCIONES UTILITARIAS
-            // =============================
-            const sectionHeader = (title) => {
-                doc.setFillColor(225, 240, 255);
-                doc.rect(margin - 2, y - 6, pageWidth - margin * 2 + 4, 9, "F");
-
-                doc.setFontSize(14);
-                doc.setFont("helvetica", "bold");
-                doc.setTextColor(20, 20, 80);
-                doc.text(title, margin, y);
-                doc.setTextColor(0, 0, 0);
-                y += 10;
-            };
-
-            const writeText = (text) => {
-                const lines = doc.splitTextToSize(text || "No registrado", pageWidth - margin * 2);
-                doc.text(lines, margin, y);
-                y += lines.length * lineHeight + 5;
-            };
-
-            // =============================
-            // SECCIONES SOAP
-            // =============================
-            sectionHeader("Subjetivo (S)");
-            writeText(subjective);
-
-            sectionHeader("Objetivo (O)");
-            writeText(objective);
-
-            sectionHeader("Evaluación (A)");
-            writeText(assessment);
-
-            sectionHeader("Plan (P)");
-            writeText(plan);
-
-            // =============================
-            // FOOTER
-            // =============================
-            y += 10;
-            doc.setDrawColor(180, 180, 180);
-            doc.line(margin, y, pageWidth - margin, y);
             y += 7;
-
-            doc.setFontSize(10);
-            doc.setFont("helvetica", "normal");
-            doc.setTextColor(120, 120, 120);
-            doc.text("Documento generado automáticamente — CuidarMed+", margin, y);
-
-            // Guardar
-            doc.save(`Consulta_${enc.encounterId || enc.EncounterId}.pdf`);
+            doc.setTextColor(45, 55, 72);
         };
+
+        const writeText = (txt) => {
+            const lines = doc.splitTextToSize(txt || "No registrado", pageWidth - margin * 2);
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(11);
+            doc.text(lines, margin, y);
+
+            y += lines.length * 6 + 8;
+        };
+
+        // SECCIONES SOAP
+        sectionHeader("Subjetivo (S)");
+        writeText(subjective);
+
+        sectionHeader("Objetivo (O)");
+        writeText(objective);
+
+        sectionHeader("Evaluación (A)");
+        writeText(assessment);
+
+        sectionHeader("Plan (P)");
+        writeText(plan);
+
+        // FOOTER
+        if (y > pageHeight - 20) {
+            doc.addPage();
+            y = 20;
+        }
+
+        doc.setDrawColor(200, 200, 200);
+        doc.line(margin, pageHeight - 15, pageWidth - margin, pageHeight - 15);
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.setTextColor(120, 120, 120);
+
+        const footerText = "CuidarMed+ — Sistema de Gestión Clínica";
+        const footerWidth = doc.getTextWidth(footerText);
+        doc.text(footerText, (pageWidth - footerWidth) / 2, pageHeight - 10);
+
+        // GUARDAR PDF
+        doc.save(`Consulta_${enc.encounterId || enc.EncounterId}.pdf`);
+    };
+
 
 
         container.appendChild(clone);
