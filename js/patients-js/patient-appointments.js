@@ -174,11 +174,29 @@ export function renderAppointmentsFull(appointments) {
                     </button>
                     ` : ""}
                     ${canCancel ? `
-                        <button class="btn-clean-cancel" 
-                            onclick="cancelAppointment(${appointmentId})" 
+                        <button 
+                            onclick="cancelAppointment(${appointmentId})"
                             title="Cancelar turno"
-                            style="background: #dc2626; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem;">
-                            <i class="fas fa-times"></i> Cancelar
+                            style="
+                                background-color: #dc2626;
+                                color: #fff;
+                                border: none;
+                                padding: 0.7rem 1.4rem;
+                                border-radius: 10px;
+                                cursor: pointer;
+                                display: inline-flex;
+                                align-items: center;
+                                gap: 0.6rem;
+                                font-size: 1rem;
+                                font-weight: 600;
+                                box-shadow: 0 2px 4px rgba(0,0,0,0.12);
+                                transition: background-color .2s ease;
+                            "
+                            onmouseover="this.style.backgroundColor='#b91c1c'"
+                            onmouseout="this.style.backgroundColor='#dc2626'"
+                        >
+                            <i class="fas fa-times" style="font-size: 1rem;"></i>
+                            Cancelar
                         </button>
                     ` : ""}
                 </div>

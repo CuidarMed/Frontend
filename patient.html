@@ -343,19 +343,20 @@
 <!-- Contenedor donde se insertarán las recetas -->
 <div id="prescriptions-list-full"></div>
 
-<!-- Template para cada receta -->
 <template id="template-prescription-card">
     <div class="prescription-card">
+        
         <div class="prescription-card-header">
-            <i class="fa-solid fa-file-medical prescription-card-icon"></i>
+            <div class="prescription-card-header-left">
+                <i class="fa-solid fa-file-medical prescription-card-icon"></i>
+                <h4 class="prescription-card-title"></h4>
+            </div>
 
-            <h4 class="prescription-card-title"></h4>
-            <div class="prescription-card-footer">
-            <button class="btn btn-primary btn-prescription-view">
+            <button class="btn-prescription-view">
                 <i class="fas fa-download"></i> Descargar
             </button>
         </div>
-        </div>
+
         <div class="prescription-card-body">
             <p><strong>Diagnóstico:</strong> <span class="prescription-diagnosis"></span></p>
             <p><strong>Medicación:</strong> <span class="prescription-medication"></span></p>
@@ -366,8 +367,10 @@
             <p><i class="fas fa-user-md"></i> <span class="prescription-doctor"></span></p>
             <p><i class="fas fa-calendar-alt"></i> <span class="prescription-date"></span></p>
         </div>
+
     </div>
 </template>
+
 
 
 
