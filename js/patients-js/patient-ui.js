@@ -145,114 +145,57 @@ function applyStatusStyle(element, status) {
     } else if (iconElement && icon) {
         iconElement.className = `fas ${icon}`;
     }
-    
-    // Agregar clase de animación si el estado cambió
-    element.classList.add('status-changed');
-    setTimeout(() => {
-        element.classList.remove('status-changed');
-    }, 500);
 }
 
 /**
- * Inicializa el observer de mutaciones para detectar cambios en el DOM
+ * Inicializa el sistema de estilos
+ * NO aplica estilos automáticamente, solo prepara el sistema
  */
 export function initializeUIObserver() {
-    console.log('👁️ Inicializando observer de UI...');
-    
-    // Aplicar estilos iniciales después de un pequeño delay
+    console.log('👁️ Sistema de estilos inicializado');
+    console.log('ℹ️ Los estilos se aplicarán solo en las secciones: Inicio y Turnos');
+}
+
+/**
+ * Aplica estilos cuando cambia el filtro de estado
+ * Esta función se llama desde patient-filters.js
+ */
+export function applyStylesAfterFilterChange() {
+    console.log('🎯 Filtro cambiado - Aplicando estilos...');
     setTimeout(() => {
         applyAppointmentStatusStyles();
-    }, 300);
+    }, 150);
+}
+
+/**
+ * Aplica estilos cuando se navega a las secciones permitidas
+ * Esta función se llama desde patient-navigation.js
+ */
+export function applyStylesForSection(section) {
+    const allowedSections = ['inicio', 'turnos'];
     
-    // Crear MutationObserver
-    const observer = new MutationObserver((mutations) => {
-        let shouldUpdate = false;
-        
-        mutations.forEach((mutation) => {
-            // Detectar si se agregaron nodos
-            if (mutation.addedNodes.length > 0) {
-                mutation.addedNodes.forEach((node) => {
-                    if (node.nodeType === Node.ELEMENT_NODE) {
-                        // Verificar si es una tarjeta de turno o contiene una
-                        if (
-                            node.classList?.contains('appointment-home-card') ||
-                            node.classList?.contains('appointment-clean-card') ||
-                            node.querySelector?.('.appointment-home-card, .appointment-clean-card') ||
-                            Array.from(node.classList || []).some(c => c.includes('status-'))
-                        ) {
-                            shouldUpdate = true;
-                        }
-                    }
-                });
-            }
-            
-            // Detectar cambios en atributos de clase
-            if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
-                const target = mutation.target;
-                if (
-                    target.classList?.contains('appointment-clean-status') ||
-                    target.classList?.contains('appointment-home-status') ||
-                    Array.from(target.classList || []).some(c => c.startsWith('status-'))
-                ) {
-                    shouldUpdate = true;
-                }
-            }
-        });
-        
-        if (shouldUpdate) {
-            console.log('🔄 Cambios detectados, re-aplicando estilos...');
-            // Aplicar estilos con un pequeño delay para asegurar que el DOM esté listo
-            setTimeout(() => {
-                applyAppointmentStatusStyles();
-            }, 50);
-        }
-    });
-    
-    // Observar el contenedor principal
-    const container = document.querySelector('.dashboard-content') || document.body;
-    observer.observe(container, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-        attributeFilter: ['class']
-    });
-    
-    console.log('✅ Observer de UI inicializado');
-    
-    // Re-aplicar estilos al navegar entre secciones
-    document.querySelectorAll('.nav-item').forEach(item => {
-        item.addEventListener('click', () => {
-            setTimeout(() => {
-                console.log('🧭 Navegación detectada, re-aplicando estilos...');
-                applyAppointmentStatusStyles();
-            }, 400);
-        });
-    });
-    
-    return observer;
+    if (allowedSections.includes(section)) {
+        console.log(`🎯 Navegación a "${section}" - Aplicando estilos...`);
+        setTimeout(() => {
+            applyAppointmentStatusStyles();
+        }, 200);
+    } else {
+        console.log(`ℹ️ Sección "${section}" - No se aplican estilos de turnos`);
+    }
 }
 
 /**
  * Fuerza la actualización de estilos (útil después de cargar datos)
  */
 export function forceStyleUpdate() {
-    console.log('🔨 Forzando actualización de estilos...');
+    console.log('🔨 Actualización manual de estilos...');
     setTimeout(() => {
         applyAppointmentStatusStyles();
     }, 100);
-}
-
-/**
- * Aplica estilos cuando cambia el filtro de estado
- */
-export function applyStylesAfterFilterChange() {
-    console.log('🎯 Aplicando estilos después de cambio de filtro...');
-    setTimeout(() => {
-        applyAppointmentStatusStyles();
-    }, 200);
 }
 
 // Exportar funciones globales
 window.applyAppointmentStatusStyles = applyAppointmentStatusStyles;
 window.forceStyleUpdate = forceStyleUpdate;
 window.applyStylesAfterFilterChange = applyStylesAfterFilterChange;
+window.applyStylesForSection = applyStylesForSection;

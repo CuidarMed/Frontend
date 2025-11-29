@@ -1,5 +1,5 @@
 // ============================================
-// PATIENT HISTORY RECENT
+// PATIENT HISTORY RECENT - VERSION DEBUG
 // ============================================
 
 import { appState, getAuthenticatedUser } from './patient-state.js';
@@ -42,6 +42,9 @@ export async function loadRecentPatientHistory() {
         const encounters = Array.isArray(response) ? response : response?.value || [];
 
         console.log('✅ Encounters recibidos del backend:', encounters.length);
+        
+        // 🔍 DEBUG: Mostrar todos los encounters recibidos
+        console.log('📋 Datos completos de encounters:', encounters);
 
         if (!encounters.length) {
             historyList.innerHTML = `
@@ -53,41 +56,57 @@ export async function loadRecentPatientHistory() {
         }
 
         // ============================================
-        // 🔥 NUEVO: Filtrar solo los encuentros pasados
+        // 🔥 SIMPLIFICADO: Mostrar todas las consultas (sin filtrar por fecha pasada)
         // ============================================
-        const pastEncounters = encounters.filter(e => {
-            const encounterDate = new Date(e.date || e.Date);
+        const validEncounters = encounters.filter(e => {
+            // Obtener la fecha del encounter (PRIMERO Date con mayúscula)
+            const dateValue = e.Date || e.date;
+            
+            if (!dateValue) {
+                console.warn('⚠️ Encounter sin fecha:', e);
+                return false;
+            }
 
-            // Cierra el día actual para evitar que una diferencia de horas lo excluya
-            const endOfToday = new Date();
-            endOfToday.setHours(23, 59, 59, 999);
+            const encounterDate = new Date(dateValue);
+            
+            // Verificar que sea una fecha válida
+            if (isNaN(encounterDate.getTime())) {
+                console.warn('⚠️ Fecha inválida:', dateValue, 'en encounter:', e);
+                return false;
+            }
 
-            return encounterDate <= endOfToday;
+            console.log('✅ Encounter válido con fecha:', encounterDate.toLocaleDateString('es-AR'), e);
+            return true;
         });
 
-        console.log("📉 Consultas filtradas (solo pasadas):", pastEncounters.length);
+        console.log("📉 Consultas con fecha válida:", validEncounters.length);
 
-        if (!pastEncounters.length) {
+        if (!validEncounters.length) {
             historyList.innerHTML = `
                 <div class="empty-state">
                     <i class="fas fa-file-medical"></i>
-                    <p>No hay consultas realizadas aún</p>
+                    <p>No hay consultas con fecha válida</p>
                 </div>`;
             return;
         }
 
         // Ordenar por fecha descendente y tomar solo 3
-        const lastThree = pastEncounters
-            .sort((a, b) => new Date(b.date || b.Date) - new Date(a.date || a.Date))
+        const lastThree = validEncounters
+            .sort((a, b) => {
+                const dateA = new Date(a.Date || a.date).getTime();
+                const dateB = new Date(b.Date || b.date).getTime();
+                return dateB - dateA; // Orden descendente (más reciente primero)
+            })
             .slice(0, 3);
 
         console.log('📊 Últimas 3 consultas seleccionadas:', lastThree.map(e => ({
-            encounterId: e.encounterId || e.EncounterId,
-            date: new Date(e.date || e.Date).toLocaleString('es-AR')
+            encounterId: e.EncounterId || e.encounterId,
+            date: new Date(e.Date || e.date).toLocaleString('es-AR'),
+            assessment: e.Assessment || e.assessment
         })));
 
         // Obtener info de doctores
-        const doctorIds = [...new Set(lastThree.map(e => e.doctorId || e.DoctorId))];
+        const doctorIds = [...new Set(lastThree.map(e => e.DoctorId || e.doctorId))];
         const doctorsMap = new Map();
 
         console.log('👨‍⚕️ Cargando información de', doctorIds.length, 'doctores');
@@ -106,12 +125,13 @@ export async function loadRecentPatientHistory() {
         // Renderizar últimas 3 consultas
         historyList.innerHTML = lastThree
             .map(enc => {
-                const encounterId = enc.encounterId || enc.EncounterId;
-                const appointmentId = enc.appointmentId || enc.AppointmentId || enc.appoinmentId || enc.AppoinmentId;
-                const patientId = enc.patientId || enc.PatientId;
-                const date = new Date(enc.date || enc.Date);
-                const doctorName = doctorsMap.get(enc.doctorId || enc.DoctorId) || 'Dr. Desconocido';
-                const assessment = enc.assessment || enc.Assessment || 'Sin diagnóstico';
+                // IMPORTANTE: Usar primero las propiedades con mayúscula (como vienen de la BD)
+                const encounterId = enc.EncounterId || enc.encounterId;
+                const appointmentId = enc.AppointmentId || enc.appointmentId;
+                const patientId = enc.PatientId || enc.patientId;
+                const date = new Date(enc.Date || enc.date);
+                const doctorName = doctorsMap.get(enc.DoctorId || enc.doctorId) || 'Dr. Desconocido';
+                const assessment = enc.Assessment || enc.assessment || 'Sin diagnóstico';
                 
                 const year = date.getFullYear();
                 const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -132,7 +152,10 @@ export async function loadRecentPatientHistory() {
                                 <div class="history-compact-reason"><strong>Diagnóstico: </strong>${assessment}</div>
                             </div>
                         </div>
-                        
+                        <button class="btn-history-view" onclick="viewPrescription(${encounterId || 'null'}, ${appointmentId || 'null'}, ${patientId || 'null'})">
+                            <i class="fas fa-file-prescription"></i>
+                            Ver Receta
+                        </button>
                     </div>
                 `;
             })

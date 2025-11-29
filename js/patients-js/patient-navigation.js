@@ -2,6 +2,8 @@
 // NAVEGACIÓN DEL SIDEBAR
 // ============================================
 
+import { applyStylesForSection } from './patient-ui.js';
+
 /**
  * Inicializa la navegación del sidebar
  */
@@ -62,11 +64,17 @@ export async function handleSectionNavigation(section) {
             await loadPatientData();
             await loadPatientAppointments();
             await loadRecentPatientHistory();
+            
+            // ✅ Aplicar estilos después de cargar
+            applyStylesForSection('inicio');
             break;
             
         case 'perfil':
             const { loadPatientProfile } = await import('./patient-profile.js');
             await loadPatientProfile();
+            
+            // No aplica estilos en perfil
+            applyStylesForSection('perfil');
             break;
             
         case 'turnos':
@@ -76,6 +84,9 @@ export async function handleSectionNavigation(section) {
             }
             const { loadPatientAppointments: loadAppointmentsFull } = await import('./patient-appointments.js');
             await loadAppointmentsFull();
+            
+            // ✅ Aplicar estilos después de cargar
+            applyStylesForSection('turnos');
             break;
             
         case 'historial':
@@ -112,6 +123,9 @@ export async function handleSectionNavigation(section) {
             
             const { loadPatientHistoryFull } = await import('./patient-history.js');
             await loadPatientHistoryFull();
+            
+            // No aplica estilos en historial
+            applyStylesForSection('historial');
             break;
 
         case 'recetas':
@@ -168,6 +182,9 @@ export async function handleSectionNavigation(section) {
             // Cargar las recetas
             const { loadPatientPrescriptions } = await import('./patient-prescriptions-list.js');
             await loadPatientPrescriptions();
+            
+            // No aplica estilos en recetas
+            applyStylesForSection('recetas');
             break;    
             
         default:
@@ -176,5 +193,7 @@ export async function handleSectionNavigation(section) {
                     sec.style.display = '';
                 }
             });
+            
+            applyStylesForSection('default');
     }
 }
