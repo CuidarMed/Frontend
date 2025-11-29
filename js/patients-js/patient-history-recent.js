@@ -132,10 +132,7 @@ export async function loadRecentPatientHistory() {
                                 <div class="history-compact-reason"><strong>Diagnóstico: </strong>${assessment}</div>
                             </div>
                         </div>
-                        <button class="btn-history-view" onclick="viewPrescription(${encounterId || 'null'}, ${appointmentId || 'null'}, ${patientId || 'null'})">
-                            <i class="fas fa-file-prescription"></i>
-                            Ver Receta
-                        </button>
+                        
                     </div>
                 `;
             })

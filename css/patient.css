@@ -3384,7 +3384,7 @@ ease;
     background-color: #138496;
 }
 
-<<<<<<< HEAD
+
 /* Badge de mensajes no leídos */
 .unread-badge {
     position: absolute;
@@ -3417,7 +3417,7 @@ ease;
 .btn-clean-chat {
     position: relative !important;
 }
-=======
+
 
 
 /* --- SELECT DE ESTADO --- */
@@ -3482,4 +3482,4 @@ ease;
 .btn-clean-chat i {
     font-size: 1.25rem; /* Ícono de tamaño moderado */
 }
->>>>>>> 5c5877eb021bb9e30064d6822b390452edcf27cd
+
