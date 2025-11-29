@@ -167,24 +167,33 @@ export async function getChatMessages(chatRoomId, userId, pageNumber = 1, pageSi
 /**
  * Marca mensajes como leídos
  */
-export async function markMessagesAsRead(chatRoomId, userId) {
-    console.log('✓ Marcando mensajes como leídos:', { chatRoomId, userId });
-    
-    const response = await tryFetch(`/Chat/rooms/${chatRoomId}/read`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(userId)
-    });
+export async function markMessagesAsRead(chatRoomId, userId, userRole) {
+    try {
+        const response = await tryFetch(`/Chat/rooms/${chatRoomId}/read`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${localStorage.getItem("token")}`
+            },
+            body: JSON.stringify({
+                userId,
+                userRole
+            })
+        });
 
-    if (!response.ok) {
-        const error = await response.json().catch(() => ({ message: 'Error al marcar mensajes' }));
-        throw new Error(error.message);
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ message: "Error al marcar como leídos" }));
+            throw new Error(error.message);
+        }
+
+        console.log("📩 Mensajes marcados como leídos");
+    } catch (err) {
+        console.error("❌ No se pudieron marcar como leídos:", err);
+        throw err;
     }
-
-    return await response.json();
 }
+
+
 export const CHAT_HUB_URL = "http://localhost:8085/chatHub";
 
 console.log('🔧 Chat Service configurado:', {

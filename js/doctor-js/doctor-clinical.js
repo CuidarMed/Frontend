@@ -11,12 +11,42 @@ const STATUS_CONFIG = {
 };
 
 const createHTML = {
-    loading: (text) => `<div style="grid-column: 1 / -1; text-align: center; padding: 2rem; color: #6b7280;"><i class="fas fa-spinner fa-spin" style="font-size: 2rem; margin-bottom: 1rem;"></i><p>${text}</p></div>`,
-    error: (text) => `<div style="grid-column: 1 / -1; text-align: center; padding: 2rem; color: #ef4444;"><i class="fas fa-exclamation-circle" style="font-size: 2rem; margin-bottom: 1rem;"></i><p>${text}</p></div>`,
-    empty: (icon, text) => `<div style="grid-column: 1 / -1; text-align: center; padding: 2rem; color: #6b7280;"><i class="fas ${icon}" style="font-size: 2rem; margin-bottom: 1rem; opacity: 0.5;"></i><p>${text}</p></div>`,
-    card: (title, content, id) => `<div style="background: white; border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 1.5rem;"><h4 style="margin-top: 0; color: #111827; border-bottom: 2px solid #10b981; padding-bottom: 0.5rem;">${title}</h4><div id="${id}" style="margin-top: 1rem;">${content}</div></div>`,
-    infoBlock: (label, text) => `<div style="margin-bottom: 0.75rem;"><strong style="color: #6b7280; display: block; margin-bottom: 0.25rem;">${label}:</strong><p style="color: #111827; margin: 0;">${text}</p></div>`
+    loading: (text) => `
+        <div class="state-message state-loading">
+            <i class="fas fa-spinner fa-spin state-icon"></i>
+            <p>${text}</p>
+        </div>
+    `,
+
+    error: (text) => `
+        <div class="state-message state-error">
+            <i class="fas fa-exclamation-circle state-icon"></i>
+            <p>${text}</p>
+        </div>
+    `,
+
+    empty: (icon, text) => `
+        <div class="state-message state-empty">
+            <i class="fas ${icon} state-icon"></i>
+            <p>${text}</p>
+        </div>
+    `,
+
+    card: (title, content, id) => `
+        <div class="info-card">
+            <h4 class="info-card-title">${title}</h4>
+            <div id="${id}" class="info-card-content">${content}</div>
+        </div>
+    `,
+
+    infoBlock: (label, text) => `
+        <div class="info-block">
+            <strong class="info-block-label">${label}:</strong>
+            <p class="info-block-text">${text}</p>
+        </div>
+    `
 };
+
 
 export async function loadClinicalHistoryView() {
     const dashboardContent = document.querySelector('.dashboard-content');
@@ -27,20 +57,29 @@ export async function loadClinicalHistoryView() {
     const historySection = document.createElement('div');
     historySection.className = 'dashboard-section clinical-history-section';
     historySection.innerHTML = `
-        <div class="section-header">
-            <div><h3>Historia Clínica</h3><p>Busca y accede al historial médico de tus pacientes</p></div>
+    <div class="section-header">
+        <div>
+            <h3>Historia Clínica</h3>
+            <p>Busca y accede al historial médico de tus pacientes</p>
         </div>
-        <div class="patient-search-container" style="margin-bottom: 2rem;">
-            <div style="position: relative; margin-bottom: 1rem;">
-                <i class="fas fa-search" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: #6b7280;"></i>
-                <input type="text" id="patient-search-input" placeholder="Buscar paciente por nombre, apellido o DNI..." 
-                       style="width: 100%; padding: 0.75rem 1rem 0.75rem 3rem; border: 1px solid #d1d5db; border-radius: 0.5rem; font-size: 1rem;">
-            </div>
-            <div id="patients-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
-                ${createHTML.loading('Cargando pacientes...')}
-            </div>
+    </div>
+
+    <div class="patient-search-container">
+        
+        <div class="search-wrapper">
+            <i class="fas fa-search search-icon"></i>
+            <input type="text" id="patient-search-input" 
+                   class="patient-search-input"
+                   placeholder="Buscar paciente por nombre, apellido o DNI...">
         </div>
-    `;
+
+        <div id="patients-list" class="patients-grid">
+            ${createHTML.loading('Cargando pacientes...')}
+        </div>
+
+    </div>
+`;
+
     dashboardContent.appendChild(historySection);
 
     await loadAllPatients();
@@ -136,20 +175,20 @@ function renderPatientsList(patients) {
         const initial = (p.name || p.Name || 'P').charAt(0).toUpperCase();
 
         return `
-            <div class="patient-card" data-patient-id="${id}" 
-                 style="background: white; border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 1.5rem; cursor: pointer; transition: all 0.2s;"
-                 onmouseover="this.style.boxShadow='0 4px 6px rgba(0,0,0,0.1)'; this.style.borderColor='#10b981';"
-                 onmouseout="this.style.boxShadow='none'; this.style.borderColor='#e5e7eb';">
-                <div style="display: flex; align-items: center; gap: 1rem;">
-                    <div style="width: 50px; height: 50px; border-radius: 50%; background: #10b981; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.5rem; font-weight: bold;">${initial}</div>
-                    <div style="flex: 1;">
-                        <h4 style="margin: 0; color: #111827; font-size: 1.1rem; font-weight: 600;">${name}</h4>
-                        <p style="margin: 0.25rem 0 0; color: #6b7280; font-size: 0.875rem;"><i class="fas fa-id-card"></i> DNI: ${dni}</p>
+            <div class="patient-card" data-patient-id="${id}">
+                <div class="patient-card-inner">
+                    <div class="patient-avatar">${initial}</div>
+
+                    <div class="patient-info">
+                        <h4 class="patient-name">${name}</h4>
+                        <p class="patient-dni"><i class="fas fa-id-card"></i> DNI: ${dni}</p>
                     </div>
-                    <i class="fas fa-chevron-right" style="color: #9ca3af;"></i>
+
+                    <i class="fas fa-chevron-right patient-arrow"></i>
                 </div>
             </div>
         `;
+
     }).join('');
 
     patientsList.querySelectorAll('.patient-card').forEach(card => {
@@ -186,18 +225,25 @@ export async function viewPatientProfile(patientId) {
     const profileSection = document.createElement('div');
     profileSection.className = 'dashboard-section patient-profile-section';
     profileSection.innerHTML = `
-        <div class="section-header" style="margin-bottom: 2rem;">
-            <div style="display: flex; align-items: center; gap: 1rem;">
-                <button id="back-to-patients" class="btn btn-secondary" style="padding: 0.5rem 1rem;"><i class="fas fa-arrow-left"></i> Volver</button>
-                <div><h3 id="patient-profile-name">Cargando...</h3><p>Perfil e historial médico del paciente</p></div>
+        <div class="section-header patient-profile-header">
+            <div class="profile-header-left">
+                <button id="back-to-patients" class="btn btn-secondary profile-back-btn">
+                    <i class="fas fa-arrow-left"></i> Volver
+                </button>
+
+                <div>
+                    <h3 id="patient-profile-name">Cargando...</h3>
+                    <p>Perfil e historial médico del paciente</p>
+                </div>
             </div>
         </div>
-        <div id="patient-profile-content" style="display: grid; gap: 2rem;">
-            <style>@media (min-width: 768px) { #patient-profile-content { grid-template-columns: 1fr 2fr !important; } }</style>
-            ${createHTML.card('Información del Paciente', '<p style="color: #6b7280;">Cargando información...</p>', 'patient-info-details')}
-            ${createHTML.card('Historial Médico', '<p style="color: #6b7280;">Cargando historial...</p>', 'patient-history-list')}
+
+        <div id="patient-profile-content" class="patient-profile-grid">
+            ${createHTML.card('Información del Paciente', '<p class="text-muted">Cargando información...</p>', 'patient-info-details')}
+            ${createHTML.card('Historial Médico', '<p class="text-muted">Cargando historial...</p>', 'patient-history-list')}
         </div>
     `;
+
     dashboardContent.appendChild(profileSection);
 
     document.getElementById('back-to-patients')?.addEventListener('click', () => {
@@ -269,22 +315,34 @@ async function loadPatientHistory(patientId) {
             const config = STATUS_CONFIG[status] || STATUS_CONFIG.default;
 
             return `
-                <div style="border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 1.5rem; margin-bottom: 1rem; background: #f9fafb;">
-                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
-                        <div>
-                            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
-                                <i class="fas fa-calendar-alt" style="color: #10b981;"></i>
-                                <strong style="color: #111827;">${date.toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}</strong>
+                <div class="encounter-card">
+                    <div class="encounter-card-header">
+                        <div class="encounter-card-header-left">
+                            <div class="encounter-date-row">
+                                <i class="fas fa-calendar-alt"></i>
+                                <strong>${date.toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}</strong>
                             </div>
-                            <div style="display: flex; align-items: center; gap: 0.5rem; color: #6b7280;"><i class="fas fa-user-md"></i><span>${doctorName}</span></div>
+
+                            <div class="encounter-doctor-row">
+                                <i class="fas fa-user-md"></i>
+                                <span>${doctorName}</span>
+                            </div>
                         </div>
-                        <span style="padding: 0.25rem 0.75rem; border-radius: 0.25rem; font-size: 0.875rem; font-weight: 500; background: ${config.bg}; color: ${config.color};">${config.label}</span>
+
+                        <span class="encounter-status-badge" style="background:${config.bg}; color:${config.color};">
+                            ${config.label}
+                        </span>
                     </div>
+
                     ${createHTML.infoBlock('Motivo de consulta', enc.reasons || enc.Reasons || 'Sin motivo especificado')}
                     ${createHTML.infoBlock('Diagnóstico', enc.assessment || enc.Assessment || 'Sin diagnóstico')}
-                    <button onclick="viewEncounterDetailsFromDoctor(${id})" class="btn btn-primary" style="margin-top: 1rem; padding: 0.5rem 1rem; font-size: 0.875rem;"><i class="fas fa-eye"></i> Ver detalles completos</button>
+
+                    <button onclick="viewEncounterDetailsFromDoctor(${id})" class="btn btn-primary encounter-view-btn">
+                        <i class="fas fa-eye"></i> Ver detalles completos
+                    </button>
                 </div>
             `;
+
         }).join('');
     } catch (error) {
         historyList.innerHTML = createHTML.error('Error al cargar el historial médico');
@@ -362,20 +420,61 @@ function generateEncounterDetailsHTML(enc, date, patientName, doctorName) {
     ];
 
     return `
-        <div class="encounter-info-section">
-            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;"><i class="fas fa-info-circle" style="color: #10b981;"></i><h4 style="margin: 0;">Información General</h4></div>
-            <div style="display: grid; gap: 0.75rem;">${info.map(([icon, label, value]) => `<div style="display: flex; justify-content: space-between;"><span style="color: #6b7280;"><i class="fas fa-${icon}"></i> ${label}:</span><span style="color: #111827; font-weight: 500;">${value}</span></div>`).join('')}</div>
-        </div>
-        <div class="encounter-info-section" style="margin-top: 2rem;">
-            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;"><i class="fas fa-stethoscope" style="color: #10b981;"></i><h4 style="margin: 0;">Motivo de Consulta</h4></div>
-            <p style="color: #111827;">${enc.reasons || enc.Reasons || 'Sin motivo especificado'}</p>
-        </div>
-        <div class="encounter-info-section" style="margin-top: 2rem;">
-            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;"><i class="fas fa-file-medical" style="color: #10b981;"></i><h4 style="margin: 0;">Notas SOAP</h4></div>
-            ${soap.map(([label, value]) => `<div style="margin-bottom: 1rem;"><strong style="color: #6b7280; display: block; margin-bottom: 0.5rem;">${label}:</strong><p style="color: #111827; margin: 0; white-space: pre-wrap;">${value}</p></div>`).join('')}
-        </div>
-        ${enc.notes || enc.Notes ? `<div class="encounter-info-section" style="margin-top: 2rem;"><div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;"><i class="fas fa-sticky-note" style="color: #10b981;"></i><h4 style="margin: 0;">Notas Adicionales</h4></div><p style="color: #111827; white-space: pre-wrap;">${enc.notes || enc.Notes}</p></div>` : ''}
-    `;
+            <div class="encounter-info-section">
+                
+                <div class="encounter-info-header">
+                    <i class="fas fa-info-circle"></i>
+                    <h4>Información General</h4>
+                </div>
+
+                <div class="encounter-info-grid">
+                    ${info.map(([icon, label, value]) => `
+                        <div class="encounter-info-item">
+                            <span class="info-label"><i class="fas fa-${icon}"></i> ${label}:</span>
+                            <span class="info-value">${value}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+
+            <div class="encounter-info-section mt-2">
+                <div class="encounter-info-header">
+                    <i class="fas fa-stethoscope"></i>
+                    <h4>Motivo de Consulta</h4>
+                </div>
+                <p class="encounter-text">
+                    ${enc.reasons || enc.Reasons || 'Sin motivo especificado'}
+                </p>
+            </div>
+
+            <div class="encounter-info-section mt-2">
+                <div class="encounter-info-header">
+                    <i class="fas fa-file-medical"></i>
+                    <h4>Notas SOAP</h4>
+                </div>
+
+                <div class="soap-list">
+                    ${soap.map(([label, value]) => `
+                        <div class="soap-item">
+                            <strong class="soap-label">${label}:</strong>
+                            <p class="soap-text">${value}</p>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+
+            ${enc.notes || enc.Notes ? `
+                <div class="encounter-info-section mt-2">
+                    <div class="encounter-info-header">
+                        <i class="fas fa-sticky-note"></i>
+                        <h4>Notas Adicionales</h4>
+                    </div>
+                    <p class="encounter-text pre">
+                        ${enc.notes || enc.Notes}
+                    </p>
+                </div>
+            ` : ''}
+        `;
 }
 
 function createModal(title, subtitle, body) {
@@ -383,11 +482,20 @@ function createModal(title, subtitle, body) {
     modal.className = 'modal';
     modal.style.display = 'flex';
     modal.innerHTML = `
-        <div class="modal-content" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
-            <div class="modal-header"><div><h3>${title}</h3><p style="margin: 0.5rem 0 0; color: #6b7280;">${subtitle}</p></div><button class="close-modal">&times;</button></div>
-            <div class="modal-body">${body}</div>
+    <div class="modal-content modal-content-clean">
+        <div class="modal-header">
+            <div>
+                <h3>${title}</h3>
+                <p class="modal-subtitle">${subtitle}</p>
+            </div>
+            <button class="close-modal">&times;</button>
         </div>
-    `;
+        <div class="modal-body">
+            ${body}
+        </div>
+    </div>
+`;
+
     return modal;
 }
 

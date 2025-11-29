@@ -16,6 +16,7 @@
         <div class="actions">
             <div class="user-menu" id="userMenu">
                 <button class="user-btn" id="userBtn">
+                    <i class="fas fa-user-circle" style="font-size: 1.5rem;"></i>
                     <span id="userMenuName">Mi cuenta</span>
                     <i class="fas fa-chevron-down" style="font-size:0.8rem;"></i>
                 </button>
@@ -177,13 +178,6 @@
 
             <!-- Perfil del Profesional -->
             <div class="dashboard-section profile-section hidden" id="doctorProfileSection">
-                <!-- Breadcrumb -->
-                <nav class="breadcrumb" aria-label="Breadcrumb">
-                    <a href="#" data-section="inicio" class="breadcrumb-link">Panel Médico</a>
-                    <span class="breadcrumb-separator">/</span>
-                    <span class="breadcrumb-current">Perfil</span>
-                </nav>
-
                 <!-- Page Header (Sticky) -->
                 <header class="profile-page-header" id="profilePageHeader">
                     <div class="profile-header-content">
@@ -444,6 +438,60 @@
             </div>
         </div>
     </div>
+<!-- TEMPLATE: Tarjeta de turno -->
+<template id="template-appointment-card">
+    <div class="appointment-card">
+
+        <!-- HEADER dinámico según estado -->
+        <div class="appointment-header status-bg">
+            <div class="appointment-header-left">
+                <h4 class="appointment-patient"></h4>
+            </div>
+
+            <!-- Badge solo para estados finales -->
+            <span class="appointment-status-badge hidden"></span>
+
+            <!-- Select para editar estado -->
+            <select class="appointment-status-select hidden"></select>
+        </div>
+
+        <div class="appointment-info">
+            <div class="info-row">
+                <i class="fas fa-clock icon"></i>
+                <span class="appointment-time"></span>
+            </div>
+
+            <div class="info-row">
+                <i class="fas fa-user icon"></i>
+                <span class="appointment-dni"></span>
+            </div>
+
+            <div class="info-row">
+                <i class="fas fa-stethoscope icon"></i>
+                <span class="appointment-reason"></span>
+            </div>
+        </div>
+
+        <div class="appointment-actions"></div>
+    </div>
+</template>
+
+
+<template id="template-day-card">
+    <div class="agenda-day-card">
+        
+        <div class="agenda-day-header">
+            <div>
+                <h3 class="agenda-day-title"></h3>
+                <p class="agenda-day-subtitle"></p>
+            </div>
+
+            <span class="agenda-day-count"></span>
+        </div>
+
+        <div class="appointments-grid"></div>
+    </div>
+</template>
 
 
 

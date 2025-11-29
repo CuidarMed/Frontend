@@ -127,7 +127,6 @@ form?.addEventListener("submit", async (event) => {
       role,
       firstName,
       lastName,
-      imageUrl: null, // Se cargará en doctor.html o patient.html
     };
 
     console.log("✅ Login exitoso, usuario:", userInfo);

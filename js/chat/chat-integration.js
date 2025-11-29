@@ -143,29 +143,26 @@ export function openChatModal(chatRoom, config) {
     modal.id = 'chat-modal';
     modal.style.cssText = `
         position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.5);
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        bottom: 20px;
+        right: 20px;
         z-index: 9999;
-        padding: 1rem;
+        width: 400px;
+        height: 600px;
+        max-height: calc(100vh - 40px);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+        border-radius: 12px;
+        overflow: hidden;
+        animation: slideUp 0.3s ease-out;
     `;
 
     // Crear contenedor del chat
     const modalContent = document.createElement('div');
     modalContent.style.cssText = `
         width: 100%;
-        max-width: 600px;
-        height: 80vh;
-        max-height: 700px;
+        height: 100%;
         background: white;
-        border-radius: 12px;
-        overflow: hidden;
-        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+        display: flex;
+        flex-direction: column;
     `;
 
     modal.appendChild(modalContent);
@@ -213,4 +210,26 @@ export function openChatModal(chatRoom, config) {
         }
     };
     document.addEventListener('keydown', handleEsc);
+
+    const chatStyles = document.createElement('style');
+    chatStyles.textContent = `
+        /* Animacion de entrada */
+        @keyframes slideUp {
+            from { 
+                opacity: 0; 
+                transform: translateY(20px); }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        /* Drag handler (para mover el chat) */
+        #chat-modal .chat-header {
+            cursor: move;
+            user-select: none;
+        }
+    `;
+
+    document.head.appendChild(chatStyles);
 }

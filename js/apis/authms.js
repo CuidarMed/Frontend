@@ -60,7 +60,6 @@ function getUserFromToken() {
             Role: payload.role || payload.Role || payload.UserRole,
             isActive: payload.IsActive === "True" || payload.IsActive === true,
             isEmailVerified: payload.IsEmailVerified === "True" || payload.IsEmailVerified === true,
-            imageUrl: payload.ImageUrl || payload.imageUrl || null,
         };
     } catch (e) {
         console.error("Error al parsear token:", e);

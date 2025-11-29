@@ -13,6 +13,7 @@ export class ChatComponent {
     this.token = config.token;
     this.theme = config.theme || "doctor"; // 'doctor' o 'patient'
     this.container = config.container;
+    this.config = config;
 
     // ✅ Validar que los IDs existan
     console.log("🔧 ChatComponent config:", {
@@ -73,7 +74,7 @@ export class ChatComponent {
                 <!-- Header -->
                 <div class="chat-header" style="
                     background: linear-gradient(135deg, ${
-                      themeColors.primary
+                        themeColors.primary
                     } 0%, ${themeColors.accent} 100%);
                     color: white;
                     padding: 1rem 1.5rem;
@@ -109,22 +110,41 @@ export class ChatComponent {
                             </p>
                         </div>
                     </div>
-                    <button id="chat-close-btn" style="
-                        background: rgba(255,255,255,0.2);
-                        border: none;
-                        color: white;
-                        width: 32px;
-                        height: 32px;
-                        border-radius: 50%;
-                        cursor: pointer;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        transition: background 0.2s;
-                    " onmouseover="this.style.background='rgba(255,255,255,0.3)'" 
-                       onmouseout="this.style.background='rgba(255,255,255,0.2)'">
-                        <i class="fas fa-times"></i>
-                    </button>
+                    <!-- ✅ Botones: Minimizar y Cerrar (SIN eventos inline) -->
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button id="chat-minimize-btn" style="
+                            background: rgba(255,255,255,0.2);
+                            border: none;
+                            color: white;
+                            width: 32px;
+                            height: 32px;
+                            border-radius: 50%;
+                            cursor: pointer;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            transition: background 0.2s;
+                        " 
+                        title="Minimizar">
+                            <i class="fas fa-minus"></i>
+                        </button>
+                        <button id="chat-close-btn" style="
+                            background: rgba(255,255,255,0.2);
+                            border: none;
+                            color: white;
+                            width: 32px;
+                            height: 32px;
+                            border-radius: 50%;
+                            cursor: pointer;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            transition: background 0.2s;
+                        " 
+                        title="Cerrar">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Typing indicator -->
@@ -137,7 +157,7 @@ export class ChatComponent {
                     font-style: italic;
                 ">
                     <i class="fas fa-ellipsis-h fa-fade"></i> ${
-                      this.otherUserName
+                        this.otherUserName
                     } está escribiendo...
                 </div>
 
@@ -180,7 +200,7 @@ export class ChatComponent {
                             transition: border-color 0.2s;
                         "
                         onfocus="this.style.borderColor='${
-                          themeColors.primary
+                            themeColors.primary
                         }'"
                         onblur="this.style.borderColor='#d1d5db'"
                     ></textarea>
@@ -197,21 +217,16 @@ export class ChatComponent {
                         justify-content: center;
                         transition: all 0.2s;
                         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                    " onmouseover="this.style.transform='scale(1.05)'; this.style.background='${
-                      themeColors.accent
-                    }'" 
-                       onmouseout="this.style.transform='scale(1)'; this.style.background='${
-                         themeColors.primary
-                       }'">
+                    ">
                         <i class="fas fa-paper-plane"></i>
                     </button>
                 </div>
             </div>
         `;
-  }
+    }
 
   //Configura SignalR
- async setupSignalR() {
+async setupSignalR() {
     try {
         console.log("🔌 [SignalR] Iniciando configuración...");
         console.log("🔌 [SignalR] Hub URL:", CHAT_HUB_URL);
@@ -325,99 +340,87 @@ async loadMessages() {
         console.log("📥 [Mensajes] Chat Room ID:", this.chatRoomId);
         console.log("📥 [Mensajes] User ID:", this.currentUserId);
 
-        // Mostrar indicador en el contenedor de mensajes
         const messagesContainer = document.getElementById('chat-messages');
         if (messagesContainer) {
             messagesContainer.innerHTML = `
-                <div style="
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    justify-content: center;
-                    height: 100%;
-                    color: #6b7280;
-                ">
-                    <div class="spinner" style="
-                        width: 40px;
-                        height: 40px;
-                        border: 4px solid #e5e7eb;
-                        border-top-color: #3b82f6;
-                        border-radius: 50%;
-                        animation: spin 1s linear infinite;
-                    "></div>
+                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #6b7280;">
+                    <div class="spinner" style="width: 40px; height: 40px; border: 4px solid #e5e7eb; border-top-color: #3b82f6; border-radius: 50%; animation: spin 1s linear infinite;"></div>
                     <p style="margin-top: 1rem; font-size: 0.875rem;">Cargando mensajes...</p>
                 </div>
             `;
         }
 
-        // Obtener mensajes del servidor
         const messagesResult = await getChatMessages(this.chatRoomId, this.currentUserId);
         
         console.log("📦 [Mensajes] Resultado recibido:", messagesResult);
 
-        // ✅ Manejar diferentes estructuras de respuesta
         let messagesArray = [];
         
         if (Array.isArray(messagesResult)) {
-            // Si es un array directo
             messagesArray = messagesResult;
         } else if (messagesResult && messagesResult.items) {
-            // Si viene como { items: [...] }
             messagesArray = messagesResult.items;
         } else if (messagesResult && messagesResult.Items) {
-            // Si viene como { Items: [...] } (PascalCase)
             messagesArray = messagesResult.Items;
         }
 
         console.log("✅ [Mensajes] Mensajes procesados:", messagesArray.length);
         
-        // Guardar en la propiedad
         this.messages = messagesArray;
 
-        // Limpiar el contenedor antes de renderizar
         if (messagesContainer) {
             messagesContainer.innerHTML = '';
         }
 
-        // Renderizar los mensajes usando tu método existente
         if (this.messages.length === 0) {
             messagesContainer.innerHTML = `
-                <div style="
-                    text-align: center;
-                    color: #9ca3af;
-                    padding: 2rem;
-                    font-size: 0.875rem;
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    justify-content: center;
-                    height: 100%;
-                ">
+                <div style="text-align: center; color: #9ca3af; padding: 2rem; font-size: 0.875rem; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
                     <i class="fas fa-comments" style="font-size: 2rem; margin-bottom: 0.5rem; opacity: 0.3;"></i>
                     <p>No hay mensajes aún. ¡Inicia la conversación!</p>
                 </div>
             `;
         } else {
-            // Renderizar cada mensaje usando tu método addMessage
             this.messages.forEach((message) => {
                 console.log("🎨 [UI] Renderizando mensaje:", message);
                 this.addMessage(message, true);
             });
             
-            // Scroll al final
             this.scrollToBottom();
         }
         
-        // Marcar mensajes como leídos
+        // ✅ CORRECCIÓN CRÍTICA: Usar el ID correcto según el userType
         try {
             console.log("✓ Marcando mensajes como leídos:", {
                 chatRoomId: this.chatRoomId,
-                userId: this.currentUserId
+                currentUserId: this.currentUserId,
+                userType: this.config.userType
             });
-            await markMessagesAsRead(this.chatRoomId, this.currentUserId);
+            
+            // ✅ CLAVE: Determinar el ID correcto según el tipo de usuario
+            let userIdForRead;
+            let userRole;
+            
+            if (this.config.userType === 'doctor') {
+                // Para doctor: usar el doctorId del chatRoom o de config
+                userIdForRead = this.config.doctorId || this.currentUserId;
+                userRole = 'Doctor';
+            } else {
+                // Para paciente: usar el patientId del chatRoom o de config
+                userIdForRead = this.config.patientId || this.currentUserId;
+                userRole = 'Patient';
+            }
+            
+            console.log("✅ ID final para markAsRead:", {
+                userIdForRead,
+                userRole
+            });
+            
+            await markMessagesAsRead(this.chatRoomId, userIdForRead, userRole);
+            
             console.log("✅ Mensajes marcados como leídos");
         } catch (error) {
             console.warn("⚠️ No se pudieron marcar como leídos:", error);
+            console.error("⚠️ Error completo:", error.message);
         }
 
     } catch (error) {
@@ -427,29 +430,11 @@ async loadMessages() {
         const messagesContainer = document.getElementById('chat-messages');
         if (messagesContainer) {
             messagesContainer.innerHTML = `
-                <div style="
-                    color: #ef4444; 
-                    padding: 2rem; 
-                    text-align: center;
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    justify-content: center;
-                    height: 100%;
-                ">
+                <div style="color: #ef4444; padding: 2rem; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
                     <i class="fas fa-exclamation-triangle" style="font-size: 2rem; margin-bottom: 1rem; opacity: 0.7;"></i>
                     <p style="font-weight: 500;">Error al cargar mensajes</p>
                     <p style="font-size: 0.875rem; opacity: 0.8; margin-top: 0.5rem;">${error.message}</p>
-                    <button onclick="location.reload()" style="
-                        margin-top: 1rem;
-                        padding: 0.5rem 1rem;
-                        background: #3b82f6;
-                        color: white;
-                        border: none;
-                        border-radius: 0.5rem;
-                        cursor: pointer;
-                        font-size: 0.875rem;
-                    ">Recargar página</button>
+                    <button onclick="location.reload()" style="margin-top: 1rem; padding: 0.5rem 1rem; background: #3b82f6; color: white; border: none; border-radius: 0.5rem; cursor: pointer; font-size: 0.875rem;">Recargar página</button>
                 </div>
             `;
         }
@@ -592,37 +577,173 @@ addMessage(message, append = true) {
 }
 
   // Adjuntar event listeners
-  attachEventListeners() {
+attachEventListeners() {
     const input = document.getElementById("chat-message-input");
     const sendBtn = document.getElementById("chat-send-btn");
-    const closeBtn = document.getElementById("chat-close-btn");
+    const container = this.container.querySelector('.chat-container');
 
     // Auto-resize del textarea
-    input.addEventListener("input", (e) => {
-      e.target.style.height = "auto";
-      e.target.style.height = e.target.scrollHeight + "px";
+    if (input) {
+        input.addEventListener("input", (e) => {
+            e.target.style.height = "auto";
+            e.target.style.height = e.target.scrollHeight + "px";
+            this.handleTyping();
+        });
 
-      // Notificar que está escribiendo
-      this.handleTyping();
-    });
+        // Focus styles para input
+        input.addEventListener("focus", (e) => {
+            const themeColor = this.theme === "doctor" ? "#10b981" : "#3b82f6";
+            e.target.style.borderColor = themeColor;
+        });
 
-    // Enviar con Enter (Shift+Enter para nueva línea)
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        this.sendMessage();
-      }
-    });
+        input.addEventListener("blur", (e) => {
+            e.target.style.borderColor = "#d1d5db";
+        });
+
+        // Enviar con Enter
+        input.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                this.sendMessage();
+            }
+        });
+    }
 
     // Enviar con botón
-    sendBtn.addEventListener("click", () => this.sendMessage());
+    if (sendBtn) {
+        sendBtn.addEventListener("mouseenter", () => {
+            const accentColor = this.theme === "doctor" ? "#059669" : "#2563eb";
+            sendBtn.style.transform = "scale(1.05)";
+            sendBtn.style.background = accentColor;
+        });
 
-    // Cerrar chat
-    closeBtn.addEventListener("click", () => this.close());
-  }
+        sendBtn.addEventListener("mouseleave", () => {
+            const primaryColor = this.theme === "doctor" ? "#10b981" : "#3b82f6";
+            sendBtn.style.transform = "scale(1)";
+            sendBtn.style.background = primaryColor;
+        });
+
+        sendBtn.addEventListener("click", () => this.sendMessage());
+    }
+
+    // ✅ Usar DELEGACIÓN DE EVENTOS en el contenedor
+    if (container) {
+        container.addEventListener("click", (e) => {
+            const target = e.target;
+            const button = target.closest('button');
+            
+            if (!button) return;
+
+            const buttonId = button.id;
+
+            // Botón CERRAR
+            if (buttonId === "chat-close-btn") {
+                e.stopPropagation();
+                this.close();
+                return;
+            }
+
+            // Botón MINIMIZAR
+            if (buttonId === "chat-minimize-btn") {
+                e.stopPropagation();
+                
+                const modal = document.getElementById('chat-modal');
+                const header = container.querySelector('.chat-header');
+
+                if(!header){
+                    console.error("❌ Header no encontrado para minimizar/restaurar");
+                    return;
+                }
+
+                const children = Array.from(container.children).filter(child => child !== header);
+
+                // Guardamos valores iniciales solo la primera vez
+                if(!modal.dataset.initialized) {
+                    children.forEach(child => {
+                        child.dataset.originalDisplay = window.getComputedStyle(child).display;
+                    });
+
+                    header.dataset.originalJustify = window.getComputedStyle(header).justifyContent;
+                    modal.dataset.initialized = "true";
+                }
+
+                if (modal) {
+                    if(modal.dataset.minimized === "true") {
+                        // Restaurar
+                        modal.dataset.minimized = "false";
+                        modal.style.width = "400px";
+                        modal.style.height = "600px";
+
+                        children.forEach(child => {
+                            child.style.display = child.dataset.originalDisplay;
+                        });
+                        
+                        // Restauramos alineación original del header
+                        header.style.justifyContent = header.dataset.originalJustify;
+                        header.style.gap = '0';
+
+                        button.innerHTML = '<i class="fas fa-minus"></i>';
+                        button.title = 'Minimizar';
+
+                        this.scrollToBottom();
+                    } else {
+                        // Minimizar
+                        modal.dataset.minimized = "true";
+                        modal.style.width = "400px";
+                        modal.style.height = "70px";
+
+                        children.forEach(child => {
+                            child.style.display = "none";
+                        });
+
+                        // Centramos el header
+                        header.style.justifyContent = "center";
+                        header.style.gap = '1rem';
+
+                        button.innerHTML = '<i class="fas fa-window-maximize"></i>';
+                        button.title = 'Maximizar';
+                    }
+                }
+                return;
+            }
+        });
+
+        // ✅ Click en el HEADER para restaurar cuando está minimizado
+        const header = container.querySelector('.chat-header');
+        if (header) {
+            header.addEventListener("click", (e) => {
+                // Si clickeó en un botón, ignorar
+                if (e.target.closest('button')) return;
+
+                const modal = document.getElementById('chat-modal');
+                if (modal?.dataset.minimized === "true") {
+                    const minimizeBtn = document.getElementById('chat-minimize-btn');
+                    if (minimizeBtn) {
+                        minimizeBtn.click();
+                    }
+                }
+            });
+        }
+
+        // ✅ Hover effects para botones del header
+        container.addEventListener("mouseenter", (e) => {
+            const button = e.target.closest('#chat-minimize-btn, #chat-close-btn');
+            if (button) {
+                button.style.background = "rgba(255,255,255,0.3)";
+            }
+        }, true);
+
+        container.addEventListener("mouseleave", (e) => {
+            const button = e.target.closest('#chat-minimize-btn, #chat-close-btn');
+            if (button) {
+                button.style.background = "rgba(255,255,255,0.2)";
+            }
+        }, true);
+    }
+}
 
   // Notificar que está escribiendo
-  handleTyping() {
+handleTyping() {
     if (!this.isTyping) {
       this.isTyping = true;
       this.connection?.invoke(

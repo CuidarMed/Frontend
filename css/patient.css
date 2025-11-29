@@ -3313,32 +3313,52 @@ body {
 /* RECETAS COMPLETAS */
 /* Contenedor principal donde se renderizan las tarjetas */
 #prescriptions-list-full {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 16px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 20px;
+    width: 100%;
 }
+
 
 /* Cada tarjeta de receta */
 .prescription-card {
-    flex: 1 1 300px;
+    width: 100%;
+    min-height: 360px;
+    max-height: 420px;
+
     display: flex;
     flex-direction: column;
-    background: #fefefe;
-    border: 1px solid #ddd;
-    border-radius: 10px;
+    justify-content: space-between;
+
+    background: #ffffff;
+    border: 1px solid #dcdcdc;
+    border-radius: 12px;
     padding: 16px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    gap: 12px;
+
+    box-shadow: 0 2px 6px rgba(0,0,0,0.07);
 }
+
 
 /* Header de la tarjeta */
 .prescription-card-header {
     display: flex;
+    justify-content: space-between;
     align-items: center;
-    justify-content:last baseline;
     border-bottom: 1px solid #ddd;
     padding-bottom: 8px;
 }
+
+.prescription-card-header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.prescription-card-icon {
+    font-size: 24px;
+    color: #2563eb;
+}
+
 
 /* Icono del header */
 .prescription-card-icon {
@@ -3354,32 +3374,139 @@ body {
 /* Body de la tarjeta */
 .prescription-card-body p {
     background: #f1f6ff;
-    padding: 6px 8px;
-    border-radius: 5px;
+    padding: 6px 10px;
+    border-radius: 6px;
     margin: 4px 0;
-        font-size: 0.95rem;
+    font-size: 0.95rem;
+    line-height: 1.35rem;
 }
+
 
 /* Botón de descarga (similar a btn-history-details) */
 .btn-prescription-view {
     display: inline-flex;
     align-items: center;
-    margin-left: 66px;
+    justify-content: center;
+
     gap: 0.5rem;
-    padding: 0.625rem 1.25rem;
+    padding: 0.55rem 1.2rem;
+
     background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
     color: white;
     border: none;
     border-radius: 8px;
-    font-size: 0.875rem;
+
+    font-size: 0.85rem;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.3s 
-ease;
     white-space: nowrap;
+
+    transition: all 0.25s ease-in-out;
     box-shadow: 0 2px 8px rgba(59, 130, 246, 0.25);
 }
 
 .btn-prescription-view:hover {
-    background-color: #138496;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35);
 }
+
+
+
+/* Badge de mensajes no leídos */
+.unread-badge {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: #ef4444;
+    color: white;
+    font-size: 11px;
+    font-weight: 600;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 5px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    animation: pulse-badge 2s infinite;
+}
+
+@keyframes pulse-badge {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+}
+
+.btn-clean-chat {
+    position: relative !important;
+}
+
+
+
+/* --- SELECT DE ESTADO --- */
+#status-filter {
+    padding: 8px 14px;
+    font-size: 0.9rem;
+    border-radius: 8px;
+    border: 1px solid #d1d5db;
+    background-color: #ffffff;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: #333;
+    min-width: 180px;
+}
+
+/* Hover */
+#status-filter:hover {
+    border-color: #3b82f6;
+}
+
+/* Focus */
+#status-filter:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
+    outline: none;
+}
+
+/* Option */
+#status-filter option {
+    padding: 6px;
+}
+
+/* ALIGN FIX PARA FLEX DE ACCIONES */
+.section-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+
+.btn-clean-chat {
+    background: #3b82f6;
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem; /* Tamaño moderado */
+    border-radius: 8px; /* Bordes redondeados */
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem; /* Espacio entre ícono y texto */
+    font-size: 1rem; /* Tamaño de fuente normal */
+    font-weight: 600; /* Peso de fuente más fuerte */
+    text-transform: uppercase; /* Texto en mayúsculas */
+    transition: all 0.3s ease; /* Transición suave */
+}
+
+.btn-clean-chat:hover {
+    background: #2563eb; /* Color más oscuro al pasar el mouse */
+    transform: scale(1.05); /* Efecto de aumento al pasar el mouse */
+}
+
+.btn-clean-chat i {
+    font-size: 1.25rem; /* Ícono de tamaño moderado */
+}
+

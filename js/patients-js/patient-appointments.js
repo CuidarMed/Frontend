@@ -6,6 +6,8 @@ import { appState } from './patient-state.js';
 import { getActiveSection } from './patient-utils.js';
 import { showNotification } from './patient-notifications.js';
 import { handleAppointmentChatCreation, openChatModal } from '../chat/chat-integration.js';
+import { getStatusFilter } from './patient-filters.js';
+// En la sección de imports
 
 /**
  * Renderiza turnos para la página de inicio (solo 3 próximos)
@@ -68,9 +70,8 @@ export function renderAppointmentsHome(appointments) {
                             data-appointment-id="${appointmentId}"
                             data-doctor-id="${doctorId}"
                             data-doctor-name="${doctorName}"
-                            title="Chat con el doctor"
-                            style="background: #3b82f6; color: white; border: none; padding: 0.4rem 0.75rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem;">
-                            <i class="fas fa-comments"></i> Chat
+                            title="Chat con el doctor">
+                        <i class="fas fa-comments"></i>
                         </button>
                     ` : ""}
                     <div class="appointment-clean-status status-${status}">
@@ -80,8 +81,21 @@ export function renderAppointmentsHome(appointments) {
             </div>
         `;
     }).join('');
+     applyStylesAfterRender();
 }
-
+function applyStylesAfterRender() {
+    const statusElements = document.querySelectorAll('.appointment-card');
+    statusElements.forEach(element => {
+        const status = element.classList.contains('status-scheduled') ? 'scheduled' :
+                      element.classList.contains('status-confirmed') ? 'confirmed' :
+                      element.classList.contains('status-cancelled') ? 'cancelled' : '';
+        
+        // Aplica clases de estilo o fuerza el renderizado si es necesario
+        if (status) {
+            element.style.display = 'block'; // Asegúrate de que el contenido sea visible
+        }
+    });
+}
 /**
  * Renderiza lista completa de turnos (para sección Mis Turnos)
  */
@@ -151,21 +165,38 @@ export function renderAppointmentsFull(appointments) {
                 </div>
                 <div class="appointment-clean-actions" style="display: flex; flex-direction: row; gap: 0.75rem; align-items: center;">
                     ${chatAvailable && appointmentId && doctorId && doctorName ? `
-                        <button class="btn-clean-chat"
+                    <button class="btn-clean-chat"
                             data-appointment-id="${appointmentId}"
                             data-doctor-id="${doctorId}"
                             data-doctor-name="${doctorName}"
-                            title="Chat con el doctor"
-                            style="background: #3b82f6; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem;">
-                            <i class="fas fa-comments"></i> Chat
-                        </button>
+                            title="Chat con el doctor">
+                        <i class="fas fa-comments"></i>
+                    </button>
                     ` : ""}
                     ${canCancel ? `
-                        <button class="btn-clean-cancel" 
-                            onclick="cancelAppointment(${appointmentId})" 
+                        <button 
+                            onclick="cancelAppointment(${appointmentId})"
                             title="Cancelar turno"
-                            style="background: #dc2626; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem;">
-                            <i class="fas fa-times"></i> Cancelar
+                            style="
+                                background-color: #dc2626;
+                                color: #fff;
+                                border: none;
+                                padding: 0.7rem 1.4rem;
+                                border-radius: 10px;
+                                cursor: pointer;
+                                display: inline-flex;
+                                align-items: center;
+                                gap: 0.6rem;
+                                font-size: 1rem;
+                                font-weight: 600;
+                                box-shadow: 0 2px 4px rgba(0,0,0,0.12);
+                                transition: background-color .2s ease;
+                            "
+                            onmouseover="this.style.backgroundColor='#b91c1c'"
+                            onmouseout="this.style.backgroundColor='#dc2626'"
+                        >
+                            <i class="fas fa-times" style="font-size: 1rem;"></i>
+                            Cancelar
                         </button>
                     ` : ""}
                 </div>
@@ -185,14 +216,12 @@ async function handlePatientChatOpen(appointmentId, doctorId, doctorName){
             return;
         }
         
-        // ✅ Validar que tengamos el usuario actual
         if (!appState.currentUser) {
             console.error('❌ No hay usuario autenticado');
             showNotification('Error: No hay usuario autenticado', 'error');
             return;
         }
         
-        // ✅ Obtener userId con múltiples fallbacks
         const currentUserId = appState.currentUser.userId || 
                             appState.currentUser.UserId || 
                             appState.currentUser.id || 
@@ -211,28 +240,23 @@ async function handlePatientChatOpen(appointmentId, doctorId, doctorName){
 
         const {ApiScheduling} = await import('../api.js')
 
-        // Obtenemos los datos completos del appointment
         const appoinment = await ApiScheduling.get(`v1/Appointments/${appointmentId}`)
 
         if(!appoinment){
-            showNotification('No se encontro el turno', error)
+            showNotification('No se encontro el turno', 'error')
             return
         }
 
-        // Verificamos que este confirmado 
         const status = (appoinment.status || appoinment.Status || '').toLowerCase()
         if(status !== 'confirmed' && status !== 'in_progress'){
-            showNotification(' El chat solo esta disponible para turnos confirmados', 'warning')
+            showNotification('El chat solo esta disponible para turnos confirmados', 'warning')
             return
         }
 
-        // Crear o recurar sala de chat
-        const chatRoom = await handleAppointmentChatCreation(
-            {
-                ...appoinment,
-                currentUserId: currentUserId
-            }
-        )
+        const chatRoom = await handleAppointmentChatCreation({
+            ...appoinment,
+            currentUserId: currentUserId
+        })
 
         if(!chatRoom){
             showNotification('No se pudo iniciar el chat. Verificar la conexion.', 'error')
@@ -240,28 +264,52 @@ async function handlePatientChatOpen(appointmentId, doctorId, doctorName){
         }
 
         const patientFirstName = appState.currentPatient?.firstName || appState.currentPatient?.FirstName || ''
-
-        const patientLastName = appState.currentPatient?.LastName || appState.currentPatient?.LastName || ''
-
+        const patientLastName = appState.currentPatient?.lastName || appState.currentPatient?.LastName || ''
         const patientName = `${patientFirstName} ${patientLastName}`.trim() || 'Paciente'
 
         const patientIdForChat = chatRoom.patientId || chatRoom.PatientId
         console.log('patientId: ', patientIdForChat)
 
-        // abrir modal del chat 
         openChatModal(chatRoom, {
             currentUserId: chatRoom.patientId || chatRoom.PatientId,
             currentUserName: patientName,
             otherUserName: doctorName || 'Doctor',
-            userType: 'patient'
+            userType: 'patient',
+            patientId: chatRoom.patientId || chatRoom.PatientId,  
+            doctorId: chatRoom.doctorId || chatRoom.DoctorId      
         })
 
+        // ✅ Marcar mensajes como leídos y actualizar badge
+        try {
+            const { markMessagesAsRead } = await import('../chat/chat-service.js');
+            const chatRoomId = chatRoom.id || chatRoom.Id;
+            
+            // 🔍 DEBUG
+            console.log('🔍 DEBUG - chatRoom completo:', JSON.stringify(chatRoom, null, 2));
+            console.log('🔍 DEBUG - chatRoomId:', chatRoomId);
+            console.log('🔍 DEBUG - patientIdForChat:', patientIdForChat);
+            console.log('🔍 DEBUG - appState.currentPatient:', appState.currentPatient);
+            
+            await markMessagesAsRead(chatRoomId, patientIdForChat, 'Patient');
+            console.log('✅ Mensajes marcados como leídos por el paciente');
+            
+            // Actualizar el badge del botón a 0
+            const chatButton = document.querySelector(`.btn-clean-chat[data-doctor-id="${doctorId}"]`);
+            if (chatButton) {
+                updateChatButtonBadge(chatButton, 0);
+            }
+        } catch (error) {
+            console.error('⚠️ Error marcando mensajes como leídos:', error);
+        }
+
         showNotification('Chat iniciado', 'success') 
+        
     } catch(error){
         console.error('Error al abrir el chat: ', error)
         showNotification('Ocurrio un error al intentar abrir el chat', 'error')
     }
 }
+
 
 // Inicializar botones del chat
 function initializeChatButtons(){
@@ -281,7 +329,6 @@ function initializeChatButtons(){
             
             console.log('🗨️ Click en botón de chat:', { appointmentId, doctorId, doctorName });
             
-            // ✅ Validar que todos los datos existan
             if (!appointmentId || !doctorId || !doctorName) {
                 console.error('❌ Datos incompletos:', { 
                     appointmentId: appointmentId || 'FALTA', 
@@ -292,9 +339,15 @@ function initializeChatButtons(){
                 return;
             }
             
-            await handlePatientChatOpen(appointmentId, doctorId, doctorName)
-        })
-    })
+            // ✅ Limpiar badge al abrir el chat
+            updateChatButtonBadge(this, 0);
+            
+            await handlePatientChatOpen(appointmentId, doctorId, doctorName);
+        });
+    });
+    
+    // ✅ Inicializar badges después de configurar los botones
+    initializeChatBadges();
 }
 
 /**
@@ -308,7 +361,17 @@ export async function loadPatientAppointments() {
         }
 
         const { ApiScheduling, Api } = await import('../api.js');
-        const appointmentsResponse = await ApiScheduling.get(`v1/Appointments?patientId=${appState.currentPatient.patientId}`);
+        
+        // Obtener el estado filtrado
+        const status = getStatusFilter();
+
+        let url = `v1/Appointments?patientId=${appState.currentPatient.patientId}`;
+        
+        if (status) {
+            url += `&status=${status}`;
+        }
+
+        const appointmentsResponse = await ApiScheduling.get(url);
 
         const appointments = Array.isArray(appointmentsResponse)
             ? appointmentsResponse
@@ -327,8 +390,7 @@ export async function loadPatientAppointments() {
         }
 
         appointments.sort((a, b) =>
-            new Date(a.startTime || a.StartTime) -
-            new Date(b.startTime || b.StartTime)
+            new Date(a.startTime || a.StartTime) - new Date(b.startTime || b.StartTime)
         );
 
         // Obtener info del doctor
@@ -357,15 +419,21 @@ export async function loadPatientAppointments() {
         if (activeSection === "inicio") {
             const latestAppointments = appointments.slice(0, 3);
             appointmentsList.innerHTML = renderAppointmentsHome(latestAppointments);
-        }
-        else if (activeSection === "turnos") {
+        } else if (activeSection === "turnos") {
             appointmentsList.innerHTML = renderAppointmentsFull(appointments);
         }
 
-        // ✅ Inicializar botones de chat SIEMPRE después de renderizar (en ambas secciones)
+        // ✅ CRÍTICO: Inicializar botones de chat Y aplicar estilos
         setTimeout(() => {
             initializeChatButtons();
-        }, 100);
+            
+            // Aplicar estilos inmediatamente después de renderizar
+            if (typeof forceStyleUpdate === 'function') {
+                forceStyleUpdate();
+            } else if (typeof window.forceStyleUpdate === 'function') {
+                window.forceStyleUpdate();
+            }
+        }, 150);
 
     } catch (error) {
         console.error('Error al cargar turnos:', error);
@@ -532,5 +600,165 @@ function numberToDeterministicGuid(num) {
         hex.substring(20)
     ].join("-");
 }
+// ===================================
+// MENSAJES NO LEÍDOS - CHAT (Paciente)
+// ===================================
+
+/**
+ * Obtiene el conteo de mensajes no leídos para una sala de chat
+ */
+async function getUnreadMessagesCount(chatRoomId, patientId) {
+    try {
+        const { getChatMessages } = await import('../chat/chat-service.js');
+        
+        console.log('🔍 Obteniendo mensajes para chatRoom:', chatRoomId, 'paciente:', patientId);
+        
+        const messages = await getChatMessages(chatRoomId, patientId, 1, 100);
+        
+        console.log('🔍 Mensajes obtenidos:', messages);
+        
+        if (!messages || !Array.isArray(messages)) return 0;
+        
+        // Filtrar mensajes no leídos que fueron enviados por el DOCTOR
+        const unreadCount = messages.filter(msg => {
+            const isRead = msg.isRead || msg.IsRead;
+            const senderRole = msg.senderRole || msg.SenderRole;
+            return !isRead && senderRole !== 'Patient';
+        }).length;
+        
+        console.log('🔍 Mensajes no leídos:', unreadCount);
+        
+        return unreadCount;
+        
+    } catch (error) {
+        console.error('❌ Error obteniendo mensajes no leídos:', error);
+        return 0;
+    }
+}
+
+/**
+ * Busca el chatRoom para un appointment específico
+ */
+async function findChatRoomForAppointment(patientId, doctorId) {
+    try {
+        const { getUserChatRooms } = await import('../chat/chat-service.js');
+        
+        console.log('🔍 Buscando chatRooms para paciente:', patientId);
+        
+        const chatRooms = await getUserChatRooms(patientId);
+        
+        console.log('🔍 ChatRooms obtenidos:', chatRooms);
+        
+        if (!chatRooms || !Array.isArray(chatRooms)) {
+            console.log('🔍 No hay chatRooms o no es array');
+            return null;
+        }
+        
+        const room = chatRooms.find(r => {
+            const roomDoctorId = r.doctorId || r.DoctorId;
+            const roomPatientId = r.patientId || r.PatientId;
+            console.log('🔍 Comparando room:', { roomDoctorId, roomPatientId, doctorId, patientId });
+            return roomDoctorId == doctorId && roomPatientId == patientId;
+        });
+        
+        console.log('🔍 Room encontrado:', room);
+        return room;
+        
+    } catch (error) {
+        console.error('❌ Error buscando chatRoom:', error);
+        return null;
+    }
+}
+
+/**
+ * Actualiza el badge de un botón de chat
+ */
+function updateChatButtonBadge(button, unreadCount) {
+    // Remover badge existente
+    const existingBadge = button.querySelector('.unread-badge');
+    if (existingBadge) {
+        existingBadge.remove();
+    }
+    
+    // Si hay mensajes no leídos, agregar badge
+    if (unreadCount > 0) {
+        const badge = document.createElement('span');
+        badge.className = 'unread-badge';
+        badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+        button.style.position = 'relative';
+        button.appendChild(badge);
+        console.log('✅ Badge agregado con count:', unreadCount);
+    }
+}
+
+/**
+ * Inicializa los badges de chat para todos los botones visibles
+ */
+async function initializeChatBadges() {
+    console.log('🔔 initializeChatBadges() llamada (paciente)');
+    
+    const chatButtons = document.querySelectorAll('.btn-clean-chat');
+    console.log('🔔 Botones de chat encontrados:', chatButtons.length);
+    
+    if (chatButtons.length === 0) return;
+    
+    const patientId = appState.currentPatient?.patientId;
+    console.log('🔔 Patient ID:', patientId);
+    
+    if (!patientId) return;
+    
+    for (const button of chatButtons) {
+        const doctorId = button.getAttribute('data-doctor-id');
+        console.log('🔔 Procesando botón para doctor:', doctorId);
+        
+        if (!doctorId) continue;
+        
+        try {
+            const chatRoom = await findChatRoomForAppointment(patientId, doctorId);
+            console.log('🔔 ChatRoom encontrado:', chatRoom);
+            
+            if (chatRoom) {
+                const chatRoomId = chatRoom.id || chatRoom.Id;
+                const unreadCount = await getUnreadMessagesCount(chatRoomId, patientId);
+                console.log('🔔 Mensajes no leídos para mostrar:', unreadCount);
+                updateChatButtonBadge(button, unreadCount);
+            }
+        } catch (error) {
+            console.error('❌ Error inicializando badge:', error);
+        }
+    }
+}
+
+
+// ===================================
+// POLLING DE BADGES DE CHAT
+// ===================================
+
+let chatBadgeInterval = null;
+
+export function startChatBadgePolling() {
+    if (chatBadgeInterval) {
+        clearInterval(chatBadgeInterval);
+    }
+    
+    initializeChatBadges();
+    
+    chatBadgeInterval = setInterval(() => {
+        initializeChatBadges();
+    }, 30000);
+    
+    console.log('✅ Polling de badges de chat iniciado (paciente)');
+}
+
+export function stopChatBadgePolling() {
+    if (chatBadgeInterval) {
+        clearInterval(chatBadgeInterval);
+        chatBadgeInterval = null;
+        console.log('🛑 Polling de badges de chat detenido (paciente)');
+    }
+}
+
+
+
 // Exportar para uso global
 window.cancelAppointment = cancelAppointment;

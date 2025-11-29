@@ -1,15 +1,10 @@
 // ==== DOCTOR CALENDAR WRAPPER =====
-// Reusa la lógica del paciente, pero en el modal del DOCTOR
 
 import {
     loadAvailableDatesAndTimes,
     loadAvailableTimes
 } from "../patients-js/patient-calendar.js";
 
-/**
- * Crea (o actualiza) un select #doctor oculto para que
- * patient-calendar.js pueda leer el doctorId al hacer click en el calendario.
- */
 function ensureHiddenDoctorSelect(doctorId) {
     let doctorSelect = document.getElementById("doctor");
 
@@ -53,11 +48,6 @@ export async function loadDoctorAvailableDates(doctorId) {
     await loadAvailableDatesAndTimes(doctorId);
 }
 
-/**
- * (Opcional) Si alguna vez quisieras reaccionar al cambio manual del date
- * podés usar esta función. Para nuestro caso, casi no hace falta porque
- * los horarios se cargan al clickear en el calendario.
- */
 export async function loadDoctorAvailableTimes(doctorId, selectedDate) {
     ensureHiddenDoctorSelect(doctorId);
     await loadAvailableTimes(doctorId, selectedDate);
