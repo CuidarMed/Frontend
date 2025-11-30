@@ -260,6 +260,12 @@ async function loadTodayConsultationsForDashboard() {
         const { initializeAttendButtons } = await import('./doctor-appointments.js');
         initializeAttendButtons();
     }, 100);
+    
+    // Inicializar navegación de fecha para hoy
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    updateConsultationsListTitle(null, todayStr);
 }
 
 /**
@@ -395,7 +401,7 @@ function initializeScheduleItemClickHandlers() {
 /**
  * Carga las consultas para una fecha específica
  */
-async function loadConsultationsForDate(dateStr) {
+export async function loadConsultationsForDate(dateStr) {
     const consultationsList = document.getElementById('consultations-list');
     if (!consultationsList) return;
     
@@ -502,62 +508,49 @@ async function loadConsultationsForDate(dateStr) {
         const { initializeAttendButtons } = await import('./doctor-appointments.js');
         initializeAttendButtons();
     }, 100);
+    
+    // Actualizar título y navegación
+    updateConsultationsListTitle(null, dateStr);
 }
 function updateConsultationsListTitle(dayName, dateStr) {
-    // Buscar el título de la sección de consultas
     const consultationsSection = document.querySelector('#consultations-list')?.closest('.dashboard-section');
     if (!consultationsSection) return;
     
     const header = consultationsSection.querySelector('.section-header h3');
-    if (header) {
-        // Parsear la fecha correctamente usando componentes locales
-        const [year, month, day] = dateStr.split('-').map(Number);
-        const date = new Date(year, month - 1, day);
-        
-        // Formatear la fecha en zona horaria local
-        const formattedDate = date.toLocaleDateString('es-AR', { 
-            weekday: 'long', 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
-        });
-        
-        // Capitalizar primera letra
-        const capitalizedDate = formattedDate.charAt(0).toUpperCase() + formattedDate.slice(1);
-        
-        header.innerHTML = `
-            <span style="display: flex; align-items: center; gap: 0.5rem;">
-                <i class="fas fa-calendar-day" style="color: #10b981;"></i>
-                Consultas del ${capitalizedDate}
-            </span>
-        `;
-        
-        // Agregar botón para volver a hoy
-        let backButton = consultationsSection.querySelector('.back-to-today-btn');
-        if (!backButton) {
-            backButton = document.createElement('button');
-            backButton.className = 'btn btn-secondary btn-sm back-to-today-btn';
-            backButton.innerHTML = '<i class="fas fa-arrow-left"></i> Hoy';
-            backButton.style.marginLeft = '1rem';
-            
-            backButton.addEventListener('click', async () => {
-                // Remover selección de la agenda
-                document.querySelectorAll('.schedule-item').forEach(si => {
-                    si.style.border = '';
-                    si.style.backgroundColor = '';
-                });
-                
-                // Restaurar título original
-                header.innerHTML = 'Consultas de Hoy';
-                backButton.remove();
-                
-                // Cargar consultas de hoy
-                await loadTodayConsultationsForDashboard();
-            });
-            
-            header.parentElement.appendChild(backButton);
-        }
+    const headerContainer = header?.closest('.section-header');
+    if (!header || !headerContainer) return;
+    
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const isToday = dateStr === `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    
+    header.innerHTML = `<span style="display: flex; align-items: center; gap: 0.5rem;"><i class="fas fa-calendar-day" style="color: #10b981;"></i>Consultas${isToday ? ' de Hoy' : ''}</span>`;
+    
+    let nav = headerContainer.querySelector('.date-navigation-container');
+    if (!nav) {
+        nav = document.createElement('div');
+        nav.className = 'date-navigation-container';
+        nav.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; margin-left: auto;';
+        headerContainer.style.cssText = 'display: flex; align-items: center; justify-content: space-between; width: 100%;';
+        headerContainer.appendChild(nav);
     }
+    
+    nav.innerHTML = `
+        <button class="btn btn-primary" style="padding: 0.5rem 0.75rem; min-width: auto;" title="Día anterior"><i class="fas fa-chevron-left"></i></button>
+        <input type="date" class="date-nav-input" value="${dateStr}" style="padding: 0.5rem; border: 1px solid #10b981; border-radius: 0.375rem; background: white; color: #111827; font-weight: 500; cursor: pointer;">
+        <button class="btn btn-primary" style="padding: 0.5rem 0.75rem; min-width: auto;" title="Día siguiente"><i class="fas fa-chevron-right"></i></button>
+        <button class="btn btn-primary" style="padding: 0.5rem 1rem; min-width: auto;" title="Ir a hoy">Hoy</button>
+    `;
+    
+    const [prevBtn, dateInput, nextBtn, todayBtn] = nav.children;
+    const navigate = async (newDateStr) => { dateInput.value = newDateStr; await loadConsultationsForDate(newDateStr); updateConsultationsListTitle(null, newDateStr); };
+    
+    prevBtn.onclick = () => { const d = new Date(year, month - 1, day); d.setDate(d.getDate() - 1); navigate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`); };
+    nextBtn.onclick = () => { const d = new Date(year, month - 1, day); d.setDate(d.getDate() + 1); navigate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`); };
+    todayBtn.onclick = () => { const t = new Date(); t.setHours(0, 0, 0, 0); navigate(`${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`); };
+    dateInput.onchange = (e) => e.target.value && navigate(e.target.value);
 }
 /**
  * Crea el elemento HTML para un día de la agenda

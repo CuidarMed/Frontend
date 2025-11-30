@@ -744,10 +744,28 @@ async function openAvailabilityForm(parentModal, doctorId, availabilityId = null
         1001
     );
 
-
-    modal.querySelector('form').addEventListener('submit', async (e) => {
+    // Agregar event listener al formulario con protección contra doble envío
+    const form = modal.querySelector('form');
+    let isSubmitting = false;
+    
+    form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        await saveAvailability(modal, parentModal, doctorId, availabilityId);
+        
+        // Prevenir múltiples envíos
+        if (isSubmitting) {
+            console.log('⚠️ Formulario ya se está enviando, ignorando...');
+            return;
+        }
+        
+        isSubmitting = true;
+        try {
+            await saveAvailability(modal, parentModal, doctorId, availabilityId);
+        } finally {
+            // Solo resetear si el modal aún existe (no se cerró)
+            if (document.body.contains(modal)) {
+                isSubmitting = false;
+            }
+        }
     });
 }
 
@@ -755,6 +773,18 @@ async function openAvailabilityForm(parentModal, doctorId, availabilityId = null
  * Guarda disponibilidad
  */
 async function saveAvailability(formModal, parentModal, doctorId, availabilityId) {
+    // Prevenir doble envío
+    const submitButton = formModal.querySelector('button[type="submit"]');
+    if (submitButton.disabled) {
+        console.log('⚠️ Envío ya en progreso, ignorando...');
+        return;
+    }
+
+    // Deshabilitar botón para prevenir doble clic
+    submitButton.disabled = true;
+    const originalText = submitButton.innerHTML;
+    submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+
     try {
         const formData = new FormData(formModal.querySelector('form'));
 
@@ -803,6 +833,9 @@ async function saveAvailability(formModal, parentModal, doctorId, availabilityId
     } catch (error) {
         console.error('❌ Error al guardar disponibilidad:', error);
         showNotification(`Error: ${error.message}`, 'error');
+        // Rehabilitar botón en caso de error
+        submitButton.disabled = false;
+        submitButton.innerHTML = originalText;
     }
 }
 

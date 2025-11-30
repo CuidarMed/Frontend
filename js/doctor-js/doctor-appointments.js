@@ -685,6 +685,23 @@ async function reloadAppointmentViews() {
         const dateFilter = document.getElementById('consultation-date-filter') || document.getElementById('consultation-date-filter-view');
         await loadTodayConsultations(dateFilter?.value || null);
     }
+    
+    // Recargar dashboard principal manteniendo la fecha actual
+    const consultationsList = document.getElementById('consultations-list');
+    if (consultationsList) {
+        const dateInput = document.querySelector('.date-nav-input');
+        const currentDate = dateInput?.value || document.getElementById('consultation-date-filter')?.value;
+        if (currentDate) {
+            const { loadConsultationsForDate } = await import('./doctor-main.js');
+            await loadConsultationsForDate(currentDate);
+        } else {
+            await loadTodayConsultations(null);
+        }
+    }
+    
+    // Actualizar contadores del dashboard
+    const { loadDoctorStats } = await import('./doctor-main.js');
+    await loadDoctorStats();
 }
 
 // =======================================================
@@ -1179,17 +1196,37 @@ export function initializeAttendButtons() {
     document.querySelectorAll('.cancel-appointment-btn').forEach(button => {
         replaceEventListener(button, 'click', async function() {
             const appointmentId = this.getAttribute('data-appointment-id');
+            if (!appointmentId) return;
             
-            if (appointmentId && confirm('¿Estás seguro de que deseas cancelar este turno?')) {
-                console.log('🚫 Cancelando turno:', appointmentId);
-                
-                // Pedir motivo de cancelación
-                const reason = prompt('Motivo de la cancelación (opcional):');
-                
+            const modal = document.createElement('div');
+            modal.className = 'modal';
+            modal.style.cssText = 'display: flex; z-index: 10000;';
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width: 450px; padding: 1.5rem;">
+                    <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e5e7eb; padding-bottom: 1rem; margin-bottom: 1rem;">
+                        <h3 style="color: #111827; margin: 0; display: flex; align-items: center; gap: 0.5rem;"><i class="fas fa-exclamation-triangle" style="color: #ef4444;"></i>Cancelar Turno</h3>
+                        <button class="close-modal" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #6b7280; padding: 0; line-height: 1;">&times;</button>
+                    </div>
+                    <div class="modal-body" style="padding: 0;">
+                        <p style="color: #374151; margin-bottom: 1.5rem;">¿Estás seguro de que deseas cancelar este turno?</p>
+                        <label style="display: block; color: #374151; margin-bottom: 0.5rem; font-weight: 500;">Motivo de la cancelación (opcional):</label>
+                        <textarea id="cancel-reason" rows="3" style="width: 100%; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 0.375rem; font-family: inherit; resize: vertical; box-sizing: border-box;" placeholder="Ej: Paciente reprogramó"></textarea>
+                    </div>
+                    <div style="display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #e5e7eb;">
+                        <button id="cancel-confirm-btn" class="btn btn-primary" style="background: #10b981; border: none; padding: 0.625rem 1.5rem;">Confirmar</button>
+                        <button class="close-modal btn" style="background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; padding: 0.625rem 1.5rem;">Cancelar</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            modal.querySelectorAll('.close-modal').forEach(btn => btn.addEventListener('click', () => modal.remove()));
+            modal.querySelector('#cancel-confirm-btn').addEventListener('click', async () => {
+                const reason = modal.querySelector('#cancel-reason').value.trim();
                 await updateAppointmentStatus(appointmentId, 'CANCELLED', reason || 'Cancelado por el médico');
                 showNotification('Turno cancelado exitosamente', 'success');
+                modal.remove();
                 await reloadAppointmentViews();
-            }
+            });
         });
     });
     
@@ -1317,6 +1354,21 @@ export async function attendConsultation(appointmentId, patientId, patientName) 
         }
 
         console.log('Iniciando consulta:', { appointmentId, patientId, patientName });
+        
+        // Crear ChatRoom y sala de Daily.co antes de abrir el modal
+        const { handleAppointmentChatCreation } = await import('../chat/chat-integration.js');
+        const currentUserId = doctorState.currentUser?.userId || doctorState.currentUser?.UserId || doctorState.currentUser?.id || doctorState.currentUser?.Id || doctorId;
+        console.log('📞 Creando ChatRoom:', { appointmentId, patientId, doctorId, currentUserId });
+        const chatRoom = await handleAppointmentChatCreation({
+            appointmentId,
+            patientId,
+            doctorId,
+            status: 'IN_PROGRESS',
+            currentUserId
+        });
+        console.log('📞 ChatRoom resultado:', chatRoom);
+        
+        // Crear sala de Daily.co (se creará automáticamente al abrir el modal)
         
         showNotification(`Iniciando consulta con ${patientName}...`, 'info');
         

@@ -706,7 +706,8 @@ async function initializeVideoCall(modal, appointmentId, patientId, patientName)
             
         } catch (error) {
             console.error('❌ Error al inicializar videollamada:', error);
-            showVideoError(videoContainer, `Videollamada no disponible: ${error.message || 'Error desconocido'}`);
+            const errorMsg = error?.response?.error || error?.message || 'Error desconocido';
+            showVideoError(videoContainer, `Videollamada no disponible: ${errorMsg}`);
         }
         
     } catch (error) {
@@ -716,10 +717,17 @@ async function initializeVideoCall(modal, appointmentId, patientId, patientName)
 
 function startVideoCall(videoContainer, roomUrl, token, modal, appointmentId) {
     try {
+        if (!videoContainer) {
+            console.error('❌ videoContainer es null');
+            return;
+        }
         if (typeof window.DailyIframe === 'undefined') {
             showVideoError(videoContainer, 'SDK de Daily.co no disponible');
             return;
         }
+        
+        // Limpiar contenedor antes de crear el frame
+        videoContainer.innerHTML = '';
         
         const callFrame = window.DailyIframe.createFrame(videoContainer, {
             showLeaveButton: false,
@@ -741,10 +749,27 @@ function startVideoCall(videoContainer, roomUrl, token, modal, appointmentId) {
         
         // Unirse a la sala usando la URL completa que viene del backend
         callFrame.join({ url: roomUrl, token: token })
-            .then(() => {
+            .then(async () => {
                 console.log('✅ Unido a la videollamada');
                 const loading = videoContainer.querySelector('#video-loading');
                 if (loading) loading.style.display = 'none';
+                
+                // Notificar al paciente
+                try {
+                    const { Api, ApiAuth } = await import('../api.js');
+                    const { getId } = await import('./doctor-core.js');
+                    const doctorId = getId(doctorState.currentDoctorData, 'doctorId');
+                    const patient = await Api.get(`v1/Patient/${patientId}`).catch(() => null);
+                    if (patient?.userId && doctorId) {
+                        await ApiAuth.post('notifications/events', {
+                            userId: patient.userId,
+                            eventType: 'VideoCallIncoming',
+                            payload: { appointmentId, doctorId, doctorName: patientName }
+                        });
+                    }
+                } catch (err) {
+                    console.warn('⚠️ Error notificando al paciente:', err);
+                }
             })
             .catch((error) => {
                 console.error('❌ Error al unirse a la videollamada:', error);

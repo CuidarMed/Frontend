@@ -4,7 +4,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #1e40af 0%, #10b981 100%);
     padding: 20px;
     position: relative;
 }
@@ -60,7 +60,7 @@
     gap: 10px;
     font-size: 24px;
     font-weight: bold;
-    color: #667eea;
+    color: #2563eb;
     margin-bottom: 20px;
 }
 
@@ -148,8 +148,8 @@
 
 .input-icon input:focus {
     outline: none;
-    border-color: #667eea;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    border-color: #10b981;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
 }
 
 .input-icon input:read-only {
@@ -167,7 +167,7 @@
 .confirm-button {
     width: 100%;
     padding: 14px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #1e40af 0%, #10b981 100%);
     color: white;
     border: none;
     border-radius: 10px;
@@ -184,7 +184,7 @@
 
 .confirm-button:hover:not(:disabled) {
     transform: translateY(-2px);
-    box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+    box-shadow: 0 10px 20px rgba(16, 185, 129, 0.3);
 }
 
 .confirm-button:active:not(:disabled) {
@@ -211,8 +211,8 @@
 
 .resend-button {
     background: transparent;
-    border: 2px solid #667eea;
-    color: #667eea;
+    border: 2px solid #10b981;
+    color: #10b981;
     padding: 10px 20px;
     border-radius: 8px;
     font-size: 14px;
@@ -225,7 +225,7 @@
 }
 
 .resend-button:hover:not(:disabled) {
-    background: #667eea;
+    background: #10b981;
     color: white;
 }
 
@@ -248,7 +248,7 @@
 }
 
 .login-link a {
-    color: #667eea;
+    color: #10b981;
     text-decoration: none;
     font-weight: 500;
 }

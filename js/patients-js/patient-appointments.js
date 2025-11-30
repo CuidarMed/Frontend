@@ -50,6 +50,7 @@ export function renderAppointmentsHome(appointments) {
 
         // Chat disponible si está confirmado o en progreso
         const chatAvailable = status === 'confirmed' || status === 'in_progress';
+        const videoCallAvailable = status === 'in_progress';
 
         return `
             <div class="appointment-home-card">
@@ -65,6 +66,16 @@ export function renderAppointmentsHome(appointments) {
                     </div>
                 </div>
                 <div class="appointment-home-actions" style="display: flex; align-items: center; gap: 0.75rem;">
+                    ${videoCallAvailable && appointmentId && doctorId && doctorName ? `
+                        <button class="btn-home-video-call"
+                            data-appointment-id="${appointmentId}"
+                            data-doctor-id="${doctorId}"
+                            data-doctor-name="${doctorName}"
+                            title="Unirse a la videollamada"
+                            style="background: #10b981; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-weight: 500;">
+                            <i class="fas fa-video"></i> Atender
+                        </button>
+                    ` : ""}
                     ${chatAvailable && appointmentId && doctorId && doctorName ? `
                         <button class="btn-clean-chat"
                             data-appointment-id="${appointmentId}"
@@ -141,6 +152,7 @@ export function renderAppointmentsFull(appointments) {
         const canCancel = status === "confirmed" || status === "scheduled" || status === "rescheduled";
 
         const chatAvailable = status === 'confirmed' || status === 'in_progress';
+        const videoCallAvailable = status === 'in_progress';
 
         return `
             <div class="appointment-clean-card">
@@ -164,6 +176,16 @@ export function renderAppointmentsFull(appointments) {
                     </div>
                 </div>
                 <div class="appointment-clean-actions" style="display: flex; flex-direction: row; gap: 0.75rem; align-items: center;">
+                    ${videoCallAvailable && appointmentId && doctorId && doctorName ? `
+                        <button class="btn-clean-video-call"
+                            data-appointment-id="${appointmentId}"
+                            data-doctor-id="${doctorId}"
+                            data-doctor-name="${doctorName}"
+                            title="Unirse a la videollamada"
+                            style="background: #10b981; color: white; border: none; padding: 0.625rem 1rem; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-weight: 500;">
+                            <i class="fas fa-video"></i> Atender
+                        </button>
+                    ` : ""}
                     ${chatAvailable && appointmentId && doctorId && doctorName ? `
                     <button class="btn-clean-chat"
                             data-appointment-id="${appointmentId}"
@@ -343,6 +365,26 @@ function initializeChatButtons(){
             updateChatButtonBadge(this, 0);
             
             await handlePatientChatOpen(appointmentId, doctorId, doctorName);
+        });
+    });
+    
+    // Inicializar botones de videollamada
+    document.querySelectorAll('.btn-clean-video-call, .btn-home-video-call').forEach(button => {
+        const newButton = button.cloneNode(true);
+        button.parentNode.replaceChild(newButton, button);
+        
+        newButton.addEventListener('click', async function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const appointmentId = this.getAttribute('data-appointment-id');
+            const doctorId = this.getAttribute('data-doctor-id');
+            const doctorName = this.getAttribute('data-doctor-name');
+            
+            if (appointmentId && doctorId && doctorName) {
+                const { openPatientVideoCall } = await import('./patient-video-call.js');
+                await openPatientVideoCall(appointmentId, doctorId, doctorName);
+            }
         });
     });
     

@@ -214,16 +214,26 @@ async function initializePatientVideoCall(modal, appointmentId, doctorId) {
             throw new Error('No se pudo identificar al paciente');
         }
         
-        // Primero, intentar obtener la sala existente (para obtener la URL)
+        // Obtener la sala (se crea si no existe)
         let roomUrl = null;
-        try {
-            const roomResponse = await ApiScheduling.post(`v1/Video/room/${appointmentId}?doctorId=${doctorId}&patientId=${patientId}`, {});
-            roomUrl = roomResponse.roomUrl || roomResponse.RoomUrl;
-            console.log('✅ URL de sala obtenida:', roomUrl);
-        } catch (error) {
-            console.warn('⚠️ No se pudo obtener la sala, puede que el doctor aún no la haya creado:', error);
-            showNotification('El doctor aún no ha iniciado la videollamada. Por favor, espera a que el doctor se conecte.', 'info');
-            return;
+        let retries = 3;
+        while (retries > 0 && !roomUrl) {
+            try {
+                const roomResponse = await ApiScheduling.post(`v1/Video/room/${appointmentId}?doctorId=${doctorId}&patientId=${patientId}`, {});
+                roomUrl = roomResponse.roomUrl || roomResponse.RoomUrl;
+                if (roomUrl) {
+                    console.log('✅ URL de sala obtenida:', roomUrl);
+                    break;
+                }
+            } catch (error) {
+                retries--;
+                if (retries === 0) {
+                    console.warn('⚠️ No se pudo obtener la sala después de varios intentos:', error);
+                    showNotification('No se pudo conectar a la videollamada. Por favor, intenta nuevamente.', 'error');
+                    return;
+                }
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
         }
         
         if (!roomUrl) {

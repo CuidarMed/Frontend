@@ -54,7 +54,9 @@ async function initializePatientPanel() {
     initializeModals();
     
     // ✅ NUEVO: Inicializar sistema de notificaciones de video
-
+    const { checkVideoCallNotifications } = await import('./patient-video-notification.js');
+    checkVideoCallNotifications();
+    setInterval(checkVideoCallNotifications, 3000);
     
     // ✅ NUEVO: Inicializar observer de UI para estilos
     initializeUIObserver();
